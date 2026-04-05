@@ -1,0 +1,16 @@
+'use strict';
+const express = require('express');
+const router = express.Router();
+const GiftCard = require('../models/GiftCard');
+const AppError = require('../utils/AppError');
+const { requireRole } = require('../middleware/permissions');
+const { generateGiftCardCode } = require('../utils/helpers');
+
+router.get('/', async (req, res, next) => { try { const cards = await GiftCard.find({ store: req.storeId }).sort({ issuedAt: -1 }); res.json({ success: true, giftCards: cards }); } catch (err) { next(err); } });
+router.get('/check/:code', async (req, res, next) => { try { const card = await GiftCard.findOne({ store: req.storeId, code: req.params.code }); if (!card) return next(AppError.giftCardNotFound()); res.json({ success: true, balance: card.currentBalance, status: card.status }); } catch (err) { next(err); } });
+router.get('/stats', async (req, res, next) => { try { const cards = await GiftCard.find({ store: req.storeId }); const stats = { issued: cards.length, active: cards.filter(c=>c.status==='active').length, outstanding: cards.reduce((s,c)=>s+c.currentBalance,0), totalIssued: cards.reduce((s,c)=>s+c.originalAmount,0) }; res.json({ success: true, stats }); } catch (err) { next(err); } });
+router.post('/', async (req, res, next) => { try { const code = generateGiftCardCode(); const card = await GiftCard.create({ store: req.storeId, code, issuedBy: req.user._id, ...req.body, currentBalance: req.body.originalAmount }); res.status(201).json({ success: true, giftCard: card }); } catch (err) { next(err); } });
+router.post('/:code/redeem', async (req, res, next) => { try { const { amount } = req.body; const card = await GiftCard.findOne({ store: req.storeId, code: req.params.code }); if (!card) return next(AppError.giftCardNotFound()); if (card.status === 'depleted') return next(AppError.giftCardDepleted()); if (card.status === 'expired' || (card.expiresAt && card.expiresAt < new Date())) return next(AppError.giftCardExpired()); card.currentBalance -= amount; if (card.currentBalance <= 0) { card.currentBalance = 0; card.status = 'depleted'; } card.transactions.push({ type: 'redeem', amount: -amount, balanceAfter: card.currentBalance, staffId: req.user._id, createdAt: new Date() }); await card.save(); res.json({ success: true, giftCard: card }); } catch (err) { next(err); } });
+router.post('/:code/topup', requireRole('manager'), async (req, res, next) => { try { const { amount } = req.body; const card = await GiftCard.findOne({ store: req.storeId, code: req.params.code }); if (!card) return next(AppError.giftCardNotFound()); card.currentBalance += amount; card.status = 'active'; card.transactions.push({ type: 'topup', amount, balanceAfter: card.currentBalance, staffId: req.user._id, createdAt: new Date() }); await card.save(); res.json({ success: true, giftCard: card }); } catch (err) { next(err); } });
+router.post('/:code/disable', requireRole('manager'), async (req, res, next) => { try { const card = await GiftCard.findOneAndUpdate({ store: req.storeId, code: req.params.code }, { status: 'disabled' }, { new: true }); if (!card) return next(AppError.giftCardNotFound()); res.json({ success: true, giftCard: card }); } catch (err) { next(err); } });
+module.exports = router;

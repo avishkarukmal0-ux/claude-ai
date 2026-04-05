@@ -1,0 +1,14 @@
+'use strict';
+const express = require('express'); const router = express.Router();
+const qks = require('../services/quickKeysService');
+const { requireRole } = require('../middleware/permissions');
+router.get('/', async (req, res, next) => { try { const keys = await qks.getKeys(req.storeId, req.query.layoutId); res.json({ success: true, keys }); } catch (err) { next(err); } });
+router.get('/layouts', async (req, res, next) => { try { const layouts = await qks.getLayouts(req.storeId); res.json({ success: true, layouts }); } catch (err) { next(err); } });
+router.post('/layouts', async (req, res, next) => { try { const layout = await qks.createLayout(req.storeId, req.body.name, req.user._id); res.status(201).json({ success: true, layout }); } catch (err) { next(err); } });
+router.put('/layouts/:id', async (req, res, next) => { try { const layout = await qks.updateLayout(req.params.id, req.body); res.json({ success: true, layout }); } catch (err) { next(err); } });
+router.delete('/layouts/:id', requireRole('manager'), async (req, res, next) => { try { await qks.deleteLayout(req.params.id); res.json({ success: true }); } catch (err) { next(err); } });
+router.post('/', async (req, res, next) => { try { const key = await qks.createKey(req.storeId, req.body.layoutId, req.body); res.status(201).json({ success: true, key }); } catch (err) { next(err); } });
+router.put('/:id', async (req, res, next) => { try { const key = await qks.updateKey(req.params.id, req.body); res.json({ success: true, key }); } catch (err) { next(err); } });
+router.delete('/:id', async (req, res, next) => { try { await qks.deleteKey(req.params.id); res.json({ success: true }); } catch (err) { next(err); } });
+router.post('/reorder', async (req, res, next) => { try { await qks.reorder(req.storeId, req.body.keyIds); res.json({ success: true }); } catch (err) { next(err); } });
+module.exports = router;

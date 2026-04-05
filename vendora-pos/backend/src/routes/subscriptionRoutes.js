@@ -1,0 +1,11 @@
+'use strict';
+const express = require('express'); const router = express.Router();
+const Subscription = require('../models/Subscription');
+const { requireRole } = require('../middleware/permissions');
+router.get('/current', async (req, res, next) => { try { let sub = await Subscription.findOne({ store: req.storeId }); if (!sub) sub = await Subscription.create({ store: req.storeId, plan: 'free', status: 'active', features: { maxProducts: 500, maxStaff: 10, maxStores: 1, supplierCount: 6, advancedReports: true, loyaltyProgram: true, giftCards: true, apiAccess: false } }); res.json({ success: true, subscription: sub }); } catch (err) { next(err); } });
+router.get('/features', async (req, res, next) => { try { const sub = await Subscription.findOne({ store: req.storeId }); res.json({ success: true, features: sub ? sub.features : {} }); } catch (err) { next(err); } });
+router.get('/usage', async (req, res, next) => { try { const sub = await Subscription.findOne({ store: req.storeId }); res.json({ success: true, usage: sub ? sub.usage : {} }); } catch (err) { next(err); } });
+router.post('/upgrade', requireRole('owner'), async (req, res, next) => { try { const sub = await Subscription.findOneAndUpdate({ store: req.storeId }, { plan: req.body.plan }, { new: true, upsert: true }); res.json({ success: true, subscription: sub }); } catch (err) { next(err); } });
+router.post('/cancel', requireRole('owner'), async (req, res, next) => { try { const sub = await Subscription.findOneAndUpdate({ store: req.storeId }, { status: 'cancelled' }, { new: true }); res.json({ success: true, subscription: sub }); } catch (err) { next(err); } });
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => { res.json({ received: true }); });
+module.exports = router;

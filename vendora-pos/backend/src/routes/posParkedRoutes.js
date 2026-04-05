@@ -1,0 +1,12 @@
+'use strict';
+const express = require('express'); const router = express.Router();
+const pts = require('../services/parkedTransactionsService');
+const AppError = require('../utils/AppError');
+router.get('/', async (req, res, next) => { try { const { tillId } = req.query; const transactions = await pts.list(req.storeId, tillId); res.json({ success: true, transactions }); } catch (err) { next(err); } });
+router.get('/all', async (req, res, next) => { try { const transactions = await pts.listAll(req.storeId); res.json({ success: true, transactions }); } catch (err) { next(err); } });
+router.get('/summary', async (req, res, next) => { try { const summary = await pts.getSummary(req.storeId); res.json({ success: true, summary }); } catch (err) { next(err); } });
+router.get('/:parkId', async (req, res, next) => { try { const tx = await pts.getById(req.params.parkId, req.storeId); res.json({ success: true, transaction: tx }); } catch (err) { next(err); } });
+router.post('/', async (req, res, next) => { try { const { tillId, items, total, subtotal, customerId, customerName, reason, customerIdentifier } = req.body; const tx = await pts.park(req.storeId, tillId || 'TILL-1', req.user._id, req.user.displayName, items, total, subtotal, customerId, customerName, reason, customerIdentifier); res.status(201).json({ success: true, transaction: tx }); } catch (err) { next(err); } });
+router.post('/:parkId/resume', async (req, res, next) => { try { const tx = await pts.resume(req.params.parkId, req.storeId); res.json({ success: true, transaction: tx }); } catch (err) { next(err); } });
+router.post('/:parkId/void', async (req, res, next) => { try { const tx = await pts.voidParked(req.params.parkId, req.user._id); res.json({ success: true, transaction: tx }); } catch (err) { next(err); } });
+module.exports = router;

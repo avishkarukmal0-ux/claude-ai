@@ -1,0 +1,16 @@
+'use strict';
+const express = require('express'); const router = express.Router();
+const sts = require('../services/stockTakeService');
+const StockTake = require('../models/StockTake');
+const AppError = require('../utils/AppError');
+const { requireRole } = require('../middleware/permissions');
+router.get('/', async (req, res, next) => { try { const list = await StockTake.find({ store: req.storeId }).sort({ createdAt: -1 }).limit(20); res.json({ success: true, stockTakes: list }); } catch (err) { next(err); } });
+router.post('/', requireRole('supervisor'), async (req, res, next) => { try { const { type, categories } = req.body; const st = await sts.create(req.storeId, req.user._id, req.user.displayName, type, categories); res.status(201).json({ success: true, stockTake: st }); } catch (err) { next(err); } });
+router.post('/:id/start', requireRole('supervisor'), async (req, res, next) => { try { const st = await sts.start(req.params.id); res.json({ success: true, stockTake: st }); } catch (err) { next(err); } });
+router.post('/:id/count', async (req, res, next) => { try { const { barcode, countedQuantity } = req.body; const item = await sts.recordCount(req.params.id, barcode, countedQuantity, req.user._id, req.user.displayName); res.json({ success: true, item }); } catch (err) { next(err); } });
+router.post('/:id/batch-count', async (req, res, next) => { try { const results = await sts.batchCount(req.params.id, req.body.counts, req.user._id, req.user.displayName); res.json({ success: true, results }); } catch (err) { next(err); } });
+router.get('/:id/unscanned', async (req, res, next) => { try { const items = await sts.getUnscanned(req.params.id); res.json({ success: true, items }); } catch (err) { next(err); } });
+router.get('/:id/variances', async (req, res, next) => { try { const variances = await sts.getVariances(req.params.id); res.json({ success: true, variances }); } catch (err) { next(err); } });
+router.post('/:id/apply', requireRole('supervisor'), async (req, res, next) => { try { const st = await sts.apply(req.params.id, req.user._id); res.json({ success: true, stockTake: st }); } catch (err) { next(err); } });
+router.post('/:id/complete', requireRole('supervisor'), async (req, res, next) => { try { const st = await sts.complete(req.params.id); res.json({ success: true, stockTake: st }); } catch (err) { next(err); } });
+module.exports = router;

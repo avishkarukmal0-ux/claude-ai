@@ -1,0 +1,10 @@
+import api from './api';
+export const getDashboard = () => api.get('/loss-prevention/dashboard');
+export const getNoSales = (params) => api.get('/loss-prevention/no-sales', { params });
+export const logNoSale = (data) => api.post('/loss-prevention/no-sales', data);
+export const getScanPatterns = () => api.get('/loss-prevention/scan-patterns');
+export const getIncidents = () => api.get('/loss-prevention/incidents');
+export const logIncident = (data) => api.post('/loss-prevention/incidents', data);
+export const getWatchlist = () => api.get('/loss-prevention/watchlist');
+export const triggerPanic = (tillId) => api.post('/loss-prevention/panic', { tillId });
+export const getExceptionReport = () => api.get('/loss-prevention/exception-report');

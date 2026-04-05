@@ -1,0 +1,15 @@
+import api from './api';
+export const getState = (tillId) => api.get(`/cash-drawer/state/${tillId}`);
+export const openDay = (data) => api.post('/cash-drawer/open-day', data);
+export const closeDay = (data) => api.post('/cash-drawer/close-day', data);
+export const safeDrop = (data) => api.post('/cash-drawer/safe-drop', data);
+export const payout = (data) => api.post('/cash-drawer/payout', data);
+export const drawerOpen = (data) => api.post('/cash-drawer/drawer-open', data);
+export const quickConfirm = (tillId) => api.post('/cash-drawer/quick-confirm', { tillId });
+export const fullCount = (data) => api.post('/cash-drawer/full-count', data);
+export const getActivityLog = (tillId) => api.get(`/cash-drawer/activity/${tillId}/today`);
+export const getSummary = (tillId) => api.get(`/cash-drawer/summary/${tillId}`);
+export const initiateHandover = (data) => api.post('/cash-drawer/handover/initiate', data);
+export const confirmOutgoing = (id, pin) => api.post(`/cash-drawer/handover/${id}/confirm-outgoing`, { pin });
+export const confirmIncoming = (id, pin) => api.post(`/cash-drawer/handover/${id}/confirm-incoming`, { pin });
+export const getPendingHandover = () => api.get('/cash-drawer/handover/pending');

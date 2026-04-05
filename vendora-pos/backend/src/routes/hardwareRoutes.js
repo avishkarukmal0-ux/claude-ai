@@ -1,0 +1,13 @@
+'use strict';
+const express = require('express'); const router = express.Router();
+const printer = require('../services/printerService');
+const card = require('../services/cardPaymentService');
+const scale = require('../services/scaleService');
+router.get('/printer/status', async (req, res) => { res.json({ success: true, ...printer.getStatus() }); });
+router.post('/printer/test', async (req, res, next) => { try { const r = await printer.testPrint(); res.json({ success: true, ...r }); } catch (err) { next(err); } });
+router.post('/drawer/open', async (req, res) => { res.json({ success: true, message: 'Drawer open signal sent' }); });
+router.get('/scale/weight', async (req, res, next) => { try { const w = await scale.getWeight(); res.json({ success: true, ...w }); } catch (err) { next(err); } });
+router.post('/scale/tare', async (req, res, next) => { try { await scale.tare(); res.json({ success: true }); } catch (err) { next(err); } });
+router.get('/terminal/status', async (req, res) => { res.json({ success: true, ...card.getStatus() }); });
+router.post('/terminal/pair', async (req, res, next) => { try { const r = await card.pair(req.body.provider, req.body.apiKey); res.json({ success: true, ...r }); } catch (err) { next(err); } });
+module.exports = router;

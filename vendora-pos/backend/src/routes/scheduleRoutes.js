@@ -1,0 +1,10 @@
+'use strict';
+const express = require('express'); const router = express.Router();
+const StaffSchedule = require('../models/StaffSchedule');
+const { requireRole } = require('../middleware/permissions');
+const AppError = require('../utils/AppError');
+router.get('/', requireRole('supervisor'), async (req, res, next) => { try { const schedules = await StaffSchedule.find({ store: req.storeId }).populate('staff', 'displayName role'); res.json({ success: true, schedules }); } catch (err) { next(err); } });
+router.post('/', requireRole('manager'), async (req, res, next) => { try { const s = await StaffSchedule.create({ store: req.storeId, ...req.body }); res.status(201).json({ success: true, schedule: s }); } catch (err) { next(err); } });
+router.post('/publish', requireRole('manager'), async (req, res, next) => { try { const { scheduleIds } = req.body; await StaffSchedule.updateMany({ _id: { $in: scheduleIds }, store: req.storeId }, { publishedAt: new Date(), publishedBy: req.user._id, 'shifts.$[].published': true }); res.json({ success: true }); } catch (err) { next(err); } });
+router.get('/my', async (req, res, next) => { try { const schedules = await StaffSchedule.find({ store: req.storeId, staff: req.user._id }).sort({ weekStarting: -1 }).limit(4); res.json({ success: true, schedules }); } catch (err) { next(err); } });
+module.exports = router;
