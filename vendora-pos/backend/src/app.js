@@ -22,8 +22,20 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginEmbedderPolicy: false }));
 
 // CORS
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',').map(o => o.trim());
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, mobile apps, same-origin)
+    if (!origin) return callback(null, true);
+    // In development allow any localhost port
+    if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -39,10 +51,12 @@ app.use(requestLogger);
 // Rate limiting
 app.use('/api', generalLimiter);
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check (both paths for convenience)
+const healthHandler = (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0' });
-});
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Uploads directory
 const uploadPath = process.env.UPLOAD_PATH || './uploads';

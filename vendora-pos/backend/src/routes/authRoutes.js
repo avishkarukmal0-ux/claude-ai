@@ -8,7 +8,7 @@ const Store = require('../models/Store');
 const AppError = require('../utils/AppError');
 const { authenticate } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimit');
-const { getRedis } = require('../config/redis');
+const { getRedis, isRedisAvailable } = require('../config/redis');
 
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req, res, next) => {
@@ -126,9 +126,12 @@ router.post('/refresh', async (req, res, next) => {
     const { refreshToken } = req.body;
     if (!refreshToken) return next(AppError.authRefreshInvalid());
 
-    const redis = getRedis();
-    const storedStaffId = await redis.get(`refresh:${refreshToken}`);
-    if (!storedStaffId) return next(AppError.authRefreshInvalid());
+    // When Redis is available, validate the stored token; otherwise trust the JWT signature alone
+    if (isRedisAvailable()) {
+      const redis = getRedis();
+      const storedStaffId = await redis.get(`refresh:${refreshToken}`);
+      if (!storedStaffId) return next(AppError.authRefreshInvalid());
+    }
 
     let decoded;
     try {
