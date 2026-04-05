@@ -8,15 +8,19 @@ const navSections = [
   { label: 'POS', minRole: 'cashier', items: [
     { to: '/pos',             icon: '🛒', label: 'POS Terminal' },
     { to: '/transactions',    icon: '📜', label: 'Transactions' },
+    { to: '/training',        icon: '🎓', label: 'Training Mode' },
+    { to: '/offline-queue',   icon: '📶', label: 'Offline Queue' },
   ]},
   { label: 'Stock', minRole: 'cashier', items: [
     { to: '/products',        icon: '📦', label: 'Products' },
     { to: '/promotions',      icon: '🏷️', label: 'Promotions' },
     { to: '/smart-reorder',   icon: '🔁', label: 'Smart Reorder' },
     { to: '/stock-take',      icon: '📋', label: 'Stock Take' },
+    { to: '/label-printing',  icon: '🖨️', label: 'Label Printing' },
   ]},
   { label: 'People', minRole: 'cashier', items: [
     { to: '/customers',       icon: '👥', label: 'Customers' },
+    { to: '/loyalty',         icon: '⭐', label: 'Loyalty' },
     { to: '/staff',           icon: '👤', label: 'Staff', minRole: 'manager' },
     { to: '/schedule',        icon: '📅', label: 'Schedule' },
   ]},
@@ -24,6 +28,7 @@ const navSections = [
     { to: '/cash-management', icon: '💷', label: 'Cash Management' },
     { to: '/suppliers',       icon: '🚛', label: 'Suppliers' },
     { to: '/purchase-orders', icon: '📋', label: 'Purchase Orders' },
+    { to: '/invoices',        icon: '🧾', label: 'Invoices' },
     { to: '/gift-cards',      icon: '🎁', label: 'Gift Cards' },
   ]},
   { label: 'Security', minRole: 'supervisor', items: [

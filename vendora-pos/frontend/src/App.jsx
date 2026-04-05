@@ -23,6 +23,11 @@ import SmartReorderPage from './pages/SmartReorderPage';
 import TransactionHistoryPage from './pages/TransactionHistoryPage';
 import StockTakePage from './pages/StockTakePage';
 import SchedulePage from './pages/SchedulePage';
+import InvoicesPage from './pages/InvoicesPage';
+import LoyaltyPage from './pages/LoyaltyPage';
+import LabelPrintingPage from './pages/LabelPrintingPage';
+import OfflineQueuePage from './pages/OfflineQueuePage';
+import TrainingModePage from './pages/TrainingModePage';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -59,6 +64,11 @@ export default function App() {
                     <Route path="transactions" element={<TransactionHistoryPage />} />
                     <Route path="stock-take" element={<StockTakePage />} />
                     <Route path="schedule" element={<SchedulePage />} />
+                    <Route path="invoices" element={<ProtectedRoute requiredRole="supervisor"><InvoicesPage /></ProtectedRoute>} />
+                    <Route path="loyalty" element={<LoyaltyPage />} />
+                    <Route path="label-printing" element={<LabelPrintingPage />} />
+                    <Route path="offline-queue" element={<OfflineQueuePage />} />
+                    <Route path="training" element={<TrainingModePage />} />
                     <Route path="settings" element={<ProtectedRoute requiredRole="manager"><SettingsPage /></ProtectedRoute>} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />
