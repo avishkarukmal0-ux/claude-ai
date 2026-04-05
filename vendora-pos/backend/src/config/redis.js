@@ -1,41 +1,82 @@
-const Redis = require('ioredis');
 const config = require('./index');
 const logger = require('../utils/logger');
 
 let redisClient = null;
+let redisAvailable = false;
+let connectionAttempted = false;
+
+// No-op stub returned when Redis is unavailable — callers need not change.
+const nullRedis = {
+  get: async () => null,
+  set: async () => 'OK',
+  setex: async () => 'OK',
+  del: async () => 0,
+  exists: async () => 0,
+  expire: async () => 0,
+  ttl: async () => -2,
+  hget: async () => null,
+  hset: async () => 0,
+  hdel: async () => 0,
+  sadd: async () => 0,
+  srem: async () => 0,
+  smembers: async () => [],
+  lpush: async () => 0,
+  lrange: async () => [],
+  publish: async () => 0,
+  subscribe: async () => {},
+  on: () => nullRedis,
+  quit: async () => {},
+};
 
 const connectRedis = () => {
-  if (redisClient) return redisClient;
+  if (connectionAttempted) return redisClient;
+  connectionAttempted = true;
+
+  // Skip if explicitly disabled
+  if (!process.env.REDIS_URL && process.env.NODE_ENV !== 'production') {
+    logger.warn('Redis: REDIS_URL not set — running without Redis (caching and token blacklisting disabled)');
+    return null;
+  }
+
+  let Redis;
+  try {
+    Redis = require('ioredis');
+  } catch {
+    logger.warn('Redis: ioredis not installed — running without Redis');
+    return null;
+  }
 
   redisClient = new Redis(config.redis.url, {
-    retryStrategy(times) {
-      if (times > 10) {
-        logger.warn('Redis: too many retries, giving up');
-        return null;
-      }
-      return Math.min(times * 100, 3000);
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    retryStrategy() {
+      return null; // disable auto-reconnect; we handle it manually
     },
-    lazyConnect: false,
   });
 
   redisClient.on('connect', () => {
+    redisAvailable = true;
     logger.info('Redis connected');
   });
 
-  redisClient.on('error', (err) => {
-    logger.error('Redis error:', err.message);
+  redisClient.on('error', () => {
+    // errors are suppressed after the first connection attempt warning
   });
 
-  redisClient.on('close', () => {
-    logger.warn('Redis connection closed');
+  redisClient.connect().catch((err) => {
+    logger.warn(`Redis unavailable (${err.message}) — running without Redis. Set REDIS_URL to enable caching.`);
+    redisClient = null;
   });
 
   return redisClient;
 };
 
 const getRedis = () => {
-  if (!redisClient) return connectRedis();
-  return redisClient;
+  if (!connectionAttempted) connectRedis();
+  return redisAvailable ? redisClient : nullRedis;
 };
 
-module.exports = { connectRedis, getRedis };
+const isRedisAvailable = () => redisAvailable;
+
+module.exports = { connectRedis, getRedis, isRedisAvailable };
