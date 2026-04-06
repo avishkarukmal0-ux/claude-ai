@@ -17,14 +17,13 @@ const connectDB = async () => {
       retryWrites: true,
       maxPoolSize: 10,
     });
+    isConnecting = false;
     logger.info(`MongoDB connected: ${mongoose.connection.host}`);
     startKeepalive();
   } catch (err) {
+    isConnecting = false;
     logger.error(`MongoDB connection failed: ${err.message} — retrying in 5s`);
-    isConnecting = false;
     setTimeout(() => connectDB(), 5000);
-  } finally {
-    isConnecting = false;
   }
 };
 
