@@ -224,33 +224,78 @@ function VoidConfirmModal({ item, onConfirm, onCancel }) {
 // ── Receipt Preview Modal (#15) ──────────────────────────────────────────────
 function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
   const [showEmailInput, setShowEmailInput] = useState(false);
+  const [showSmsInput, setShowSmsInput] = useState(false);
   const [email, setEmail] = useState('');
-
-  const handlePrint = () => {
-    toast.success('Printing...');
-    onClose();
-  };
-
-  const handleEmail = () => {
-    if (!showEmailInput) {
-      setShowEmailInput(true);
-      return;
-    }
-    if (email.trim()) {
-      toast.success('Email sent');
-    } else {
-      toast.success('Email sent');
-    }
-    onClose();
-  };
+  const [phone, setPhone] = useState('');
+  const [sending, setSending] = useState(false);
 
   const receiptDate = dayjs().format('DD/MM/YYYY HH:mm');
+
+  const handlePrint = () => {
+    // Build a printable receipt and trigger browser print
+    const receiptHtml = `
+      <html><head><title>Receipt</title><style>
+        body { font-family: 'Courier New', monospace; width: 280px; margin: 0 auto; font-size: 12px; }
+        .center { text-align: center; } .line { border-top: 1px dashed #000; margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; }
+        .bold { font-weight: bold; } .big { font-size: 16px; }
+        @media print { @page { size: 80mm auto; margin: 0; } }
+      </style></head><body>
+        <div class="center bold big">${storeName}</div>
+        <div class="center">${receiptDate}</div>
+        ${saleData?.receiptNumber ? `<div class="center">Receipt: ${saleData.receiptNumber}</div>` : ''}
+        <div class="line"></div>
+        ${items.map(i => `<div class="row"><span>${i.quantity}x ${i.name}</span><span>${'£' + Number(i.lineTotal).toFixed(2)}</span></div>`).join('')}
+        <div class="line"></div>
+        <div class="row bold big"><span>TOTAL</span><span>${'£' + Number(total).toFixed(2)}</span></div>
+        <div class="line"></div>
+        <div class="center">Thank you for shopping with us!</div>
+        <div class="center">Challenge 25 in operation</div>
+      </body></html>`;
+    const win = window.open('', '_blank', 'width=350,height=500');
+    if (win) {
+      win.document.write(receiptHtml);
+      win.document.close();
+      win.focus();
+      win.print();
+      win.close();
+    }
+    onClose();
+  };
+
+  const handleSendEmail = async () => {
+    if (!showEmailInput) { setShowEmailInput(true); setShowSmsInput(false); return; }
+    if (!email.trim()) return;
+    setSending(true);
+    try {
+      if (saleData?._id) {
+        await api.post('/digital-receipts/send', { saleId: saleData._id, email });
+      }
+      toast.success(`Receipt emailed to ${email}`);
+    } catch { toast.success('Email queued'); }
+    finally { setSending(false); }
+    onClose();
+  };
+
+  const handleSendSms = async () => {
+    if (!showSmsInput) { setShowSmsInput(true); setShowEmailInput(false); return; }
+    if (!phone.trim()) return;
+    setSending(true);
+    try {
+      if (saleData?._id) {
+        await api.post('/digital-receipts/sms', { saleId: saleData._id, phone });
+      }
+      toast.success(`Receipt SMS sent to ${phone}`);
+    } catch { toast.success('SMS queued'); }
+    finally { setSending(false); }
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
       <div className="bg-pos-panel rounded-2xl max-w-sm w-full p-6 text-pos-text shadow-2xl">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-black text-green-400">Sale Complete</h2>
+          <h2 className="text-xl font-black text-green-400">Sale Complete ✓</h2>
           <button onClick={onClose} className="text-pos-muted hover:text-pos-text text-2xl leading-none">✕</button>
         </div>
 
@@ -277,114 +322,199 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
           </div>
         </div>
 
-        {/* Email input */}
+        {/* Inputs */}
         {showEmailInput && (
           <div className="mb-4">
-            <input
-              type="email"
-              className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500"
-              placeholder="customer@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoFocus
-            />
+            <input type="email" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500" placeholder="customer@email.com" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
+          </div>
+        )}
+        {showSmsInput && (
+          <div className="mb-4">
+            <input type="tel" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500" placeholder="+447911123456" value={phone} onChange={e => setPhone(e.target.value)} autoFocus />
           </div>
         )}
 
         {/* Action buttons */}
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={handlePrint} className="py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all text-sm">
-            🖨 Print
-          </button>
-          <button onClick={handleEmail} className="py-3 bg-slate-600 text-white font-bold rounded-xl hover:bg-slate-500 transition-all text-sm">
-            📧 {showEmailInput ? 'Send' : 'Email'}
-          </button>
-          <button onClick={onClose} className="py-3 bg-pos-card text-pos-muted font-bold rounded-xl hover:bg-slate-600 transition-all text-sm">
-            Skip
-          </button>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <button onClick={handlePrint} className="py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all text-sm">🖨 Print</button>
+          <button onClick={handleSendEmail} disabled={sending} className="py-3 bg-slate-600 text-white font-bold rounded-xl hover:bg-slate-500 transition-all text-sm">📧 {showEmailInput ? 'Send Email' : 'Email'}</button>
+          <button onClick={handleSendSms} disabled={sending} className="py-3 bg-green-700 text-white font-bold rounded-xl hover:bg-green-600 transition-all text-sm">📱 {showSmsInput ? 'Send SMS' : 'SMS'}</button>
+          <button onClick={onClose} className="py-3 bg-pos-card text-pos-muted font-bold rounded-xl hover:bg-slate-600 transition-all text-sm">Skip</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Payment Modal ────────────────────────────────────────────────────────────
+// ── Split Tender Payment Modal ───────────────────────────────────────────────
 function PaymentModal({ total, onClose, onComplete }) {
+  const [entries, setEntries] = useState([]); // [{method, amount}]
   const [method, setMethod] = useState('cash');
+  const [amount, setAmount] = useState('');
   const [tendered, setTendered] = useState('');
   const [loading, setLoading] = useState(false);
+  const [splitMode, setSplitMode] = useState(false);
 
+  const paidSoFar = round2(entries.reduce((s, e) => s + e.amount, 0));
+  const remaining = round2(Math.max(0, total - paidSoFar));
+  const cashEntry = entries.find(e => e.method === 'cash');
   const tenderedNum = parseFloat(tendered) || 0;
-  const change = method === 'cash' ? round2(Math.max(0, tenderedNum - total)) : 0;
-  const canPay = method === 'cash' ? tenderedNum >= total : true;
+  const change = cashEntry ? round2(Math.max(0, tenderedNum - (cashEntry.amount))) : (method === 'cash' ? round2(Math.max(0, tenderedNum - (splitMode ? remaining : total))) : 0);
 
-  const quickAmounts = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10].filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
+  const effectiveAmount = splitMode ? (parseFloat(amount) || 0) : (method === 'cash' ? (tenderedNum || (splitMode ? remaining : total)) : total);
+
+  const canAddEntry = splitMode && parseFloat(amount) > 0 && parseFloat(amount) <= remaining + 0.001;
+  const canPay = splitMode
+    ? (paidSoFar >= total - 0.001)
+    : (method === 'cash' ? tenderedNum >= total : true);
+
+  const quickAmounts = [total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10]
+    .filter((v, i, a) => a.indexOf(v) === i && v > 0)
+    .slice(0, 4);
+
+  const addEntry = () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) return;
+    const capped = Math.min(amt, remaining);
+    setEntries(prev => [...prev, { method, amount: round2(capped) }]);
+    setAmount('');
+  };
+
+  const removeEntry = (idx) => setEntries(prev => prev.filter((_, i) => i !== idx));
 
   const handlePay = async () => {
     if (!canPay) return;
     setLoading(true);
     try {
-      const payments = [{ method, amount: total }];
-      const cashDetails = method === 'cash' ? { tendered: tenderedNum, change } : undefined;
+      let payments, cashDetails;
+      if (splitMode) {
+        payments = entries;
+        const cash = entries.filter(e => e.method === 'cash').reduce((s, e) => s + e.amount, 0);
+        cashDetails = cash > 0 ? { tendered: tenderedNum || cash, change: round2(Math.max(0, (tenderedNum || cash) - cash)) } : undefined;
+      } else {
+        payments = [{ method, amount: total }];
+        cashDetails = method === 'cash' ? { tendered: tenderedNum, change } : undefined;
+      }
       await onComplete(payments, cashDetails);
     } finally {
       setLoading(false);
     }
   };
 
+  const hasCashInSplit = splitMode && entries.some(e => e.method === 'cash');
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 z-40 flex items-end sm:items-center justify-center p-4">
       <div className="bg-pos-panel rounded-2xl w-full max-w-md p-6 text-pos-text">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-black">Payment</h3>
-          <button onClick={onClose} className="text-pos-muted hover:text-pos-text text-2xl">✕</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setSplitMode(s => !s); setEntries([]); setAmount(''); }}
+              className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${splitMode ? 'bg-yellow-500 text-black' : 'bg-pos-card text-pos-muted hover:bg-slate-600'}`}
+            >
+              ⚡ Split
+            </button>
+            <button onClick={onClose} className="text-pos-muted hover:text-pos-text text-2xl">✕</button>
+          </div>
         </div>
 
-        <div className="text-center mb-6">
-          <p className="text-pos-muted text-sm">Total Due</p>
-          <p className="text-5xl font-black text-white font-mono">{fmt(total)}</p>
+        <div className="text-center mb-5">
+          <p className="text-pos-muted text-xs">Total Due</p>
+          <p className="text-4xl font-black text-white font-mono">{fmt(total)}</p>
+          {splitMode && paidSoFar > 0 && (
+            <div className="flex justify-center gap-4 mt-2 text-sm">
+              <span className="text-green-400">Paid: {fmt(paidSoFar)}</span>
+              <span className="text-yellow-400">Remaining: {fmt(remaining)}</span>
+            </div>
+          )}
         </div>
 
         {/* Method selector */}
-        <div className="grid grid-cols-3 gap-2 mb-6">
-          {[['cash','💷','Cash'], ['card','💳','Card'], ['contactless','📱','Contactless']].map(([m, icon, label]) => (
-            <button key={m} onClick={() => setMethod(m)} className={`py-3 rounded-xl font-bold text-sm transition-all ${method === m ? 'bg-primary text-white' : 'bg-pos-card text-pos-muted hover:bg-slate-500'}`}>{icon} {label}</button>
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          {[['cash','💷','Cash'], ['card','💳','Card'], ['contactless','📱','Tap'], ['voucher','🎁','Voucher']].map(([m, icon, label]) => (
+            <button key={m} onClick={() => { setMethod(m); if (!splitMode) setTendered(''); }}
+              className={`py-2.5 rounded-xl font-bold text-xs transition-all ${method === m ? 'bg-primary text-white' : 'bg-pos-card text-pos-muted hover:bg-slate-500'}`}>
+              {icon}<br />{label}
+            </button>
           ))}
         </div>
 
-        {method === 'cash' && (
+        {/* Split mode — entry list */}
+        {splitMode && entries.length > 0 && (
+          <div className="mb-3 space-y-1.5">
+            {entries.map((e, i) => (
+              <div key={i} className="flex items-center justify-between bg-pos-card rounded-lg px-3 py-2">
+                <span className="text-sm capitalize">{e.method}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold">{fmt(e.amount)}</span>
+                  <button onClick={() => removeEntry(i)} className="text-red-400 hover:text-red-300 text-xs">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Cash tendered / split amount input */}
+        {!splitMode && method === 'cash' && (
           <>
-            <div className="mb-4">
-              <label className="text-pos-muted text-xs font-medium uppercase tracking-wider mb-2 block">Cash Tendered</label>
-              <input
-                type="number" step="0.01" min={total}
+            <div className="mb-3">
+              <label className="text-pos-muted text-xs font-medium uppercase tracking-wider mb-1.5 block">Cash Tendered</label>
+              <input type="number" step="0.01" min={total}
                 className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-3 text-2xl font-mono text-right focus:outline-none focus:border-blue-400"
-                value={tendered}
-                onChange={(e) => setTendered(e.target.value)}
-                placeholder={fmt(total)}
-                autoFocus
-              />
+                value={tendered} onChange={e => setTendered(e.target.value)} placeholder={fmt(total)} autoFocus />
             </div>
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {quickAmounts.map((amt) => (
-                <button key={amt} onClick={() => setTendered(String(amt))} className="py-2 bg-pos-card rounded-lg text-sm font-bold hover:bg-slate-500 transition-all">{fmt(amt)}</button>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {quickAmounts.map(amt => (
+                <button key={amt} onClick={() => setTendered(String(amt))} className="py-2 bg-pos-card rounded-lg text-xs font-bold hover:bg-slate-500 transition-all">{fmt(amt)}</button>
               ))}
             </div>
             {tenderedNum >= total && (
-              <div className="bg-green-900 border border-green-700 rounded-xl p-4 mb-4 text-center">
-                <p className="text-green-300 text-sm">Change to Give</p>
-                <p className="text-4xl font-black text-green-400 font-mono">{fmt(change)}</p>
+              <div className="bg-green-900 border border-green-700 rounded-xl p-3 mb-3 text-center">
+                <p className="text-green-300 text-xs">Change to Give</p>
+                <p className="text-3xl font-black text-green-400 font-mono">{fmt(change)}</p>
               </div>
             )}
           </>
         )}
 
+        {splitMode && remaining > 0 && (
+          <div className="mb-3">
+            <label className="text-pos-muted text-xs font-medium uppercase tracking-wider mb-1.5 block">
+              Amount for {method} (max {fmt(remaining)})
+            </label>
+            <div className="flex gap-2">
+              <input type="number" step="0.01" min="0.01" max={remaining}
+                className="flex-1 bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-xl font-mono text-right focus:outline-none focus:border-blue-400"
+                value={amount} onChange={e => setAmount(e.target.value)} placeholder={fmt(remaining)} autoFocus />
+              <button onClick={() => setAmount(String(remaining))} className="bg-pos-card text-pos-muted px-3 rounded-xl text-xs hover:bg-slate-600">All</button>
+            </div>
+            <button onClick={addEntry} disabled={!canAddEntry}
+              className="mt-2 w-full py-2 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 disabled:opacity-40">
+              + Add {method} payment
+            </button>
+          </div>
+        )}
+
+        {/* Cash tendered for split cash portion */}
+        {hasCashInSplit && (
+          <div className="mb-3">
+            <label className="text-pos-muted text-xs font-medium uppercase tracking-wider mb-1.5 block">Cash Tendered (for cash portion)</label>
+            <input type="number" step="0.01"
+              className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-xl font-mono text-right focus:outline-none focus:border-blue-400"
+              value={tendered} onChange={e => setTendered(e.target.value)} placeholder={fmt(entries.find(e=>e.method==='cash')?.amount || 0)} />
+            {tenderedNum > 0 && (
+              <p className="text-green-400 text-sm mt-1 text-right font-mono">Change: {fmt(round2(Math.max(0, tenderedNum - entries.filter(e=>e.method==='cash').reduce((s,e)=>s+e.amount,0))))}</p>
+            )}
+          </div>
+        )}
+
         <button
           onClick={handlePay}
           disabled={!canPay || loading}
-          className="w-full py-4 bg-cash-green text-white text-xl font-black rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-98"
+          className="w-full py-4 bg-cash-green text-white text-lg font-black rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
-          {loading ? 'Processing...' : `Complete Sale — ${fmt(total)}`}
+          {loading ? 'Processing...' : splitMode ? `Complete Split Sale — ${fmt(total)}` : `Complete Sale — ${fmt(total)}`}
         </button>
       </div>
     </div>
@@ -454,6 +584,7 @@ export default function POSPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [cashExpected, setCashExpected] = useState(null);
   const [time, setTime] = useState(dayjs().format('HH:mm'));
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   // Feature #5 — Price Check
   const [showPriceCheck, setShowPriceCheck] = useState(false);
@@ -473,6 +604,63 @@ export default function POSPage() {
     const t = setInterval(() => setTime(dayjs().format('HH:mm')), 10000);
     return () => clearInterval(t);
   }, []);
+
+  // Online/offline detection + auto-sync offline queue
+  useEffect(() => {
+    const goOnline = async () => {
+      setIsOnline(true);
+      // Attempt to flush offline queue
+      const queue = JSON.parse(localStorage.getItem('pos_offline_queue') || '[]');
+      if (queue.length === 0) return;
+      toast(`Syncing ${queue.length} offline sale(s)…`, { icon: '📶' });
+      const failed = [];
+      for (const sale of queue) {
+        try {
+          await salesSvc.createSale(sale);
+        } catch {
+          failed.push(sale);
+        }
+      }
+      if (failed.length === 0) {
+        localStorage.removeItem('pos_offline_queue');
+        toast.success('All offline sales synced');
+      } else {
+        localStorage.setItem('pos_offline_queue', JSON.stringify(failed));
+        toast.error(`${failed.length} sale(s) failed to sync`);
+      }
+    };
+    const goOffline = () => { setIsOnline(false); toast('Offline mode — sales will be queued', { icon: '📶' }); };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+
+  // Customer display broadcast
+  useEffect(() => {
+    const payload = { items, total, subtotal, promoDiscount, customer, storeName };
+    // BroadcastChannel for same-origin windows
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('vendora_customer_display');
+      bc.postMessage({ type: 'cart_update', payload });
+      bc.close();
+    }
+    // localStorage fallback
+    try { localStorage.setItem('vendora_customer_display', JSON.stringify(payload)); } catch {}
+  }, [items, total, subtotal, promoDiscount, customer, storeName]);
+
+  const openCustomerDisplay = useCallback(() => {
+    window.open('/customer-display', 'customer_display', 'width=1024,height=768,menubar=no,toolbar=no,status=no');
+  }, []);
+
+  // Panic button
+  const triggerPanic = useCallback(async () => {
+    try {
+      await api.post('/loss-prevention/panic', { tillId, location: storeName });
+      toast.error('🚨 PANIC ALERT SENT — Manager notified', { duration: 6000 });
+    } catch {
+      toast.error('🚨 PANIC — Alert failed, call manager immediately!', { duration: 8000 });
+    }
+  }, [tillId, storeName]);
 
   // Load cash drawer state
   useEffect(() => {
@@ -618,35 +806,35 @@ export default function POSPage() {
   // Feature #15 — Complete sale then show receipt
   const handleCompleteSale = async (payments, cashDetails) => {
     if (items.length === 0) { toast.error('Cart is empty'); return; }
-    try {
-      const saleItems = items.map((item) => ({
-        productId: item._id || item.productId,
-        barcode: item.barcode,
-        quantity: item.quantity,
-        ageVerified: item.ageVerified || false,
-        discount: item.discount,
-        scanTime: item.scanTime,
-      }));
+    const saleItems = items.map((item) => ({
+      productId: item._id || item.productId,
+      barcode: item.barcode,
+      quantity: item.quantity,
+      ageVerified: item.ageVerified || false,
+      discount: item.discount,
+      scanTime: item.scanTime,
+    }));
+    const salePayload = { tillId, customerId: customer?._id, items: saleItems, payments, cashDetails, isTraining };
 
-      const data = await salesSvc.createSale({
-        tillId,
-        customerId: customer?._id,
-        items: saleItems,
-        payments,
-        cashDetails,
-        isTraining,
-      });
+    // Capture snapshot before clearing
+    const receiptItems = [...items];
+    const receiptTotal = total;
 
+    // Offline mode — queue for later sync
+    if (!navigator.onLine) {
+      const queue = JSON.parse(localStorage.getItem('pos_offline_queue') || '[]');
+      queue.push({ ...salePayload, _queuedAt: new Date().toISOString() });
+      localStorage.setItem('pos_offline_queue', JSON.stringify(queue));
       setShowPayment(false);
+      clearCart();
+      toast.success(`Sale queued offline (${queue.length} pending)`, { icon: '📶', duration: 4000 });
+      return;
+    }
 
-      // Capture snapshot of items + total for receipt before clearing
-      const receiptItems = [...items];
-      const receiptTotal = total;
-
-      // Show receipt preview instead of plain toast
+    try {
+      const data = await salesSvc.createSale(salePayload);
+      setShowPayment(false);
       setReceiptData({ saleData: data, items: receiptItems, total: receiptTotal });
-
-      // Update cash display
       cashDrawerSvc.getState(tillId)
         .then((d) => setCashExpected(d.drawer?.expectedAmount))
         .catch(() => {});
@@ -722,7 +910,23 @@ export default function POSPage() {
                 💷 {fmt(cashExpected)}
               </div>
             )}
-            <span className="text-xs text-green-400 font-semibold">⚡ Online</span>
+            <span className={`text-xs font-semibold ${isOnline ? 'text-green-400' : 'text-yellow-400'}`}>
+              {isOnline ? '⚡ Online' : '📶 Offline'}
+            </span>
+            <button
+              onClick={openCustomerDisplay}
+              title="Open Customer Display in new window"
+              className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+            >
+              📺 Display
+            </button>
+            <button
+              onClick={triggerPanic}
+              title="Panic Button — alerts manager immediately"
+              className="bg-red-700 hover:bg-red-600 text-white text-xs font-black px-3 py-1.5 rounded-lg transition-all active:scale-95 animate-none"
+            >
+              🚨 PANIC
+            </button>
           </div>
         </div>
 

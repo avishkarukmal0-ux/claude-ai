@@ -91,13 +91,21 @@ export default function LabelPrintingPage() {
     if (toPrint.length === 0) { toast.error('Add products to the queue first'); return; }
     setPrinting(true);
     try {
-      await api.post('/hardware/print-labels', {
+      const resp = await api.post('/hardware/print-labels', {
         template: template.id,
         items: toPrint.map(p => ({ productId: p._id, qty: p.qty })),
       });
-      toast.success(`${toPrint.reduce((s, p) => s + p.qty, 0)} labels sent to printer`);
+      const total = toPrint.reduce((s, p) => s + p.qty, 0);
+      if (resp.data?.results?.length > 0) {
+        // If ESC/POS data returned, fall through to browser print as well
+        toast.success(`${total} label(s) prepared — printing via browser`);
+        window.print();
+      } else {
+        toast.success(`${total} label(s) sent to printer`);
+      }
     } catch {
-      // Fallback: trigger browser print of preview
+      // Fallback: browser print
+      toast('Printing via browser (no ESC/POS printer connected)', { icon: '🖨' });
       window.print();
     } finally { setPrinting(false); }
   };

@@ -169,6 +169,117 @@ function TransactionReplayModal({ saleId, onClose }) {
   );
 }
 
+// ── Lone Worker Panel ────────────────────────────────────────────────────────
+function LoneWorkerPanel() {
+  const [session, setSession] = useState(null); // active session
+  const [loading, setLoading] = useState(false);
+  const [intervalMin, setIntervalMin] = useState(30);
+  const [tillId, setTillId] = useState('TILL-1');
+  const [elapsed, setElapsed] = useState(0);
+
+  // Tick every minute to show elapsed time
+  useEffect(() => {
+    if (!session) return;
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - new Date(session.startedAt)) / 60000)), 30000);
+    setElapsed(Math.floor((Date.now() - new Date(session.startedAt)) / 60000));
+    return () => clearInterval(t);
+  }, [session]);
+
+  async function startSession() {
+    setLoading(true);
+    try {
+      const { data } = await api.post('/loss-prevention/lone-worker/start', { tillId, settings: { checkIntervalMinutes: intervalMin } });
+      setSession({ ...(data.session || data), startedAt: new Date().toISOString() });
+      toast.success(`Lone worker session started — check-in every ${intervalMin} min`);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to start session');
+    } finally { setLoading(false); }
+  }
+
+  async function checkin() {
+    if (!session) return;
+    setLoading(true);
+    try {
+      await api.post('/loss-prevention/lone-worker/checkin');
+      setSession(s => ({ ...s, lastCheckin: new Date().toISOString() }));
+      toast.success('Check-in recorded — stay safe!');
+    } catch { toast.error('Check-in failed'); } finally { setLoading(false); }
+  }
+
+  async function endSession() {
+    if (!session) return;
+    setLoading(true);
+    try {
+      await api.post('/loss-prevention/lone-worker/end');
+      setSession(null);
+      toast.success('Lone worker session ended');
+    } catch { toast.error('Failed to end session'); } finally { setLoading(false); }
+  }
+
+  const minutesSinceCheckin = session?.lastCheckin
+    ? Math.floor((Date.now() - new Date(session.lastCheckin)) / 60000)
+    : null;
+  const overdueCheckin = minutesSinceCheckin !== null && minutesSinceCheckin > intervalMin;
+
+  if (session) {
+    return (
+      <div className="max-w-lg mx-auto space-y-4">
+        <div className={`rounded-xl border-2 p-6 text-center ${overdueCheckin ? 'border-red-400 bg-red-50' : 'border-green-400 bg-green-50'}`}>
+          <div className="text-5xl mb-3">{overdueCheckin ? '⚠️' : '🟢'}</div>
+          <h3 className="text-xl font-bold text-gray-900 mb-1">
+            {overdueCheckin ? 'CHECK-IN OVERDUE' : 'Session Active'}
+          </h3>
+          <p className="text-sm text-gray-600 mb-1">Till: {session.tillId} · Running {elapsed} min</p>
+          {session.lastCheckin && (
+            <p className={`text-sm font-medium ${overdueCheckin ? 'text-red-700' : 'text-green-700'}`}>
+              Last check-in: {dayjs(session.lastCheckin).format('HH:mm')} ({minutesSinceCheckin} min ago)
+            </p>
+          )}
+          <p className="text-xs text-gray-500 mt-1">Check-in interval: {intervalMin} min</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={checkin} disabled={loading}
+            className="py-4 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 disabled:opacity-50 text-lg">
+            ✅ Check In
+          </button>
+          <button onClick={endSession} disabled={loading}
+            className="py-4 bg-gray-600 text-white font-bold rounded-xl hover:bg-gray-700 disabled:opacity-50">
+            🔴 End Session
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto space-y-4">
+      <div className="bg-white rounded-xl border p-6 space-y-4">
+        <div className="text-center">
+          <div className="text-4xl mb-2">👤</div>
+          <h3 className="text-lg font-bold text-gray-900">Start Lone Worker Session</h3>
+          <p className="text-sm text-gray-500 mt-1">Automated check-ins with missed-check alert to manager</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Till ID</label>
+          <input className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            value={tillId} onChange={e => setTillId(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Check-in Interval (minutes)</label>
+          <select className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            value={intervalMin} onChange={e => setIntervalMin(Number(e.target.value))}>
+            {[15, 20, 30, 45, 60].map(m => <option key={m} value={m}>{m} minutes</option>)}
+          </select>
+        </div>
+        <button onClick={startSession} disabled={loading}
+          className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-50">
+          {loading ? 'Starting…' : '🟢 Start Session'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function LossPreventionPage() {
   const [tab, setTab] = useState('dashboard');
   const [dashboard, setDashboard] = useState(null);
@@ -214,6 +325,7 @@ export default function LossPreventionPage() {
     { id: 'incidents', label: `Incidents ${incidents.length > 0 ? `(${incidents.length})` : ''}` },
     { id: 'patterns', label: 'Scan Patterns' },
     { id: 'replay', label: '🎬 Transaction Replay' },
+    { id: 'lone-worker', label: '👤 Lone Worker' },
   ];
 
   return (
@@ -409,6 +521,8 @@ export default function LossPreventionPage() {
           )}
         </>
       )}
+
+      {tab === 'lone-worker' && <LoneWorkerPanel />}
 
       {showIncidentModal && (
         <IncidentModal

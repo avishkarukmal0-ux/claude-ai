@@ -80,9 +80,40 @@ router.get('/comparison', requireRole('manager'), async (req, res, next) => {
 
 router.get('/export', requireRole('manager'), async (req, res, next) => {
   try {
-    const { from, to, format = 'csv' } = req.query;
-    const data = await reportService.getDailySummary(req.storeId, from);
-    res.json({ success: true, data, format });
+    const { from, to } = req.query;
+    const [summary, categories, staffData] = await Promise.allSettled([
+      reportService.getDailySummary(req.storeId, from || new Date().toISOString().split('T')[0]),
+      reportService.getCategoryBreakdown(req.storeId, from, to),
+      reportService.getStaffPerformance(req.storeId, from, to),
+    ]);
+    const sum = summary.status === 'fulfilled' ? summary.value : {};
+    const cats = categories.status === 'fulfilled' ? (categories.value?.data || categories.value || []) : [];
+    const staff = staffData.status === 'fulfilled' ? (staffData.value?.data || staffData.value || []) : [];
+
+    const rows = [
+      ['Vendora POS Report Export'],
+      [`Period: ${from || 'today'} to ${to || 'today'}`],
+      [],
+      ['SUMMARY'],
+      ['Metric', 'Value'],
+      ['Total Revenue', `£${Number(sum.totalRevenue || 0).toFixed(2)}`],
+      ['Transactions', sum.transactionCount || 0],
+      ['Average Basket', `£${Number(sum.averageBasket || 0).toFixed(2)}`],
+      ['Total VAT', `£${Number(sum.totalVat || 0).toFixed(2)}`],
+      [],
+      ['CATEGORIES'],
+      ['Category', 'Revenue', 'Units'],
+      ...cats.map(c => [c.category, `£${Number(c.revenue).toFixed(2)}`, c.units]),
+      [],
+      ['STAFF PERFORMANCE'],
+      ['Name', 'Transactions', 'Revenue', 'Avg Basket', 'Voids'],
+      ...staff.map(s => [s.name, s.transactionCount, `£${Number(s.revenue).toFixed(2)}`, `£${Number(s.averageBasket).toFixed(2)}`, s.voidCount]),
+    ];
+
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="vendora-report-${from || 'today'}.csv"`);
+    res.send(csv);
   } catch (err) { next(err); }
 });
 

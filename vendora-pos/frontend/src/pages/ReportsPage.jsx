@@ -20,6 +20,41 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-primary' }) {
   );
 }
 
+function exportCsv({ summary, categories, staff, dateFrom, dateTo }) {
+  const rows = [];
+  rows.push(['Vendora POS — Report Export']);
+  rows.push([`Period: ${dateFrom} to ${dateTo}`]);
+  rows.push([]);
+  if (summary) {
+    rows.push(['SUMMARY']);
+    rows.push(['Metric', 'Value']);
+    rows.push(['Total Revenue', `£${Number(summary.totalRevenue || 0).toFixed(2)}`]);
+    rows.push(['Transactions', summary.transactionCount || 0]);
+    rows.push(['Average Basket', `£${Number(summary.averageBasket || 0).toFixed(2)}`]);
+    rows.push(['Total VAT', `£${Number(summary.totalVat || 0).toFixed(2)}`]);
+    rows.push([]);
+  }
+  if (categories?.length > 0) {
+    rows.push(['CATEGORIES']);
+    rows.push(['Category', 'Revenue', 'Units']);
+    categories.forEach(c => rows.push([c.category, `£${Number(c.revenue).toFixed(2)}`, c.units]));
+    rows.push([]);
+  }
+  if (staff?.length > 0) {
+    rows.push(['STAFF PERFORMANCE']);
+    rows.push(['Name', 'Transactions', 'Revenue', 'Avg Basket', 'Voids', 'Discounts']);
+    staff.forEach(s => rows.push([s.name, s.transactionCount, `£${Number(s.revenue).toFixed(2)}`, `£${Number(s.averageBasket).toFixed(2)}`, s.voidCount, `£${Number(s.discountsGiven).toFixed(2)}`]));
+  }
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `vendora-report-${dateFrom}-to-${dateTo}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function ReportsPage() {
   const [tab, setTab] = useState('summary');
   const [dateFrom, setDateFrom] = useState(dayjs().subtract(7, 'day').format('YYYY-MM-DD'));
@@ -77,12 +112,18 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
           <p className="text-sm text-gray-500 mt-1">Sales performance and analytics</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <input type="date" className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
           <span className="text-gray-400 text-sm">to</span>
           <input type="date" className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={dateTo} onChange={e => setDateTo(e.target.value)} />
           <button onClick={loadData} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90">
             <RefreshCw size={16} /> Refresh
+          </button>
+          <button onClick={() => exportCsv({ summary, categories, staff, dateFrom, dateTo })} className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+            📥 CSV
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+            🖨 Print
           </button>
         </div>
       </div>
@@ -226,7 +267,10 @@ export default function ReportsPage() {
               </div>
             </div>
             {xReport ? (
-              <ReportDisplay report={xReport} />
+              <>
+                <ReportDisplay report={xReport} />
+                <button onClick={() => window.print()} className="mt-3 w-full border border-gray-200 text-gray-600 py-1.5 rounded-lg text-sm hover:bg-gray-50">🖨 Print X Report</button>
+              </>
             ) : (
               <p className="text-gray-400 text-sm text-center py-8">Click "Run X" to generate</p>
             )}
@@ -243,7 +287,10 @@ export default function ReportsPage() {
               </button>
             </div>
             {zReport ? (
-              <ReportDisplay report={zReport} />
+              <>
+                <ReportDisplay report={zReport} />
+                <button onClick={() => window.print()} className="mt-3 w-full border border-gray-200 text-gray-600 py-1.5 rounded-lg text-sm hover:bg-gray-50">🖨 Print Z Report</button>
+              </>
             ) : (
               <p className="text-gray-400 text-sm text-center py-8">Click "Run Z" to close day and generate</p>
             )}
