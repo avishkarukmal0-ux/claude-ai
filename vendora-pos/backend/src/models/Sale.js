@@ -67,6 +67,5 @@ const SaleSchema = new Schema({
 
 SaleSchema.index({ store: 1, completedAt: -1 });
 SaleSchema.index({ store: 1, staff: 1, completedAt: -1 });
-SaleSchema.index({ receiptNumber: 1 });
 
 module.exports = model('Sale', SaleSchema);

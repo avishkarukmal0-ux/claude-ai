@@ -295,7 +295,9 @@ export default function CustomersPage() {
 
       {tab === 'segments' && <SegmentationTab />}
 
-      {tab === 'customers' && <div className="flex gap-3 mb-6">
+      {tab === 'customers' && (
+        <>
+        <div className="flex gap-3 mb-6">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -383,6 +385,8 @@ export default function CustomersPage() {
             <ChevronRight size={16} />
           </button>
         </div>
+      )}
+        </>
       )}
 
       {showModal && <CustomerModal customer={editCustomer} onClose={closeModal} onSaved={onSaved} />}

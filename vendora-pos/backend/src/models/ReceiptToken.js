@@ -11,6 +11,5 @@ const ReceiptTokenSchema = new Schema({
 }, { timestamps: true });
 
 ReceiptTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-ReceiptTokenSchema.index({ token: 1 });
 
 module.exports = model('ReceiptToken', ReceiptTokenSchema);
