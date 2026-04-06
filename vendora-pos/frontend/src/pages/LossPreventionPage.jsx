@@ -467,8 +467,6 @@ export default function LossPreventionPage() {
               ))}
             </div>
           )}
-        </>
-      )}
 
           {tab === 'replay' && (
             <div className="space-y-4">
