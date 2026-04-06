@@ -221,18 +221,60 @@ function VoidConfirmModal({ item, onConfirm, onCancel }) {
   );
 }
 
+// ── Mobile Top-Up Phone Modal ────────────────────────────────────────────────
+function TopUpPhoneModal({ product, onConfirm, onCancel }) {
+  const [phone, setPhone] = useState('');
+  const isValid = /^(\+44|0)[0-9]{10}$/.test(phone.replace(/\s/g, ''));
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+      <div className="bg-pos-panel rounded-2xl max-w-sm w-full p-6 text-pos-text shadow-2xl">
+        <div className="text-center mb-4">
+          <div className="text-5xl mb-2">📱</div>
+          <h2 className="text-xl font-black text-white">{product?.name}</h2>
+          <p className="text-pos-muted text-sm mt-1">Enter customer's mobile number</p>
+        </div>
+        <input
+          type="tel"
+          className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-3 text-xl font-mono text-center focus:outline-none focus:border-blue-400 placeholder-slate-500 mb-3"
+          placeholder="07911 123456"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          autoFocus
+        />
+        <p className="text-pos-muted text-xs text-center mb-4">UK mobile number (07... or +44...)</p>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={onCancel} className="py-3 bg-pos-card text-pos-muted font-bold rounded-xl hover:bg-slate-600 transition-all">Cancel</button>
+          <button
+            onClick={() => onConfirm(phone)}
+            disabled={!isValid}
+            className="py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary/90 disabled:opacity-40 transition-all"
+          >
+            Add to Cart
+          </button>
+        </div>
+        <button onClick={() => onConfirm('')} className="w-full mt-2 text-pos-muted text-xs hover:text-pos-text">Skip phone number</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Receipt Preview Modal (#15) ──────────────────────────────────────────────
 function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [showSmsInput, setShowSmsInput] = useState(false);
+  const [showWaInput, setShowWaInput] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [qrCode, setQrCode] = useState(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [waLink, setWaLink] = useState(null);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [waPhone, setWaPhone] = useState('');
   const [sending, setSending] = useState(false);
 
   const receiptDate = dayjs().format('DD/MM/YYYY HH:mm');
 
   const handlePrint = () => {
-    // Build a printable receipt and trigger browser print
     const receiptHtml = `
       <html><head><title>Receipt</title><style>
         body { font-family: 'Courier New', monospace; width: 280px; margin: 0 auto; font-size: 12px; }
@@ -245,7 +287,7 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
         <div class="center">${receiptDate}</div>
         ${saleData?.receiptNumber ? `<div class="center">Receipt: ${saleData.receiptNumber}</div>` : ''}
         <div class="line"></div>
-        ${items.map(i => `<div class="row"><span>${i.quantity}x ${i.name}</span><span>${'£' + Number(i.lineTotal).toFixed(2)}</span></div>`).join('')}
+        ${items.map(i => `<div class="row"><span>${i.quantity}x ${i.name}${i.mobileTopupPhone ? ` (${i.mobileTopupPhone})` : ''}</span><span>${'£' + Number(i.lineTotal).toFixed(2)}</span></div>`).join('')}
         <div class="line"></div>
         <div class="row bold big"><span>TOTAL</span><span>${'£' + Number(total).toFixed(2)}</span></div>
         <div class="line"></div>
@@ -253,24 +295,16 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
         <div class="center">Challenge 25 in operation</div>
       </body></html>`;
     const win = window.open('', '_blank', 'width=350,height=500');
-    if (win) {
-      win.document.write(receiptHtml);
-      win.document.close();
-      win.focus();
-      win.print();
-      win.close();
-    }
+    if (win) { win.document.write(receiptHtml); win.document.close(); win.focus(); win.print(); win.close(); }
     onClose();
   };
 
   const handleSendEmail = async () => {
-    if (!showEmailInput) { setShowEmailInput(true); setShowSmsInput(false); return; }
+    if (!showEmailInput) { setShowEmailInput(true); setShowSmsInput(false); setShowWaInput(false); setShowQr(false); return; }
     if (!email.trim()) return;
     setSending(true);
     try {
-      if (saleData?._id) {
-        await api.post('/digital-receipts/send', { saleId: saleData._id, email });
-      }
+      if (saleData?._id) await api.post('/digital-receipts/send', { saleId: saleData._id, email });
       toast.success(`Receipt emailed to ${email}`);
     } catch { toast.success('Email queued'); }
     finally { setSending(false); }
@@ -278,18 +312,71 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
   };
 
   const handleSendSms = async () => {
-    if (!showSmsInput) { setShowSmsInput(true); setShowEmailInput(false); return; }
+    if (!showSmsInput) { setShowSmsInput(true); setShowEmailInput(false); setShowWaInput(false); setShowQr(false); return; }
     if (!phone.trim()) return;
     setSending(true);
     try {
-      if (saleData?._id) {
-        await api.post('/digital-receipts/sms', { saleId: saleData._id, phone });
-      }
-      toast.success(`Receipt SMS sent to ${phone}`);
+      if (saleData?._id) await api.post('/digital-receipts/sms', { saleId: saleData._id, phone });
+      toast.success(`SMS sent to ${phone}`);
     } catch { toast.success('SMS queued'); }
     finally { setSending(false); }
     onClose();
   };
+
+  const handleWhatsApp = async () => {
+    if (!showWaInput) { setShowWaInput(true); setShowEmailInput(false); setShowSmsInput(false); setShowQr(false); return; }
+    if (!waPhone.trim()) return;
+    setSending(true);
+    try {
+      const resp = await api.post('/receipts/whatsapp', { saleId: saleData?._id, phone: waPhone });
+      if (resp.waLink) {
+        setWaLink(resp.waLink);
+        window.open(resp.waLink, '_blank');
+      }
+      toast.success('WhatsApp receipt ready');
+    } catch {
+      toast.success('WhatsApp link generated');
+    }
+    finally { setSending(false); }
+  };
+
+  const handleQrCode = async () => {
+    if (showQr) { setShowQr(false); return; }
+    setShowQr(true);
+    setShowEmailInput(false); setShowSmsInput(false); setShowWaInput(false);
+    if (!qrCode && saleData?._id) {
+      setQrLoading(true);
+      try {
+        const resp = await api.post(`/receipts/qr/${saleData._id}`);
+        setQrCode(resp.qrCode || resp.qrCodeDataUrl);
+      } catch { toast.error('QR generation failed'); setShowQr(false); }
+      finally { setQrLoading(false); }
+    }
+  };
+
+  // Auto-dismiss QR after 15s
+  useEffect(() => {
+    if (!showQr) return;
+    const t = setTimeout(() => setShowQr(false), 15000);
+    return () => clearTimeout(t);
+  }, [showQr]);
+
+  if (showQr) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex flex-col items-center justify-center p-4" onClick={() => setShowQr(false)}>
+        <p className="text-white text-lg font-semibold mb-4">Scan for your receipt</p>
+        {qrLoading ? (
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent" />
+        ) : qrCode ? (
+          <img src={qrCode} alt="Receipt QR Code" className="w-64 h-64 bg-white rounded-2xl p-3" />
+        ) : (
+          <div className="text-white text-sm">QR unavailable</div>
+        )}
+        <p className="text-slate-400 text-sm mt-4">Tap anywhere to close · Auto-closes in 15s</p>
+        <button onClick={onClose} className="mt-4 text-slate-500 text-xs">Done</button>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
@@ -300,7 +387,7 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
         </div>
 
         {/* Receipt */}
-        <div className="bg-pos-card rounded-xl p-4 mb-5 font-mono text-xs">
+        <div className="bg-pos-card rounded-xl p-4 mb-4 font-mono text-xs">
           <div className="text-center mb-3">
             <p className="font-bold text-pos-text text-sm">{storeName}</p>
             <p className="text-pos-muted mt-0.5">{receiptDate}</p>
@@ -311,7 +398,12 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
           <div className="border-t border-slate-700 pt-3 space-y-1.5">
             {items.map((item, idx) => (
               <div key={idx} className="flex justify-between gap-2">
-                <span className="text-pos-muted truncate flex-1">{item.quantity}x {item.name}</span>
+                <span className="text-pos-muted truncate flex-1">
+                  {item.quantity}x {item.name}
+                  {item.category === 'Lottery' && <span className="ml-1 text-yellow-400 text-xs">🎟</span>}
+                  {item.category === 'Mobile Top-Up' && <span className="ml-1 text-blue-400 text-xs">📱</span>}
+                  {item.mobileTopupPhone && <span className="text-blue-300 block text-xs">→ {item.mobileTopupPhone}</span>}
+                </span>
                 <span className="text-pos-text shrink-0">{fmt(item.lineTotal)}</span>
               </div>
             ))}
@@ -322,24 +414,19 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
           </div>
         </div>
 
-        {/* Inputs */}
-        {showEmailInput && (
-          <div className="mb-4">
-            <input type="email" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500" placeholder="customer@email.com" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
-          </div>
-        )}
-        {showSmsInput && (
-          <div className="mb-4">
-            <input type="tel" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500" placeholder="+447911123456" value={phone} onChange={e => setPhone(e.target.value)} autoFocus />
-          </div>
-        )}
+        {/* Conditional inputs */}
+        {showEmailInput && <input type="email" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500 mb-3" placeholder="customer@email.com" value={email} onChange={e => setEmail(e.target.value)} autoFocus />}
+        {showSmsInput && <input type="tel" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500 mb-3" placeholder="+447911123456" value={phone} onChange={e => setPhone(e.target.value)} autoFocus />}
+        {showWaInput && <input type="tel" className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500 mb-3" placeholder="07911 123456" value={waPhone} onChange={e => setWaPhone(e.target.value)} autoFocus />}
 
-        {/* Action buttons */}
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <button onClick={handlePrint} className="py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all text-sm">🖨 Print</button>
-          <button onClick={handleSendEmail} disabled={sending} className="py-3 bg-slate-600 text-white font-bold rounded-xl hover:bg-slate-500 transition-all text-sm">📧 {showEmailInput ? 'Send Email' : 'Email'}</button>
-          <button onClick={handleSendSms} disabled={sending} className="py-3 bg-green-700 text-white font-bold rounded-xl hover:bg-green-600 transition-all text-sm">📱 {showSmsInput ? 'Send SMS' : 'SMS'}</button>
-          <button onClick={onClose} className="py-3 bg-pos-card text-pos-muted font-bold rounded-xl hover:bg-slate-600 transition-all text-sm">Skip</button>
+        {/* Action buttons — 3x2 grid */}
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={handlePrint} className="py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 text-xs">🖨 Print</button>
+          <button onClick={handleSendEmail} disabled={sending} className="py-3 bg-slate-600 text-white font-bold rounded-xl hover:bg-slate-500 text-xs">📧 {showEmailInput ? 'Send' : 'Email'}</button>
+          <button onClick={handleSendSms} disabled={sending} className="py-3 bg-blue-700 text-white font-bold rounded-xl hover:bg-blue-600 text-xs">📱 {showSmsInput ? 'Send' : 'SMS'}</button>
+          <button onClick={handleWhatsApp} disabled={sending} className="py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-500 text-xs">💬 {showWaInput ? 'Send' : 'WhatsApp'}</button>
+          <button onClick={handleQrCode} className="py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-500 text-xs">📷 QR Code</button>
+          <button onClick={onClose} className="py-3 bg-pos-card text-pos-muted font-bold rounded-xl hover:bg-slate-600 text-xs">Skip</button>
         </div>
       </div>
     </div>
@@ -595,6 +682,15 @@ export default function POSPage() {
   // Feature #15 — Receipt Preview
   const [receiptData, setReceiptData] = useState(null); // { saleData, items, total }
 
+  // Mobile top-up phone number modal
+  const [pendingTopUp, setPendingTopUp] = useState(null); // product awaiting phone number
+
+  // Quick-sell grid tab state
+  const [quickTab, setQuickTab] = useState('All');
+  const [quickProducts, setQuickProducts] = useState([]);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const quickTabCache = useRef({});
+
   const searchRef = useRef();
   const tillId = settings?.tillId || 'TILL-1';
   const storeName = settings?.storeName || "Raj's Off-Licence";
@@ -661,6 +757,39 @@ export default function POSPage() {
       toast.error('🚨 PANIC — Alert failed, call manager immediately!', { duration: 8000 });
     }
   }, [tillId, storeName]);
+
+  // Quick-sell grid: load products for selected tab
+  useEffect(() => {
+    const tab = quickTab;
+    if (quickTabCache.current[tab]) { setQuickProducts(quickTabCache.current[tab]); return; }
+    setQuickLoading(true);
+    const params = tab === 'All' ? { active: true, limit: 40 } : { category: tab, active: true, limit: 40 };
+    productSvc.getProducts(params)
+      .then(data => {
+        const prods = data.products || data || [];
+        quickTabCache.current[tab] = prods;
+        setQuickProducts(prods);
+      })
+      .catch(() => setQuickProducts([]))
+      .finally(() => setQuickLoading(false));
+  }, [quickTab]);
+
+  // Collection order recall: check localStorage on mount
+  useEffect(() => {
+    const orderId = localStorage.getItem('vendora_collection_order_recall');
+    if (!orderId) return;
+    localStorage.removeItem('vendora_collection_order_recall');
+    api.get(`/collection-orders`).then(resp => {
+      const orders = resp?.orders || resp || [];
+      const order = Array.isArray(orders) ? orders.find(o => o._id === orderId) : null;
+      if (order && order.items?.length) {
+        order.items.forEach(item => {
+          addItem({ name: item.name, unitPrice: item.unitPrice, quantity: item.quantity, lineTotal: item.lineTotal, _id: item.productId || orderId, barcode: item.barcode || 'CC', category: 'Collection' });
+        });
+        toast.success(`Collection order ${order.orderNumber} loaded into cart`);
+      }
+    }).catch(() => {});
+  }, []); // eslint-disable-line
 
   // Load cash drawer state
   useEffect(() => {
@@ -758,7 +887,12 @@ export default function POSPage() {
       setPendingAgeVerify({ product, verified: false });
       return;
     }
-    addItem({ ...product, barcode: product.barcode, name: product.name, unitPrice: product.pricing.retailPrice, quantity: 1, lineTotal: product.pricing.retailPrice, ageVerified: false });
+    // Mobile top-up: prompt for phone number
+    if (product.category === 'Mobile Top-Up') {
+      setPendingTopUp(product);
+      return;
+    }
+    addItem({ ...product, barcode: product.barcode, name: product.name, unitPrice: product.pricing?.retailPrice ?? product.unitPrice ?? 0, quantity: 1, lineTotal: product.pricing?.retailPrice ?? product.unitPrice ?? 0, ageVerified: false });
     toast.success(`${product.name} added`, { duration: 1000 });
   }, [addItem]);
 
@@ -786,6 +920,16 @@ export default function POSPage() {
     }).catch(() => {});
     setPendingAgeVerify(null);
   };
+
+  // Mobile top-up phone confirm
+  const confirmTopUp = useCallback((phone) => {
+    if (!pendingTopUp) return;
+    const p = pendingTopUp;
+    const price = p.pricing?.retailPrice ?? p.unitPrice ?? 0;
+    addItem({ ...p, barcode: p.barcode, name: p.name, unitPrice: price, quantity: 1, lineTotal: price, ageVerified: false, mobileTopupPhone: phone || '' });
+    toast.success(`${p.name} added${phone ? ` (${phone})` : ''}`, { duration: 1500 });
+    setPendingTopUp(null);
+  }, [pendingTopUp, addItem]);
 
   // Feature #8 — Void handlers
   const handleVoidRequest = useCallback((index) => {
@@ -871,6 +1015,15 @@ export default function POSPage() {
           item={voidTarget.item}
           onConfirm={handleVoidConfirm}
           onCancel={handleVoidCancel}
+        />
+      )}
+
+      {/* Mobile top-up phone modal */}
+      {pendingTopUp && (
+        <TopUpPhoneModal
+          product={pendingTopUp}
+          onConfirm={confirmTopUp}
+          onCancel={() => setPendingTopUp(null)}
         />
       )}
 
@@ -980,12 +1133,64 @@ export default function POSPage() {
           </div>
         )}
 
-        {/* Empty state */}
-        {searchResults.length === 0 && items.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center text-pos-muted">
-            <div className="text-6xl mb-4">🛒</div>
-            <p className="text-lg font-semibold">Ready to serve</p>
-            <p className="text-sm mt-1">Scan a barcode or search for a product</p>
+        {/* Quick-sell grid */}
+        {searchResults.length === 0 && (
+          <div className="flex-1 flex flex-col min-h-0 px-4 pb-4">
+            {/* Tabs */}
+            <div className="flex gap-1 overflow-x-auto pb-2 pos-scroll-x mb-3">
+              {['All', 'Beer', 'Spirits', 'Soft Drinks', 'Snacks', 'Tobacco', 'Lottery', 'Top-Up'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setQuickTab(tab === 'Top-Up' ? 'Mobile Top-Up' : tab)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    (quickTab === tab || (tab === 'Top-Up' && quickTab === 'Mobile Top-Up'))
+                      ? 'bg-primary text-white'
+                      : 'bg-pos-card text-pos-muted hover:bg-slate-600'
+                  }`}
+                >
+                  {tab === 'Lottery' ? '🎟 Lottery' : tab === 'Top-Up' ? '📱 Top-Up' : tab}
+                </button>
+              ))}
+            </div>
+            {/* Product grid */}
+            {quickLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto pos-scroll">
+                {quickProducts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-pos-muted text-sm">
+                    <p>No products in this category</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {quickProducts.map(p => {
+                      const cat = p.category || '';
+                      let btnClass = 'bg-pos-card hover:bg-slate-600 border border-slate-600';
+                      if (cat === 'Lottery') btnClass = 'bg-yellow-900 hover:bg-yellow-800 border border-yellow-600';
+                      else if (cat === 'Mobile Top-Up') btnClass = 'bg-blue-900 hover:bg-blue-800 border border-blue-600';
+                      else if (cat === 'Beer' || cat === 'Cider') btnClass = 'bg-amber-900 hover:bg-amber-800 border border-amber-600';
+                      else if (cat === 'Spirits') btnClass = 'bg-purple-900 hover:bg-purple-800 border border-purple-600';
+                      else if (cat === 'Tobacco') btnClass = 'bg-gray-800 hover:bg-gray-700 border border-gray-600';
+                      return (
+                        <button
+                          key={p._id}
+                          onClick={() => addProductToCart(p)}
+                          className={`${btnClass} rounded-xl p-2 text-left transition-all active:scale-95`}
+                        >
+                          <p className="text-pos-text text-xs font-semibold leading-tight truncate">{p.name}</p>
+                          <p className="text-pos-muted text-xs font-mono mt-0.5">{fmt(p.pricing?.retailPrice || 0)}</p>
+                          {p.stock?.quantity !== undefined && (
+                            <p className="text-pos-muted text-xs opacity-60">Qty: {p.stock.quantity}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

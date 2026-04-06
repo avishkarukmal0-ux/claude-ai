@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 
+const { publicRouter: receiptPublicRouter } = require('./receiptRoutes');
 const authRoutes           = require('./authRoutes');
 const saleRoutes           = require('./saleRoutes');
 const productRoutes        = require('./productRoutes');
@@ -33,6 +34,9 @@ const challenge25Routes    = require('./challenge25Routes');
 // Public routes
 router.use('/auth', authRoutes);
 
+// Public receipt viewer (no auth required)
+router.use('/receipt', receiptPublicRouter);
+
 // All routes below require a valid JWT
 router.use(authenticate);
 
@@ -62,5 +66,17 @@ router.use('/pos/quick-keys',   posQuickKeyRoutes);
 router.use('/pos/stock-take',   posStockTakeRoutes);
 router.use('/pos/training',     posTrainingRoutes);
 router.use('/challenge25',      challenge25Routes);
+
+const receiptRoutes          = require('./receiptRoutes');
+const collectionOrderRoutes  = require('./collectionOrderRoutes');
+const selfCheckoutRoutes     = require('./selfCheckoutRoutes');
+const tapToPayRoutes         = require('./tapToPayRoutes');
+const queueBustRoutes        = require('./queueBustRoutes');
+
+router.use('/receipts',              receiptRoutes);
+router.use('/collection-orders',     collectionOrderRoutes);
+router.use('/pos/self-checkout',     selfCheckoutRoutes);
+router.use('/payments/tap-to-pay',   tapToPayRoutes);
+router.use('/pos/queue-bust',        queueBustRoutes);
 
 module.exports = router;

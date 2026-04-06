@@ -30,6 +30,9 @@ import OfflineQueuePage from './pages/OfflineQueuePage';
 import TrainingModePage from './pages/TrainingModePage';
 import Challenge25Page from './pages/Challenge25Page';
 import CustomerDisplayPage from './pages/CustomerDisplayPage';
+import CollectionOrdersPage from './pages/CollectionOrdersPage';
+import SelfCheckoutPage from './pages/SelfCheckoutPage';
+import QueueBustPage from './pages/QueueBustPage';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -73,8 +76,11 @@ export default function App() {
                     <Route path="training" element={<TrainingModePage />} />
                     <Route path="challenge25" element={<ProtectedRoute requiredRole="supervisor"><Challenge25Page /></ProtectedRoute>} />
                     <Route path="settings" element={<ProtectedRoute requiredRole="manager"><SettingsPage /></ProtectedRoute>} />
+                    <Route path="collection-orders" element={<CollectionOrdersPage />} />
                   </Route>
                   <Route path="customer-display" element={<CustomerDisplayPage />} />
+                  <Route path="self-checkout" element={<ProtectedRoute><SelfCheckoutPage /></ProtectedRoute>} />
+                  <Route path="queue-bust" element={<ProtectedRoute><QueueBustPage /></ProtectedRoute>} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </NotificationProvider>

@@ -26,6 +26,7 @@ const SaleSchema = new Schema({
     vatAmount: Number,
     ageVerified: { type: Boolean, default: false },
     scanTime: Date,
+    mobileTopupPhone: String,
   }],
   subtotal: Number,
   discountTotal: Number,
@@ -34,7 +35,7 @@ const SaleSchema = new Schema({
   payments: [{
     method: {
       type: String,
-      enum: ['cash', 'card', 'contactless', 'gift_card', 'loyalty_points', 'voucher', 'account', 'open_banking'],
+      enum: ['cash', 'card', 'contactless', 'gift_card', 'loyalty_points', 'voucher', 'account', 'open_banking', 'tap_to_pay', 'mobile_topup'],
     },
     amount: Number,
     reference: String,

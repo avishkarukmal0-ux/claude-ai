@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Edit2, AlertTriangle, Package, ChevronLeft, ChevronRight, X, BarChart2 } from 'lucide-react';
+import { Search, Plus, Edit2, AlertTriangle, Package, ChevronLeft, ChevronRight, X, BarChart2, Lightbulb } from 'lucide-react';
 import * as productsSvc from '../services/products';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -12,7 +12,8 @@ const VAT_RATES = [
 
 const CATEGORIES = [
   'Beer & Cider', 'Spirits', 'Wine', 'Soft Drinks', 'Confectionery',
-  'Tobacco', 'Snacks', 'Household', 'Top-Up Cards', 'Newspapers & Mags', 'Other',
+  'Tobacco', 'Snacks', 'Household', 'Top-Up Cards', 'Mobile Top-Up',
+  'Newspapers & Mags', 'Lottery', 'Other',
 ];
 
 function ProductModal({ product, onClose, onSaved }) {
@@ -37,8 +38,29 @@ function ProductModal({ product, onClose, onSaved }) {
     ageRestricted: false, requiresChallenge25: false, isActive: true,
   });
   const [saving, setSaving] = useState(false);
+  const [suggestedPrice, setSuggestedPrice] = useState(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSuggestPrice = async () => {
+    if (!form.costPrice || parseFloat(form.costPrice) <= 0) {
+      toast.error('Enter cost price first');
+      return;
+    }
+    setSuggestLoading(true);
+    try {
+      const res = await api.post('/products/suggest-price', {
+        costPrice: parseFloat(form.costPrice),
+        category: form.category,
+      });
+      setSuggestedPrice(res);
+    } catch {
+      toast.error('Could not fetch price suggestion');
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -82,8 +104,60 @@ function ProductModal({ product, onClose, onSaved }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Retail Price (£) *</label>
-              <input type="number" step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.retailPrice} onChange={e => set('retailPrice', e.target.value)} required />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Retail Price (£) *</label>
+                <button
+                  type="button"
+                  onClick={handleSuggestPrice}
+                  disabled={suggestLoading}
+                  className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium disabled:opacity-50"
+                >
+                  {suggestLoading
+                    ? <span className="animate-spin inline-block w-3 h-3 border border-amber-500 border-t-transparent rounded-full" />
+                    : <Lightbulb size={12} />}
+                  Suggest
+                </button>
+              </div>
+              <input type="number" step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.retailPrice} onChange={e => { set('retailPrice', e.target.value); setSuggestedPrice(null); }} required />
+              {suggestedPrice && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <div className="flex items-start gap-2 mb-2">
+                    <Lightbulb size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-amber-900">
+                        Suggested: £{Number(suggestedPrice.suggestedPrice || 0).toFixed(2)}
+                        {suggestedPrice.marginPct != null && (
+                          <span className={`ml-2 text-xs font-bold ${
+                            suggestedPrice.marginPct >= 30 ? 'text-green-700' :
+                            suggestedPrice.marginPct >= 15 ? 'text-amber-700' : 'text-red-600'
+                          }`}>
+                            ({suggestedPrice.marginPct}% margin)
+                          </span>
+                        )}
+                      </p>
+                      {suggestedPrice.reason && (
+                        <p className="text-xs text-amber-700 mt-0.5">{suggestedPrice.reason}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { set('retailPrice', suggestedPrice.suggestedPrice); setSuggestedPrice(null); }}
+                      className="flex-1 bg-amber-600 text-white px-2 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-700"
+                    >
+                      Use This Price
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggestedPrice(null)}
+                      className="flex-1 border border-amber-300 text-amber-700 px-2 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-100"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Cost Price (£)</label>

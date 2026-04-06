@@ -6,10 +6,13 @@ import clsx from 'clsx';
 
 const navSections = [
   { label: 'POS', minRole: 'cashier', items: [
-    { to: '/pos',             icon: '🛒', label: 'POS Terminal' },
-    { to: '/transactions',    icon: '📜', label: 'Transactions' },
-    { to: '/training',        icon: '🎓', label: 'Training Mode' },
-    { to: '/offline-queue',   icon: '📶', label: 'Offline Queue' },
+    { to: '/pos',               icon: '🛒', label: 'POS Terminal' },
+    { to: '/transactions',      icon: '📜', label: 'Transactions' },
+    { to: '/collection-orders', icon: '📦', label: 'Click & Collect' },
+    { to: '/queue-bust',        icon: '🏃', label: 'Queue Busting' },
+    { to: '/self-checkout',     icon: '🤳', label: 'Self-Checkout' },
+    { to: '/training',          icon: '🎓', label: 'Training Mode' },
+    { to: '/offline-queue',     icon: '📶', label: 'Offline Queue' },
   ]},
   { label: 'Stock', minRole: 'cashier', items: [
     { to: '/products',        icon: '📦', label: 'Products' },
