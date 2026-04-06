@@ -107,4 +107,59 @@ router.delete('/schedules/:id', requireRole('manager'), async (req, res, next) =
   } catch (err) { next(err); }
 });
 
+// ── Custom Report Builder (#139) ─────────────────────────────────────────────
+
+// POST /api/reports/custom
+router.post('/custom', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const { from, to, metrics = ['revenue', 'transactions'], groupBy = 'day' } = req.body;
+
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const toDate = to ? new Date(to) : new Date();
+
+    const Sale = require('../models/Sale');
+
+    const groupFormats = {
+      day:   { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+      week:  { $dateToString: { format: '%Y-W%V', date: '$createdAt' } },
+      month: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+      staff: '$staffName',
+      till:  '$tillId',
+    };
+
+    const groupExpr = groupFormats[groupBy] || groupFormats.day;
+
+    const agg = await Sale.aggregate([
+      {
+        $match: {
+          store: req.storeId,
+          createdAt: { $gte: fromDate, $lte: toDate },
+          isVoid: { $ne: true },
+          isTraining: { $ne: true },
+        },
+      },
+      {
+        $group: {
+          _id: groupExpr,
+          revenue:      { $sum: '$total' },
+          transactions: { $sum: 1 },
+          avgBasket:    { $avg: '$total' },
+          itemsSold:    { $sum: { $sum: '$items.quantity' } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const totals = agg.reduce((t, r) => {
+      t.revenue += r.revenue;
+      t.transactions += r.transactions;
+      t.itemsSold += r.itemsSold;
+      return t;
+    }, { revenue: 0, transactions: 0, itemsSold: 0 });
+    totals.avgBasket = totals.transactions > 0 ? totals.revenue / totals.transactions : 0;
+
+    res.json({ success: true, params: { from: fromDate, to: toDate, metrics, groupBy }, rows: agg, totals });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

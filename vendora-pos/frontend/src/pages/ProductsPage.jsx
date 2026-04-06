@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Edit2, AlertTriangle, Package, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Search, Plus, Edit2, AlertTriangle, Package, ChevronLeft, ChevronRight, X, BarChart2 } from 'lucide-react';
 import * as productsSvc from '../services/products';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 
 const VAT_RATES = [
@@ -131,6 +132,73 @@ function ProductModal({ product, onClose, onSaved }) {
   );
 }
 
+// Product Insights Modal (#74)
+function InsightsModal({ productId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/products/${productId}/insights`)
+      .then(r => setData(r.data))
+      .catch(() => toast.error('Failed to load insights'))
+      .finally(() => setLoading(false));
+  }, [productId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h2 className="font-bold text-gray-900">Product Insights</h2>
+            {data && <p className="text-sm text-gray-500">{data.product.name}</p>}
+          </div>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" /></div>
+        ) : data ? (
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['Units Sold (7d)', data.insights.unitsSold7, '📦'],
+                ['Units Sold (30d)', data.insights.unitsSold30, '📦'],
+                ['Revenue (30d)', `£${Number(data.insights.revenue30).toFixed(2)}`, '💷'],
+                ['Daily Velocity', `${data.insights.dailyVelocity}/day`, '📈'],
+                ['Days of Stock', data.insights.daysOfStock !== null ? `${data.insights.daysOfStock}d` : '—', '🗓️'],
+                ['Margin', data.insights.marginPct !== null ? `${data.insights.marginPct}%` : '—', '💰'],
+              ].map(([label, value, icon]) => (
+                <div key={label} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">{icon} {label}</p>
+                  <p className="text-xl font-bold text-gray-900 mt-1">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+              <p className="font-medium text-gray-700">Pricing</p>
+              <div className="flex justify-between"><span className="text-gray-500">Cost Price</span><span className="font-mono">£{Number(data.insights.costPrice).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Retail Price</span><span className="font-mono font-bold">£{Number(data.insights.retailPrice).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Current Stock</span><span className={`font-bold ${data.insights.currentStock <= data.insights.lowStockThreshold ? 'text-red-600' : 'text-green-600'}`}>{data.insights.currentStock} units</span></div>
+            </div>
+            {data.stockHistory.length > 0 && (
+              <div>
+                <p className="font-medium text-gray-700 mb-2 text-sm">Recent Stock Movements</p>
+                <div className="space-y-1">
+                  {data.stockHistory.slice(0, 8).map((m, i) => (
+                    <div key={i} className="flex justify-between text-xs bg-gray-50 rounded px-3 py-2">
+                      <span className="text-gray-600 capitalize">{m.type?.replace(/_/g, ' ')}</span>
+                      <span className={m.quantity >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{m.quantity >= 0 ? '+' : ''}{m.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +209,7 @@ export default function ProductsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [editProduct, setEditProduct] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [insightsProductId, setInsightsProductId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -240,9 +309,14 @@ export default function ProductsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700">
-                      <Edit2 size={15} />
-                    </button>
+                    <div className="flex gap-1">
+                      <button onClick={() => setInsightsProductId(p._id)} className="p-1.5 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600" title="Product Insights">
+                        <BarChart2 size={15} />
+                      </button>
+                      <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700">
+                        <Edit2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -264,6 +338,7 @@ export default function ProductsPage() {
       )}
 
       {showModal && <ProductModal product={editProduct} onClose={closeModal} onSaved={onSaved} />}
+      {insightsProductId && <InsightsModal productId={insightsProductId} onClose={() => setInsightsProductId(null)} />}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { TrendingUp, ShoppingBag, Users, DollarSign, FileText, RefreshCw } from 'lucide-react';
 import * as reportsSvc from '../services/reports';
+import api from '../services/api';
 import dayjs from 'dayjs';
 
 const COLORS = ['#2563EB', '#16A34A', '#D97706', '#DC2626', '#7C3AED', '#0891B2', '#BE185D', '#065F46'];
@@ -66,6 +67,7 @@ export default function ReportsPage() {
     { id: 'categories', label: 'Categories' },
     { id: 'staff', label: 'Staff' },
     { id: 'xz', label: 'X/Z Reports' },
+    { id: 'custom', label: '🔧 Custom Builder' },
   ];
 
   return (
@@ -247,6 +249,148 @@ export default function ReportsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Custom Report Builder (#139) */}
+      {tab === 'custom' && <CustomReportBuilder />}
+    </div>
+  );
+}
+
+// Custom Report Builder Component (#139)
+function CustomReportBuilder() {
+  const [from, setFrom] = useState(dayjs().subtract(30, 'day').format('YYYY-MM-DD'));
+  const [to, setTo] = useState(dayjs().format('YYYY-MM-DD'));
+  const [groupBy, setGroupBy] = useState('day');
+  const [metrics, setMetrics] = useState(['revenue', 'transactions']);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const allMetrics = [
+    { id: 'revenue', label: 'Revenue' },
+    { id: 'transactions', label: 'Transactions' },
+    { id: 'avgBasket', label: 'Avg Basket' },
+    { id: 'itemsSold', label: 'Items Sold' },
+  ];
+
+  function toggleMetric(m) {
+    setMetrics(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]);
+  }
+
+  async function runReport() {
+    setLoading(true);
+    try {
+      const { data } = await api.post('/reports/custom', { from, to, metrics, groupBy });
+      setResult(data);
+    } catch { }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border p-6">
+        <h3 className="font-semibold text-gray-800 mb-4">Report Parameters</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+            <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={from} onChange={e => setFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+            <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={to} onChange={e => setTo(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Group By</label>
+            <select className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={groupBy} onChange={e => setGroupBy(e.target.value)}>
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+              <option value="staff">Staff</option>
+              <option value="till">Till</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button onClick={runReport} disabled={loading} className="w-full bg-primary text-white py-2 rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+              {loading ? 'Running…' : 'Run Report'}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-2">Metrics</label>
+          <div className="flex gap-2 flex-wrap">
+            {allMetrics.map(m => (
+              <button key={m.id} onClick={() => toggleMetric(m.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${metrics.includes(m.id) ? 'bg-primary text-white border-primary' : 'bg-white text-gray-600 border-gray-200 hover:border-primary'}`}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {result && (
+        <>
+          {/* Totals */}
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              ['Total Revenue', `£${Number(result.totals.revenue).toFixed(2)}`],
+              ['Transactions', result.totals.transactions],
+              ['Items Sold', result.totals.itemsSold],
+              ['Avg Basket', `£${Number(result.totals.avgBasket).toFixed(2)}`],
+            ].map(([label, value]) => (
+              <div key={label} className="bg-white rounded-xl border p-4">
+                <p className="text-xs text-gray-500">{label}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-xl border overflow-hidden">
+            <div className="px-4 py-3 bg-gray-50 border-b flex justify-between">
+              <h3 className="font-semibold text-sm text-gray-800">Results by {groupBy}</h3>
+              <span className="text-xs text-gray-400">{result.rows.length} rows</span>
+            </div>
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b text-xs text-gray-500 uppercase sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left">{groupBy}</th>
+                    {metrics.includes('revenue') && <th className="px-4 py-3 text-right">Revenue</th>}
+                    {metrics.includes('transactions') && <th className="px-4 py-3 text-right">Transactions</th>}
+                    {metrics.includes('avgBasket') && <th className="px-4 py-3 text-right">Avg Basket</th>}
+                    {metrics.includes('itemsSold') && <th className="px-4 py-3 text-right">Items</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {result.rows.map((row, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium">{row._id}</td>
+                      {metrics.includes('revenue') && <td className="px-4 py-3 text-right font-mono">£{Number(row.revenue).toFixed(2)}</td>}
+                      {metrics.includes('transactions') && <td className="px-4 py-3 text-right">{row.transactions}</td>}
+                      {metrics.includes('avgBasket') && <td className="px-4 py-3 text-right font-mono">£{Number(row.avgBasket).toFixed(2)}</td>}
+                      {metrics.includes('itemsSold') && <td className="px-4 py-3 text-right">{row.itemsSold}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Bar chart */}
+          <div className="bg-white rounded-xl border p-5">
+            <h3 className="font-semibold text-gray-800 mb-3 text-sm">Revenue by {groupBy}</h3>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={result.rows}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="_id" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `£${v}`} />
+                <Tooltip formatter={v => [`£${Number(v).toFixed(2)}`, 'Revenue']} />
+                <Bar dataKey="revenue" fill="#2563EB" radius={[4,4,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
       )}
     </div>
   );

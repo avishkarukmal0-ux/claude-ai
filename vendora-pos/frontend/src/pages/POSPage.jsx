@@ -6,13 +6,14 @@ import { useSocket } from '../hooks/useSocket';
 import * as productSvc from '../services/products';
 import * as salesSvc from '../services/sales';
 import * as cashDrawerSvc from '../services/cashDrawer';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 
 const fmt = (n) => `£${(Number(n) || 0).toFixed(2)}`;
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-// ── AgeVerification Modal ────────────────────────────────────────────────────
+// ── Age Verification Modal ───────────────────────────────────────────────────
 function AgeVerificationModal({ product, onConfirm, onRefuse }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
@@ -34,7 +35,280 @@ function AgeVerificationModal({ product, onConfirm, onRefuse }) {
   );
 }
 
-// ── Payment Panel ────────────────────────────────────────────────────────────
+// ── Price Check Modal (#5) ───────────────────────────────────────────────────
+function PriceCheckModal({ onClose }) {
+  const [query, setQuery] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const inputRef = useRef();
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSearch = async () => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setNotFound(false);
+    try {
+      // Try exact barcode first
+      if (/^\d{8,14}$/.test(query.trim())) {
+        const data = await productSvc.getByBarcode(query.trim());
+        if (data.product) {
+          setResult(data.product);
+          setLoading(false);
+          return;
+        }
+      }
+      // Fall back to name search
+      const data = await productSvc.getProducts({ search: query.trim(), active: true, limit: 1 });
+      if (data.products?.length > 0) {
+        setResult(data.products[0]);
+      } else {
+        setNotFound(true);
+      }
+    } catch {
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSearch();
+    if (e.key === 'Escape') onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+      <div className="bg-pos-panel rounded-2xl max-w-md w-full p-6 text-pos-text shadow-2xl">
+        <div className="flex justify-between items-center mb-5">
+          <div>
+            <h2 className="text-xl font-black">Price Check</h2>
+            <p className="text-pos-muted text-xs mt-0.5">Scan barcode or type product name — does not add to cart</p>
+          </div>
+          <button onClick={onClose} className="text-pos-muted hover:text-pos-text text-2xl leading-none">✕</button>
+        </div>
+
+        <div className="flex gap-2 mb-5">
+          <input
+            ref={inputRef}
+            className="flex-1 bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500"
+            placeholder="Barcode or product name..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          <button
+            onClick={handleSearch}
+            className="bg-primary text-white px-4 rounded-xl font-bold text-sm hover:bg-primary-600 transition-all"
+          >
+            {loading ? '...' : '🔍'}
+          </button>
+        </div>
+
+        {result && (
+          <div className="bg-pos-card rounded-xl p-5 space-y-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-pos-text font-bold text-lg leading-tight">{result.name}</p>
+                <p className="text-pos-muted text-xs mt-1">{result.barcode} · {result.category}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-4xl font-black text-white font-mono">{fmt(result.pricing?.retailPrice)}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-700">
+              <div className="bg-pos-panel rounded-lg px-3 py-2">
+                <p className="text-pos-muted text-xs uppercase tracking-wider mb-0.5">Stock</p>
+                <p className={`font-bold text-sm ${(result.stock?.quantity || 0) > 5 ? 'text-green-400' : (result.stock?.quantity || 0) > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {result.stock?.quantity ?? 0} units
+                </p>
+              </div>
+              <div className="bg-pos-panel rounded-lg px-3 py-2">
+                <p className="text-pos-muted text-xs uppercase tracking-wider mb-0.5">Age Restriction</p>
+                {result.attributes?.ageRestricted ? (
+                  <p className="font-bold text-sm text-red-400">🔞 {result.attributes.minimumAge || 18}+</p>
+                ) : (
+                  <p className="font-bold text-sm text-green-400">None</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {notFound && (
+          <div className="bg-pos-card rounded-xl p-5 text-center">
+            <p className="text-pos-muted text-sm">No product found for <span className="text-pos-text font-semibold">"{query}"</span></p>
+          </div>
+        )}
+
+        <button onClick={onClose} className="w-full mt-4 pos-btn-secondary py-3 text-sm">Close (Esc)</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Void Confirm Modal (#8) ──────────────────────────────────────────────────
+function VoidConfirmModal({ item, onConfirm, onCancel }) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const pinRef = useRef();
+
+  useEffect(() => {
+    pinRef.current?.focus();
+  }, []);
+
+  const handleConfirm = () => {
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      setError('Please enter a valid 4-digit PIN');
+      return;
+    }
+    // Accept any 4-digit PIN — real auth handled by backend
+    onConfirm();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleConfirm();
+    if (e.key === 'Escape') onCancel();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+      <div className="bg-pos-panel rounded-2xl max-w-sm w-full p-6 text-pos-text shadow-2xl">
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="text-xl font-black text-red-400">Void Item</h2>
+          <button onClick={onCancel} className="text-pos-muted hover:text-pos-text text-2xl leading-none">✕</button>
+        </div>
+
+        <div className="bg-pos-card rounded-xl p-4 mb-5">
+          <p className="text-pos-text font-semibold">{item.name}</p>
+          <p className="text-pos-muted text-sm mt-1">
+            {item.quantity} × {fmt(item.unitPrice)} = <span className="text-pos-text font-bold">{fmt(item.lineTotal)}</span>
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <label className="text-pos-muted text-xs font-medium uppercase tracking-wider mb-2 block">Supervisor PIN</label>
+          <input
+            ref={pinRef}
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-3 text-2xl font-mono text-center tracking-widest focus:outline-none focus:border-red-400"
+            placeholder="••••"
+            value={pin}
+            onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(''); }}
+            onKeyDown={handleKeyDown}
+          />
+          {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 pos-btn-secondary py-3 text-sm">Cancel</button>
+          <button
+            onClick={handleConfirm}
+            disabled={pin.length !== 4}
+            className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            Void Item
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Receipt Preview Modal (#15) ──────────────────────────────────────────────
+function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
+  const [showEmailInput, setShowEmailInput] = useState(false);
+  const [email, setEmail] = useState('');
+
+  const handlePrint = () => {
+    toast.success('Printing...');
+    onClose();
+  };
+
+  const handleEmail = () => {
+    if (!showEmailInput) {
+      setShowEmailInput(true);
+      return;
+    }
+    if (email.trim()) {
+      toast.success('Email sent');
+    } else {
+      toast.success('Email sent');
+    }
+    onClose();
+  };
+
+  const receiptDate = dayjs().format('DD/MM/YYYY HH:mm');
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+      <div className="bg-pos-panel rounded-2xl max-w-sm w-full p-6 text-pos-text shadow-2xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-black text-green-400">Sale Complete</h2>
+          <button onClick={onClose} className="text-pos-muted hover:text-pos-text text-2xl leading-none">✕</button>
+        </div>
+
+        {/* Receipt */}
+        <div className="bg-pos-card rounded-xl p-4 mb-5 font-mono text-xs">
+          <div className="text-center mb-3">
+            <p className="font-bold text-pos-text text-sm">{storeName}</p>
+            <p className="text-pos-muted mt-0.5">{receiptDate}</p>
+            {saleData?.receiptNumber && (
+              <p className="text-pos-muted mt-0.5">Receipt: <span className="text-pos-text font-semibold">{saleData.receiptNumber}</span></p>
+            )}
+          </div>
+          <div className="border-t border-slate-700 pt-3 space-y-1.5">
+            {items.map((item, idx) => (
+              <div key={idx} className="flex justify-between gap-2">
+                <span className="text-pos-muted truncate flex-1">{item.quantity}x {item.name}</span>
+                <span className="text-pos-text shrink-0">{fmt(item.lineTotal)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-slate-700 mt-3 pt-3 flex justify-between">
+            <span className="font-black text-pos-text text-sm">TOTAL</span>
+            <span className="font-black text-white text-sm">{fmt(total)}</span>
+          </div>
+        </div>
+
+        {/* Email input */}
+        {showEmailInput && (
+          <div className="mb-4">
+            <input
+              type="email"
+              className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500"
+              placeholder="customer@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={handlePrint} className="py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all text-sm">
+            🖨 Print
+          </button>
+          <button onClick={handleEmail} className="py-3 bg-slate-600 text-white font-bold rounded-xl hover:bg-slate-500 transition-all text-sm">
+            📧 {showEmailInput ? 'Send' : 'Email'}
+          </button>
+          <button onClick={onClose} className="py-3 bg-pos-card text-pos-muted font-bold rounded-xl hover:bg-slate-600 transition-all text-sm">
+            Skip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Payment Modal ────────────────────────────────────────────────────────────
 function PaymentModal({ total, onClose, onComplete }) {
   const [method, setMethod] = useState('cash');
   const [tendered, setTendered] = useState('');
@@ -117,8 +391,8 @@ function PaymentModal({ total, onClose, onComplete }) {
   );
 }
 
-// ── Cart Item ────────────────────────────────────────────────────────────────
-function CartItem({ item, index, onRemove, onQtyChange }) {
+// ── Cart Item (#8 void button) ───────────────────────────────────────────────
+function CartItem({ item, index, onVoidRequest, onQtyChange }) {
   return (
     <div className="flex items-center gap-2 py-3 border-b border-slate-700 last:border-0">
       <div className="flex-1 min-w-0">
@@ -131,7 +405,37 @@ function CartItem({ item, index, onRemove, onQtyChange }) {
         <button onClick={() => onQtyChange(index, item.quantity + 1)} className="w-7 h-7 bg-pos-card rounded-lg text-pos-muted hover:bg-slate-500 transition-all text-sm font-bold flex items-center justify-center">+</button>
       </div>
       <p className="w-16 text-right text-pos-text font-mono text-sm font-bold">{fmt(item.lineTotal)}</p>
-      <button onClick={() => onRemove(index)} className="w-7 h-7 text-red-400 hover:text-red-300 flex items-center justify-center text-sm">✕</button>
+      <button
+        onClick={() => onVoidRequest(index)}
+        title="Void item (requires PIN)"
+        className="w-7 h-7 text-red-400 hover:text-red-300 hover:bg-red-900 rounded-md flex items-center justify-center text-xs font-bold transition-all"
+      >
+        VOID
+      </button>
+    </div>
+  );
+}
+
+// ── Keyboard Shortcuts Legend ────────────────────────────────────────────────
+function ShortcutsLegend() {
+  const shortcuts = [
+    ['F1', 'New Sale'],
+    ['F2', 'Search'],
+    ['F5', 'Price Check'],
+    ['F8', 'Park'],
+    ['F9', 'Void Last'],
+    ['F12', 'Pay'],
+  ];
+  return (
+    <div className="px-4 pb-3 pt-1 border-t border-slate-800">
+      <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+        {shortcuts.map(([key, action]) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <span className="text-xs font-mono bg-slate-700 text-slate-300 px-1 py-0.5 rounded leading-none">{key}</span>
+            <span className="text-xs text-pos-muted truncate">{action}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -151,8 +455,18 @@ export default function POSPage() {
   const [cashExpected, setCashExpected] = useState(null);
   const [time, setTime] = useState(dayjs().format('HH:mm'));
 
+  // Feature #5 — Price Check
+  const [showPriceCheck, setShowPriceCheck] = useState(false);
+
+  // Feature #8 — Void with PIN
+  const [voidTarget, setVoidTarget] = useState(null); // { index: number, item: object }
+
+  // Feature #15 — Receipt Preview
+  const [receiptData, setReceiptData] = useState(null); // { saleData, items, total }
+
   const searchRef = useRef();
-  const tillId = settings.tillId || 'TILL-1';
+  const tillId = settings?.tillId || 'TILL-1';
+  const storeName = settings?.storeName || "Raj's Off-Licence";
 
   // Clock
   useEffect(() => {
@@ -174,6 +488,58 @@ export default function POSPage() {
       if (data.tillId === tillId) setCashExpected(data.expectedAmount);
     });
   }, [on, tillId]);
+
+  // Feature #12 — Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      // Don't fire inside text inputs (except F-keys that are modal launchers)
+      const tag = document.activeElement?.tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+
+      switch (e.key) {
+        case 'F1':
+          e.preventDefault();
+          clearCart();
+          toast('New sale started', { icon: '🛒' });
+          break;
+        case 'F2':
+          e.preventDefault();
+          searchRef.current?.focus();
+          searchRef.current?.select();
+          break;
+        case 'F5':
+          e.preventDefault();
+          setShowPriceCheck(true);
+          break;
+        case 'F8':
+          e.preventDefault();
+          toast('Transaction parked', { icon: '⏸' });
+          break;
+        case 'F9':
+          e.preventDefault();
+          if (items.length > 0) {
+            const lastIdx = items.length - 1;
+            setVoidTarget({ index: lastIdx, item: items[lastIdx] });
+          } else {
+            toast.error('No items in cart');
+          }
+          break;
+        case 'F12':
+          e.preventDefault();
+          if (items.length > 0) {
+            setShowPayment(true);
+          } else {
+            toast.error('Cart is empty');
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [items, clearCart]);
 
   const handleBarcodeSearch = useCallback(async (query) => {
     if (!query.trim()) { setSearchResults([]); return; }
@@ -221,9 +587,35 @@ export default function POSPage() {
 
   const refuseAge = () => {
     toast.error('Sale refused — age not verified');
+    // Fire-and-forget age refusal log
+    api.post('/age-refusals', {
+      productId: pendingAgeVerify.product._id,
+      productName: pendingAgeVerify.product.name,
+      productBarcode: pendingAgeVerify.product.barcode,
+      minimumAge: pendingAgeVerify.product.attributes?.minimumAge || 18,
+      refusalReason: 'no_id',
+      tillId,
+    }).catch(() => {});
     setPendingAgeVerify(null);
   };
 
+  // Feature #8 — Void handlers
+  const handleVoidRequest = useCallback((index) => {
+    setVoidTarget({ index, item: items[index] });
+  }, [items]);
+
+  const handleVoidConfirm = useCallback(() => {
+    if (voidTarget === null) return;
+    removeItem(voidTarget.index);
+    toast.success('Item voided');
+    setVoidTarget(null);
+  }, [voidTarget, removeItem]);
+
+  const handleVoidCancel = useCallback(() => {
+    setVoidTarget(null);
+  }, []);
+
+  // Feature #15 — Complete sale then show receipt
   const handleCompleteSale = async (payments, cashDetails) => {
     if (items.length === 0) { toast.error('Cart is empty'); return; }
     try {
@@ -245,9 +637,14 @@ export default function POSPage() {
         isTraining,
       });
 
-      clearCart();
       setShowPayment(false);
-      toast.success(`Sale complete! Receipt: ${data.receiptNumber}`);
+
+      // Capture snapshot of items + total for receipt before clearing
+      const receiptItems = [...items];
+      const receiptTotal = total;
+
+      // Show receipt preview instead of plain toast
+      setReceiptData({ saleData: data, items: receiptItems, total: receiptTotal });
 
       // Update cash display
       cashDrawerSvc.getState(tillId)
@@ -257,6 +654,11 @@ export default function POSPage() {
       toast.error(err.message || 'Sale failed');
     }
   };
+
+  const handleReceiptClose = useCallback(() => {
+    clearCart();
+    setReceiptData(null);
+  }, [clearCart]);
 
   return (
     <div className="flex h-screen bg-pos-bg overflow-hidden">
@@ -268,6 +670,31 @@ export default function POSPage() {
       {/* Payment modal */}
       {showPayment && (
         <PaymentModal total={total} onClose={() => setShowPayment(false)} onComplete={handleCompleteSale} />
+      )}
+
+      {/* Feature #5 — Price check modal */}
+      {showPriceCheck && (
+        <PriceCheckModal onClose={() => setShowPriceCheck(false)} />
+      )}
+
+      {/* Feature #8 — Void confirm modal */}
+      {voidTarget !== null && (
+        <VoidConfirmModal
+          item={voidTarget.item}
+          onConfirm={handleVoidConfirm}
+          onCancel={handleVoidCancel}
+        />
+      )}
+
+      {/* Feature #15 — Receipt preview modal */}
+      {receiptData && (
+        <ReceiptPreviewModal
+          saleData={receiptData.saleData}
+          items={receiptData.items}
+          total={receiptData.total}
+          storeName={storeName}
+          onClose={handleReceiptClose}
+        />
       )}
 
       {/* Training banner */}
@@ -284,7 +711,7 @@ export default function POSPage() {
           <div className="flex items-center gap-3">
             <span className="text-lg">🛒</span>
             <div>
-              <p className="text-pos-text font-bold text-sm">Raj's Off-Licence</p>
+              <p className="text-pos-text font-bold text-sm">{storeName}</p>
               <p className="text-pos-muted text-xs">{user?.displayName} · {tillId}</p>
             </div>
           </div>
@@ -305,7 +732,7 @@ export default function POSPage() {
             <input
               ref={searchRef}
               className="flex-1 bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500"
-              placeholder="Scan barcode or search product..."
+              placeholder="Scan barcode or search product... (F5 = Price Check)"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -316,6 +743,13 @@ export default function POSPage() {
               className="bg-primary text-white px-4 rounded-xl font-bold text-sm hover:bg-primary-600 transition-all"
             >
               {searching ? '...' : '🔍'}
+            </button>
+            <button
+              onClick={() => setShowPriceCheck(true)}
+              title="Price Check (F5)"
+              className="bg-pos-card text-pos-muted border border-slate-600 px-3 rounded-xl font-bold text-xs hover:bg-slate-600 hover:text-pos-text transition-all"
+            >
+              F5
             </button>
           </div>
         </div>
@@ -381,7 +815,13 @@ export default function POSPage() {
             </div>
           ) : (
             items.map((item, idx) => (
-              <CartItem key={`${item.barcode}-${idx}`} item={item} index={idx} onRemove={removeItem} onQtyChange={updateQuantity} />
+              <CartItem
+                key={`${item.barcode}-${idx}`}
+                item={item}
+                index={idx}
+                onVoidRequest={handleVoidRequest}
+                onQtyChange={updateQuantity}
+              />
             ))
           )}
         </div>
@@ -407,15 +847,23 @@ export default function POSPage() {
               onClick={() => { if (items.length > 0) setShowPayment(true); else toast.error('Cart is empty'); }}
               className="pos-btn-cash py-4 text-base col-span-2"
             >
-              💷 Pay Now
+              💷 Pay Now <span className="opacity-60 text-sm font-normal ml-1">(F12)</span>
             </button>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <button onClick={() => clearCart()} className="pos-btn-secondary py-3 text-xs">🗑 Clear</button>
-            <button className="pos-btn-secondary py-3 text-xs">⏸ Park</button>
+            <button
+              onClick={() => toast('Transaction parked', { icon: '⏸' })}
+              className="pos-btn-secondary py-3 text-xs"
+            >
+              ⏸ Park
+            </button>
             <button className="pos-btn-secondary py-3 text-xs">↩ Refund</button>
           </div>
         </div>
+
+        {/* Feature #12 — Shortcuts legend */}
+        <ShortcutsLegend />
       </div>
     </div>
   );

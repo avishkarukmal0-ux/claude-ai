@@ -33,6 +33,7 @@ const navSections = [
   ]},
   { label: 'Security', minRole: 'supervisor', items: [
     { to: '/loss-prevention', icon: '🔒', label: 'Loss Prevention' },
+    { to: '/challenge25',     icon: '🔞', label: 'Challenge 25' },
   ]},
   { label: 'Insights', minRole: 'supervisor', items: [
     { to: '/reports',         icon: '📊', label: 'Reports' },

@@ -201,6 +201,62 @@ router.post('/:id/adjust-stock', requireRole('supervisor'), async (req, res, nex
   }
 });
 
+// GET /api/products/:id/insights (#74) — sales velocity, margin, stock history
+router.get('/:id/insights', async (req, res, next) => {
+  try {
+    const Sale = require('../models/Sale');
+    const product = await Product.findOne({ _id: req.params.id, store: req.storeId }).lean();
+    if (!product) return next(AppError.notFound('Product'));
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+
+    // Sales velocity: units sold in last 7 and 30 days
+    const [sold30, sold7, movements] = await Promise.all([
+      Sale.aggregate([
+        { $match: { store: req.storeId, createdAt: { $gte: thirtyDaysAgo }, isVoid: { $ne: true } } },
+        { $unwind: '$items' },
+        { $match: { $or: [{ 'items.productId': product._id }, { 'items.barcode': product.barcode }] } },
+        { $group: { _id: null, qty: { $sum: '$items.quantity' }, revenue: { $sum: '$items.lineTotal' } } },
+      ]),
+      Sale.aggregate([
+        { $match: { store: req.storeId, createdAt: { $gte: sevenDaysAgo }, isVoid: { $ne: true } } },
+        { $unwind: '$items' },
+        { $match: { $or: [{ 'items.productId': product._id }, { 'items.barcode': product.barcode }] } },
+        { $group: { _id: null, qty: { $sum: '$items.quantity' } } },
+      ]),
+      StockMovement.find({ store: req.storeId, product: product._id }).sort({ createdAt: -1 }).limit(20).lean(),
+    ]);
+
+    const unitsSold30 = sold30[0]?.qty || 0;
+    const revenue30 = sold30[0]?.revenue || 0;
+    const unitsSold7 = sold7[0]?.qty || 0;
+    const costPrice = product.pricing?.costPrice || 0;
+    const retailPrice = product.pricing?.retailPrice || 0;
+    const margin = costPrice > 0 ? ((retailPrice - costPrice) / retailPrice * 100).toFixed(1) : null;
+    const dailyVelocity = unitsSold30 > 0 ? (unitsSold30 / 30).toFixed(2) : 0;
+    const daysOfStock = dailyVelocity > 0 ? Math.round(product.stock?.quantity / dailyVelocity) : null;
+
+    res.json({
+      success: true,
+      product,
+      insights: {
+        unitsSold7,
+        unitsSold30,
+        revenue30,
+        dailyVelocity: Number(dailyVelocity),
+        daysOfStock,
+        marginPct: margin ? Number(margin) : null,
+        costPrice,
+        retailPrice,
+        currentStock: product.stock?.quantity || 0,
+        lowStockThreshold: product.stock?.lowStockThreshold || 5,
+      },
+      stockHistory: movements,
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/products/import
 router.post('/import', requireRole('manager'), async (req, res, next) => {
   try {

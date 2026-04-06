@@ -28,6 +28,7 @@ import LoyaltyPage from './pages/LoyaltyPage';
 import LabelPrintingPage from './pages/LabelPrintingPage';
 import OfflineQueuePage from './pages/OfflineQueuePage';
 import TrainingModePage from './pages/TrainingModePage';
+import Challenge25Page from './pages/Challenge25Page';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -69,6 +70,7 @@ export default function App() {
                     <Route path="label-printing" element={<LabelPrintingPage />} />
                     <Route path="offline-queue" element={<OfflineQueuePage />} />
                     <Route path="training" element={<TrainingModePage />} />
+                    <Route path="challenge25" element={<ProtectedRoute requiredRole="supervisor"><Challenge25Page /></ProtectedRoute>} />
                     <Route path="settings" element={<ProtectedRoute requiredRole="manager"><SettingsPage /></ProtectedRoute>} />
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />

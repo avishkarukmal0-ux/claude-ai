@@ -145,13 +145,104 @@ const ACTIVITY_COLORS = {
   drawer_open: 'text-gray-600 bg-gray-100',
 };
 
+// Blind Cash Count Modal (#48)
+function BlindCountModal({ tillId, onClose, onDone }) {
+  const [counts, setCounts] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const counted = DENOMS.reduce((s, d) => s + (counts[d.value] || 0) * d.value, 0);
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    try {
+      const { data } = await import('../services/api').then(m => m.default.post('/cash-drawer/blind-count', {
+        tillId,
+        denominations: counts,
+        countedTotal: counted,
+      }));
+      setResult(data);
+    } catch {
+      const cashSvc = await import('../services/cashDrawer');
+      try {
+        const resp = await cashSvc.default?.blindCount?.({ tillId, denominations: counts, countedTotal: counted });
+        setResult(resp);
+      } catch {
+        // Fallback: show local result without backend
+        setResult({ countedTotal: counted, expected: null, variance: null });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (result) {
+    const isExact = result.variance === 0;
+    const isOver = result.variance > 0;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-sm text-center p-8">
+          <div className="text-5xl mb-4">{isExact ? '🎯' : isOver ? '📈' : '📉'}</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Count Complete</h2>
+          <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Counted</span>
+              <span className="font-bold font-mono">£{counted.toFixed(2)}</span>
+            </div>
+            {result.expected !== null && result.expected !== undefined && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Expected</span>
+                  <span className="font-mono">£{Number(result.expected).toFixed(2)}</span>
+                </div>
+                <div className={`flex justify-between font-bold ${isExact ? 'text-green-600' : isOver ? 'text-blue-600' : 'text-red-600'}`}>
+                  <span>Variance</span>
+                  <span className="font-mono">{result.variance > 0 ? '+' : ''}£{Number(result.variance).toFixed(2)}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={onDone} className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-600">Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b">
+          <div>
+            <h2 className="text-lg font-bold">Blind Cash Count</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Count cash without seeing the expected total</p>
+          </div>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <DenomCount counts={counts} onChange={setCounts} />
+          <div className="flex justify-between font-bold text-xl border-t pt-4">
+            <span>Counted Total</span>
+            <span className="text-green-600">£{counted.toFixed(2)}</span>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+            <button onClick={handleSubmit} disabled={submitting || counted === 0} className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              {submitting ? 'Submitting…' : 'Submit Count'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CashManagementPage() {
   const { user } = useAuth();
   const [tillId, setTillId] = useState('TILL-1');
   const [state, setState] = useState(null);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null); // 'safedrop' | 'payout'
+  const [modal, setModal] = useState(null); // 'safedrop' | 'payout' | 'blindcount'
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -243,6 +334,12 @@ export default function CashManagementPage() {
             >
               <ArrowUpCircle size={18} /> Payout
             </button>
+            <button
+              onClick={() => setModal('blindcount')}
+              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-purple-700"
+            >
+              🙈 Blind Count
+            </button>
           </div>
 
           {/* Activity log */}
@@ -279,6 +376,7 @@ export default function CashManagementPage() {
 
       {modal === 'safedrop' && <SafeDropModal tillId={tillId} onClose={() => setModal(null)} onDone={onModalDone} />}
       {modal === 'payout' && <PayoutModal tillId={tillId} onClose={() => setModal(null)} onDone={onModalDone} />}
+      {modal === 'blindcount' && <BlindCountModal tillId={tillId} onClose={() => setModal(null)} onDone={onModalDone} />}
     </div>
   );
 }

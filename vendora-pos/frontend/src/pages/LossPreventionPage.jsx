@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, Eye, ShieldAlert, TrendingDown, Zap, RefreshCw, Plus, X } from 'lucide-react';
+import { AlertTriangle, Eye, ShieldAlert, TrendingDown, Zap, RefreshCw, Plus, X, Clock } from 'lucide-react';
 import * as lpSvc from '../services/lossPrevention';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 
@@ -75,6 +76,99 @@ function IncidentModal({ onClose, onSaved }) {
   );
 }
 
+// Transaction Replay Modal (#43)
+function TransactionReplayModal({ saleId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [cctvRef, setCctvRef] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get(`/loss-prevention/transaction-replay/${saleId}`)
+      .then(r => { setData(r.data); setCctvRef(r.data.sale?.cctvReference || ''); })
+      .catch(() => toast.error('Failed to load transaction'))
+      .finally(() => setLoading(false));
+  }, [saleId]);
+
+  async function saveCctv() {
+    setSaving(true);
+    try {
+      await api.put(`/loss-prevention/transaction-replay/${saleId}/cctv`, { cctvReference: cctvRef });
+      toast.success('CCTV reference saved');
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h2 className="font-bold text-gray-900">Transaction Replay</h2>
+            {data && <p className="text-sm text-gray-500">Receipt #{data.sale.receiptNumber}</p>}
+          </div>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" /></div>
+        ) : data ? (
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs">Staff</p>
+                <p className="font-medium">{data.sale.staffName}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs">Till</p>
+                <p className="font-medium">{data.sale.tillId}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs">Total</p>
+                <p className="font-bold text-green-700">£{Number(data.sale.total).toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2"><Clock size={14} /> Scan Timeline</h3>
+              <div className="space-y-2">
+                {data.timeline.map((item, i) => (
+                  <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2.5 text-sm">
+                    <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">{item.seq}</span>
+                    <span className="text-gray-400 font-mono text-xs w-16">{dayjs(item.time).format('HH:mm:ss')}</span>
+                    <div className="flex-1">
+                      <span className="font-medium">{item.productName}</span>
+                      <span className="text-gray-400 ml-2 text-xs">{item.barcode}</span>
+                    </div>
+                    <span className="text-gray-600">×{item.quantity}</span>
+                    <span className="font-mono font-medium">£{Number(item.lineTotal).toFixed(2)}</span>
+                    {item.ageVerified && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">✓ Age</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">CCTV Reference</label>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="e.g. CAM2-2024-01-15-14:32"
+                  value={cctvRef}
+                  onChange={e => setCctvRef(e.target.value)}
+                />
+                <button onClick={saveCctv} disabled={saving} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50">
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-center py-8 text-gray-400">Transaction not found</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function LossPreventionPage() {
   const [tab, setTab] = useState('dashboard');
   const [dashboard, setDashboard] = useState(null);
@@ -82,6 +176,10 @@ export default function LossPreventionPage() {
   const [patterns, setPatterns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
+  const [replaySearch, setReplaySearch] = useState('');
+  const [replaySales, setReplaySales] = useState([]);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replaySaleId, setReplaySaleId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,10 +199,21 @@ export default function LossPreventionPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const searchReplaySales = useCallback(async () => {
+    if (!replaySearch.trim()) return;
+    setReplayLoading(true);
+    try {
+      const { data } = await api.get('/sales', { params: { search: replaySearch.trim(), limit: 20 } });
+      setReplaySales(data.sales || data || []);
+    } catch { toast.error('Search failed'); }
+    finally { setReplayLoading(false); }
+  }, [replaySearch]);
+
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'incidents', label: `Incidents ${incidents.length > 0 ? `(${incidents.length})` : ''}` },
     { id: 'patterns', label: 'Scan Patterns' },
+    { id: 'replay', label: '🎬 Transaction Replay' },
   ];
 
   return (
@@ -249,11 +358,66 @@ export default function LossPreventionPage() {
         </>
       )}
 
+          {tab === 'replay' && (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Search by receipt number, staff name..."
+                  value={replaySearch}
+                  onChange={e => setReplaySearch(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && searchReplaySales()}
+                />
+                <button onClick={searchReplaySales} disabled={replayLoading} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50">
+                  {replayLoading ? '…' : 'Search'}
+                </button>
+              </div>
+              {replaySales.length > 0 && (
+                <div className="bg-white rounded-xl border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b text-xs text-gray-500 uppercase">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Receipt</th>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-left">Staff</th>
+                        <th className="px-4 py-3 text-right">Total</th>
+                        <th className="px-4 py-3 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {replaySales.map(s => (
+                        <tr key={s._id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-mono font-medium">{s.receiptNumber}</td>
+                          <td className="px-4 py-3 text-gray-500">{dayjs(s.createdAt).format('DD/MM/YYYY HH:mm')}</td>
+                          <td className="px-4 py-3">{s.staffName}</td>
+                          <td className="px-4 py-3 text-right font-medium">£{Number(s.total).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button onClick={() => setReplaySaleId(s._id)} className="bg-primary text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-primary-600">
+                              Replay
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {replaySales.length === 0 && replaySearch && !replayLoading && (
+                <p className="text-center py-8 text-gray-400">No transactions found. Try searching by receipt number.</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
       {showIncidentModal && (
         <IncidentModal
           onClose={() => setShowIncidentModal(false)}
           onSaved={() => { setShowIncidentModal(false); load(); }}
         />
+      )}
+      {replaySaleId && (
+        <TransactionReplayModal saleId={replaySaleId} onClose={() => setReplaySaleId(null)} />
       )}
     </div>
   );

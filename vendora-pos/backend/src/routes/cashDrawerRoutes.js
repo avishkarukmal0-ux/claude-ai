@@ -181,4 +181,41 @@ router.get('/handover/pending', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Blind Cash Count (#48) ───────────────────────────────────────────────────
+
+// POST /api/cash-drawer/blind-count — submit counted amount without seeing expected
+router.post('/blind-count', async (req, res, next) => {
+  try {
+    const { tillId = 'TILL-1', denominations, countedTotal, notes } = req.body;
+    const CashDrawer = require('../models/CashDrawer');
+    const CashActivity = require('../models/CashActivity');
+
+    const drawer = await CashDrawer.getDrawer(req.storeId, tillId);
+    const expected = drawer.expectedAmount || 0;
+    const variance = Number((countedTotal - expected).toFixed(2));
+
+    await CashActivity.create({
+      store: req.storeId,
+      tillId,
+      type: 'blind_count',
+      amount: countedTotal,
+      balanceAfter: countedTotal,
+      variance,
+      denominations,
+      staff: req.user._id,
+      staffName: req.user.displayName,
+      description: notes || 'Blind cash count',
+      occurredAt: new Date(),
+    });
+
+    res.json({
+      success: true,
+      countedTotal,
+      expected,
+      variance,
+      varianceLabel: variance === 0 ? 'exact' : variance > 0 ? 'over' : 'under',
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -18,8 +18,23 @@ const app = express();
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1);
 
-// Security
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+// Security — HSTS in production (#178)
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  hsts: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+}));
+
+// HTTPS redirect in production (#178)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (!req.secure && req.get('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, 'https://' + req.headers.host + req.url);
+    }
+    next();
+  });
+}
 
 // CORS
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
