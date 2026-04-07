@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import api from '../services/api';
 
 // Challenge 25 Training Reminder (#24)
@@ -42,12 +43,14 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showC25Reminder, setShowC25Reminder] = useState(false);
   const { user } = useAuth();
+  const { subscription, trialDaysLeft } = useSubscription();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!user) return;
     // Check if staff needs today's C25 reminder
     api.get('/challenge25/training-reminder')
-      .then(r => { if (r.data?.needsReminder) setShowC25Reminder(true); })
+      .then(r => { if (r?.needsReminder) setShowC25Reminder(true); })
       .catch(() => {}); // Non-blocking
   }, [user]);
 
@@ -77,6 +80,27 @@ export default function Layout() {
           <button onClick={() => setSidebarOpen(true)} className="text-gray-600 text-xl">☰</button>
           <span className="font-bold text-gray-900">Vendora POS</span>
         </div>
+
+        {/* Trial expiry banner */}
+        {subscription?.status === 'trial' &&
+          trialDaysLeft !== null &&
+          trialDaysLeft <= 7 &&
+          trialDaysLeft > 0 && (
+            <div
+              className={`px-4 py-2 text-sm font-medium text-center ${
+                trialDaysLeft <= 3 ? 'bg-red-500 text-white' : 'bg-orange-400 text-white'
+              }`}
+            >
+              ⚠️ {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} left in your free trial
+              <button
+                onClick={() => navigate('/subscription')}
+                className="ml-3 underline font-bold"
+              >
+                Choose a plan →
+              </button>
+            </div>
+          )}
+
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>

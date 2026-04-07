@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -45,6 +46,46 @@ const navSections = [
     { to: '/settings',        icon: '⚙️', label: 'Settings' },
   ]},
 ];
+
+const PLAN_COLORS = {
+  trial: 'bg-orange-100 text-orange-700',
+  starter: 'bg-gray-100 text-gray-600',
+  plus: 'bg-blue-100 text-blue-700',
+  pro: 'bg-purple-100 text-purple-700',
+};
+
+function SubscriptionWidget() {
+  const { subscription, trialDaysLeft } = useSubscription();
+  const navigate = useNavigate();
+  if (!subscription) return null;
+
+  const planName =
+    subscription.plan
+      ? subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1)
+      : 'Trial';
+
+  return (
+    <div
+      className="mx-3 mb-2 p-3 bg-gray-50 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-100 transition-all"
+      onClick={() => navigate('/subscription')}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${PLAN_COLORS[subscription.plan] || PLAN_COLORS.trial}`}>
+          {planName}
+        </span>
+        {subscription.status === 'trial' && trialDaysLeft !== null && (
+          <span className={`text-xs font-medium ${trialDaysLeft <= 7 ? 'text-orange-600' : 'text-gray-500'}`}>
+            {trialDaysLeft}d left
+          </span>
+        )}
+        {subscription.status === 'active' && (
+          <span className="text-xs text-gray-400">Active</span>
+        )}
+      </div>
+      <p className="text-xs text-gray-500">Manage Subscription →</p>
+    </div>
+  );
+}
 
 export default function Sidebar({ onClose }) {
   const { user, logout, hasRole } = useAuth();
@@ -95,6 +136,9 @@ export default function Sidebar({ onClose }) {
             </div>
           );
         })}
+
+        {/* Subscription widget */}
+        <SubscriptionWidget />
       </nav>
 
       {/* User */}
