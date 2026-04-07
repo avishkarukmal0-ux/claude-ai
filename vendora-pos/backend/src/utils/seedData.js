@@ -50,6 +50,11 @@ async function seed() {
   });
   logger.info(`Store created: ${store.name} (${store._id})`);
 
+  // ── SUBSCRIPTION ──────────────────────────────────────────────────────────
+  const { model: Subscription } = require('../models/Subscription');
+  await Subscription.createTrial(store._id);
+  logger.info('Trial subscription created');
+
   // ── STAFF ─────────────────────────────────────────────────────────────────
   const staffData = [
     { employeeId: 'EMP001', displayName: 'Raj Patel',  email: 'raj@rajsofflicence.co.uk', pin: '1111', password: 'owner123',   role: 'owner',      permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 100, maxRefundAmount: 9999 } },

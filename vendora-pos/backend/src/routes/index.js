@@ -18,7 +18,7 @@ const promotionRoutes      = require('./promotionRoutes');
 const giftCardRoutes       = require('./giftCardRoutes');
 const smartReorderRoutes   = require('./smartReorderRoutes');
 const hardwareRoutes       = require('./hardwareRoutes');
-const subscriptionRoutes   = require('./subscriptionRoutes');
+const { publicRouter: subscriptionPublicRouter } = require('./subscriptionRoutes');
 const posParkedRoutes      = require('./posParkedRoutes');
 const posPromotionRoutes   = require('./posPromotionRoutes');
 const posQuickKeyRoutes    = require('./posQuickKeyRoutes');
@@ -37,6 +37,9 @@ router.use('/auth', authRoutes);
 // Public receipt viewer (no auth required)
 router.use('/receipt', receiptPublicRouter);
 
+// Public subscription webhook (no auth required)
+router.use('/subscriptions', subscriptionPublicRouter);
+
 // All routes below require a valid JWT
 router.use(authenticate);
 
@@ -54,6 +57,7 @@ router.use('/promotions',       promotionRoutes);
 router.use('/gift-cards',       giftCardRoutes);
 router.use('/smart-reorder',    smartReorderRoutes);
 router.use('/hardware',         hardwareRoutes);
+const { router: subscriptionRoutes } = require('./subscriptionRoutes');
 router.use('/subscriptions',    subscriptionRoutes);
 router.use('/display',          displayRoutes);
 router.use('/digital-receipts', digitalReceiptRoutes);
