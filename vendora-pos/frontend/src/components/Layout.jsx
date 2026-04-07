@@ -55,7 +55,7 @@ export default function Layout() {
   }, [user]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
       {showC25Reminder && <C25TrainingReminder onDismiss={() => setShowC25Reminder(false)} />}
 
       {/* Desktop sidebar */}
@@ -66,8 +66,8 @@ export default function Layout() {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 flex lg:hidden">
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white z-50">
+          <div className="fixed inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
+          <div className="relative flex-1 flex flex-col max-w-xs w-full z-50">
             <Sidebar onClose={() => setSidebarOpen(false)} />
           </div>
         </div>
@@ -76,9 +76,18 @@ export default function Layout() {
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Mobile topbar */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
-          <button onClick={() => setSidebarOpen(true)} className="text-gray-600 text-xl">☰</button>
-          <span className="font-bold text-gray-900">Vendora POS</span>
+        <div className="lg:hidden flex items-center gap-3 px-4" style={{
+          height: 52,
+          background: 'var(--bg-primary)',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{ color: 'var(--text-secondary)', fontSize: 18, lineHeight: 1 }}
+          >
+            ☰
+          </button>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Vendora POS</span>
         </div>
 
         {/* Trial expiry banner */}

@@ -611,21 +611,48 @@ function PaymentModal({ total, onClose, onComplete }) {
 // ── Cart Item (#8 void button) ───────────────────────────────────────────────
 function CartItem({ item, index, onVoidRequest, onQtyChange }) {
   return (
-    <div className="flex items-center gap-2 py-3 border-b border-slate-700 last:border-0">
-      <div className="flex-1 min-w-0">
-        <p className="text-pos-text text-sm font-semibold truncate">{item.name}</p>
-        <p className="text-pos-muted text-xs font-mono">{fmt(item.unitPrice)}</p>
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '10px 0', borderBottom: '1px solid var(--border)',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }} className="truncate">{item.name}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{fmt(item.unitPrice)}</p>
       </div>
-      <div className="flex items-center gap-1">
-        <button onClick={() => onQtyChange(index, item.quantity - 1)} className="w-7 h-7 bg-pos-card rounded-lg text-pos-muted hover:bg-slate-500 transition-all text-sm font-bold flex items-center justify-center">−</button>
-        <span className="w-8 text-center text-pos-text font-bold text-sm">{item.quantity}</span>
-        <button onClick={() => onQtyChange(index, item.quantity + 1)} className="w-7 h-7 bg-pos-card rounded-lg text-pos-muted hover:bg-slate-500 transition-all text-sm font-bold flex items-center justify-center">+</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button
+          onClick={() => onQtyChange(index, item.quantity - 1)}
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+            border: '1px solid var(--border)', fontSize: 14, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'var(--transition-fast)',
+          }}
+        >−</button>
+        <span style={{ width: 24, textAlign: 'center', color: 'var(--text-primary)', fontWeight: 700, fontSize: 13 }}>{item.quantity}</span>
+        <button
+          onClick={() => onQtyChange(index, item.quantity + 1)}
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+            border: '1px solid var(--border)', fontSize: 14, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', transition: 'var(--transition-fast)',
+          }}
+        >+</button>
       </div>
-      <p className="w-16 text-right text-pos-text font-mono text-sm font-bold">{fmt(item.lineTotal)}</p>
+      <p style={{ width: 52, textAlign: 'right', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}>{fmt(item.lineTotal)}</p>
       <button
         onClick={() => onVoidRequest(index)}
         title="Void item (requires PIN)"
-        className="w-7 h-7 text-red-400 hover:text-red-300 hover:bg-red-900 rounded-md flex items-center justify-center text-xs font-bold transition-all"
+        style={{
+          width: 36, height: 24, borderRadius: 5,
+          background: 'var(--red-dim)', color: 'var(--red-light)',
+          border: 'none', fontSize: 9, fontWeight: 700,
+          cursor: 'pointer', transition: 'var(--transition-fast)',
+          letterSpacing: '0.05em',
+        }}
       >
         VOID
       </button>
@@ -644,12 +671,17 @@ function ShortcutsLegend() {
     ['F12', 'Pay'],
   ];
   return (
-    <div className="px-4 pb-3 pt-1 border-t border-slate-800">
-      <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+    <div style={{ padding: '8px 12px 10px', borderTop: '1px solid var(--border)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px 8px' }}>
         {shortcuts.map(([key, action]) => (
-          <div key={key} className="flex items-center gap-1.5">
-            <span className="text-xs font-mono bg-slate-700 text-slate-300 px-1 py-0.5 rounded leading-none">{key}</span>
-            <span className="text-xs text-pos-muted truncate">{action}</span>
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{
+              fontSize: 9, fontFamily: 'monospace',
+              background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)',
+              padding: '2px 4px', borderRadius: 4, lineHeight: 1.4,
+              border: '1px solid var(--border)',
+            }}>{key}</span>
+            <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{action}</span>
           </div>
         ))}
       </div>
@@ -992,8 +1024,22 @@ export default function POSPage() {
     setReceiptData(null);
   }, [clearCart]);
 
+  // Category bar color helper
+  const getCatBarClass = (cat) => {
+    if (!cat) return 'cat-bar-default';
+    const c = cat.toLowerCase();
+    if (c.includes('beer') || c.includes('cider')) return 'cat-bar-beer';
+    if (c.includes('spirit')) return 'cat-bar-spirits';
+    if (c.includes('soft') || c.includes('juice') || c.includes('water')) return 'cat-bar-soft';
+    if (c.includes('snack') || c.includes('food')) return 'cat-bar-snacks';
+    if (c.includes('tobacco') || c.includes('vape') || c.includes('cigar')) return 'cat-bar-tobacco';
+    if (c.includes('lottery')) return 'cat-bar-lottery';
+    if (c.includes('top-up') || c.includes('topup') || c.includes('mobile')) return 'cat-bar-topup';
+    return 'cat-bar-default';
+  };
+
   return (
-    <div className="flex h-screen bg-pos-bg overflow-hidden">
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-primary)', overflow: 'hidden' }}>
       {/* Age verification modal */}
       {pendingAgeVerify && (
         <AgeVerificationModal product={pendingAgeVerify.product} onConfirm={confirmAge} onRefuse={refuseAge} />
