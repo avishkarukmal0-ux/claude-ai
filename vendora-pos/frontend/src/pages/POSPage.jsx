@@ -1086,43 +1086,73 @@ export default function POSPage() {
 
       {/* Training banner */}
       {isTraining && (
-        <div className="fixed top-0 left-0 right-0 bg-yellow-400 text-yellow-900 text-center py-2 font-bold z-50 text-sm">
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+          background: '#FBBF24', color: '#78350F', textAlign: 'center',
+          padding: '8px', fontWeight: 700, fontSize: 13,
+        }}>
           🎓 TRAINING MODE — Transactions are NOT saved
         </div>
       )}
 
       {/* ── LEFT PANEL ── */}
-      <div className="flex-1 flex flex-col bg-pos-bg border-r border-slate-700 min-w-0">
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        background: 'var(--bg-primary)', borderRight: '1px solid var(--border)', minWidth: 0,
+      }}>
         {/* Topbar */}
-        <div className="flex items-center justify-between px-4 py-3 bg-pos-panel border-b border-slate-700">
-          <div className="flex items-center gap-3">
-            <span className="text-lg">🛒</span>
-            <div>
-              <p className="text-pos-text font-bold text-sm">{storeName}</p>
-              <p className="text-pos-muted text-xs">{user?.displayName} · {tillId}</p>
-            </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px', height: 52,
+          background: 'var(--bg-primary)', borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{storeName}</p>
+            <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>{tillId} · {time}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-pos-muted text-sm font-mono">{time}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {cashExpected !== null && (
-              <div className="bg-cash-green text-white text-xs font-bold px-3 py-1.5 rounded-full font-mono">
+              <div style={{
+                background: 'var(--green-dim)', color: 'var(--green-light)',
+                fontSize: 11, fontWeight: 700, padding: '4px 10px',
+                borderRadius: 20, fontFamily: 'monospace',
+                border: '1px solid rgba(22,163,74,0.25)',
+              }}>
                 💷 {fmt(cashExpected)}
               </div>
             )}
-            <span className={`text-xs font-semibold ${isOnline ? 'text-green-400' : 'text-yellow-400'}`}>
+            <div style={{
+              fontSize: 10, fontWeight: 600,
+              color: isOnline ? 'var(--green-light)' : 'var(--amber-light)',
+              background: isOnline ? 'var(--green-dim)' : 'var(--amber-dim)',
+              padding: '4px 8px', borderRadius: 20,
+              border: `1px solid ${isOnline ? 'rgba(22,163,74,0.25)' : 'rgba(217,119,6,0.25)'}`,
+            }}>
               {isOnline ? '⚡ Online' : '📶 Offline'}
-            </span>
+            </div>
             <button
               onClick={openCustomerDisplay}
               title="Open Customer Display in new window"
-              className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+              style={{
+                background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+                border: '1px solid var(--border)', borderRadius: 8,
+                fontSize: 11, fontWeight: 600, padding: '5px 10px',
+                cursor: 'pointer', transition: 'var(--transition)',
+              }}
             >
               📺 Display
             </button>
             <button
               onClick={triggerPanic}
               title="Panic Button — alerts manager immediately"
-              className="bg-red-700 hover:bg-red-600 text-white text-xs font-black px-3 py-1.5 rounded-lg transition-all active:scale-95 animate-none"
+              style={{
+                background: 'var(--red)', color: 'white',
+                border: 'none', borderRadius: 8,
+                fontSize: 11, fontWeight: 800, padding: '5px 10px',
+                cursor: 'pointer', transition: 'var(--transition)',
+                letterSpacing: '0.03em',
+              }}
             >
               🚨 PANIC
             </button>
@@ -1130,49 +1160,77 @@ export default function POSPage() {
         </div>
 
         {/* Search bar */}
-        <div className="p-4">
-          <div className="flex gap-2">
-            <input
-              ref={searchRef}
-              className="flex-1 bg-pos-card text-pos-text border border-slate-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-400 placeholder-slate-500"
-              placeholder="Scan barcode or search product... (F5 = Price Check)"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-            />
+        <div style={{ padding: '12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ position: 'relative', display: 'flex', gap: 8 }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <span style={{
+                position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                color: 'var(--text-muted)', fontSize: 14, pointerEvents: 'none',
+              }}>🔍</span>
+              <input
+                ref={searchRef}
+                style={{
+                  width: '100%', height: 40, paddingLeft: 36, paddingRight: 12,
+                  background: 'var(--bg-input)', border: '1px solid var(--border)',
+                  borderRadius: 10, color: 'var(--text-primary)', fontSize: 13,
+                  transition: 'var(--transition)', outline: 'none',
+                }}
+                placeholder="Scan barcode or search product... (F5 = Price Check)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                onFocus={e => e.target.style.borderColor = 'var(--blue)'}
+                onBlur={e => e.target.style.borderColor = 'var(--border)'}
+              />
+            </div>
             <button
               onClick={() => handleBarcodeSearch(search)}
-              className="bg-primary text-white px-4 rounded-xl font-bold text-sm hover:bg-primary-600 transition-all"
-            >
-              {searching ? '...' : '🔍'}
-            </button>
+              style={{
+                height: 40, padding: '0 14px', background: 'var(--blue)',
+                color: 'white', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                border: 'none', cursor: 'pointer', transition: 'var(--transition)',
+              }}
+            >{searching ? '...' : '🔍'}</button>
             <button
               onClick={() => setShowPriceCheck(true)}
-              title="Price Check (F5)"
-              className="bg-pos-card text-pos-muted border border-slate-600 px-3 rounded-xl font-bold text-xs hover:bg-slate-600 hover:text-pos-text transition-all"
-            >
-              F5
-            </button>
+              style={{
+                height: 40, padding: '0 10px', background: 'var(--bg-card)',
+                color: 'var(--text-muted)', borderRadius: 10, fontSize: 11,
+                border: '1px solid var(--border)', cursor: 'pointer', fontWeight: 600,
+              }}
+            >F5</button>
           </div>
         </div>
 
         {/* Search results */}
         {searchResults.length > 0 && (
-          <div className="mx-4 mb-4 bg-pos-panel rounded-xl border border-slate-600 overflow-hidden max-h-64 overflow-y-auto pos-scroll">
+          <div style={{
+            margin: '0 12px 12px',
+            background: 'var(--bg-card)', borderRadius: 12,
+            border: '1px solid var(--border)', overflow: 'hidden',
+            maxHeight: 260, overflowY: 'auto',
+          }} className="pos-scroll">
             {searchResults.map((p) => (
               <button
                 key={p._id}
                 onClick={() => { addProductToCart(p); setSearch(''); setSearchResults([]); }}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-pos-card transition-all border-b border-slate-700 last:border-0 text-left"
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between', padding: '12px 16px',
+                  background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)',
+                  cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
                 <div>
-                  <p className="text-pos-text text-sm font-semibold">{p.name}</p>
-                  <p className="text-pos-muted text-xs">{p.barcode} · {p.category}</p>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{p.barcode} · {p.category}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-pos-text font-mono font-bold">{fmt(p.pricing.retailPrice)}</p>
-                  <p className="text-xs text-pos-muted">Qty: {p.stock?.quantity || 0}</p>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: 14, fontFamily: 'monospace', fontWeight: 700, color: 'var(--blue-light)' }}>{fmt(p.pricing.retailPrice)}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>Qty: {p.stock?.quantity || 0}</p>
                 </div>
               </button>
             ))}
@@ -1181,55 +1239,114 @@ export default function POSPage() {
 
         {/* Quick-sell grid */}
         {searchResults.length === 0 && (
-          <div className="flex-1 flex flex-col min-h-0 px-4 pb-4">
-            {/* Tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-2 pos-scroll-x mb-3">
-              {['All', 'Beer', 'Spirits', 'Soft Drinks', 'Snacks', 'Tobacco', 'Lottery', 'Top-Up'].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setQuickTab(tab === 'Top-Up' ? 'Mobile Top-Up' : tab)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    (quickTab === tab || (tab === 'Top-Up' && quickTab === 'Mobile Top-Up'))
-                      ? 'bg-primary text-white'
-                      : 'bg-pos-card text-pos-muted hover:bg-slate-600'
-                  }`}
-                >
-                  {tab === 'Lottery' ? '🎟 Lottery' : tab === 'Top-Up' ? '📱 Top-Up' : tab}
-                </button>
-              ))}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '0 12px 12px' }}>
+            {/* Category Tabs */}
+            <div style={{
+              display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 10, flexShrink: 0,
+            }} className="pos-scroll">
+              {['All', 'Beer', 'Spirits', 'Soft Drinks', 'Snacks', 'Tobacco', 'Lottery', 'Top-Up'].map(tab => {
+                const isActive = quickTab === tab || (tab === 'Top-Up' && quickTab === 'Mobile Top-Up');
+                const isLottery = tab === 'Lottery';
+                const isTopUp = tab === 'Top-Up';
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setQuickTab(tab === 'Top-Up' ? 'Mobile Top-Up' : tab)}
+                    style={{
+                      flexShrink: 0,
+                      padding: '5px 12px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'var(--transition)',
+                      background: isActive
+                        ? (isLottery ? 'var(--amber)' : isTopUp ? 'var(--green)' : 'var(--blue)')
+                        : 'rgba(255,255,255,0.06)',
+                      color: isActive ? 'white' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {tab === 'Lottery' ? '🎟 Lottery' : tab === 'Top-Up' ? '📱 Top-Up' : tab}
+                  </button>
+                );
+              })}
             </div>
+
             {/* Product grid */}
             {quickLoading ? (
-              <div className="flex-1 flex items-center justify-center">
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto pos-scroll">
+              <div style={{ flex: 1, overflowY: 'auto' }} className="pos-scroll">
                 {quickProducts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-32 text-pos-muted text-sm">
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'center', height: 128, color: 'var(--text-muted)', fontSize: 13,
+                  }}>
                     <p>No products in this category</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                     {quickProducts.map(p => {
-                      const cat = p.category || '';
-                      let btnClass = 'bg-pos-card hover:bg-slate-600 border border-slate-600';
-                      if (cat === 'Lottery') btnClass = 'bg-yellow-900 hover:bg-yellow-800 border border-yellow-600';
-                      else if (cat === 'Mobile Top-Up') btnClass = 'bg-blue-900 hover:bg-blue-800 border border-blue-600';
-                      else if (cat === 'Beer' || cat === 'Cider') btnClass = 'bg-amber-900 hover:bg-amber-800 border border-amber-600';
-                      else if (cat === 'Spirits') btnClass = 'bg-purple-900 hover:bg-purple-800 border border-purple-600';
-                      else if (cat === 'Tobacco') btnClass = 'bg-gray-800 hover:bg-gray-700 border border-gray-600';
+                      const catBarClass = getCatBarClass(p.category || '');
+                      const isLowStock = (p.stock?.quantity ?? 99) < 10;
                       return (
                         <button
                           key={p._id}
                           onClick={() => addProductToCart(p)}
-                          className={`${btnClass} rounded-xl p-2 text-left transition-all active:scale-95`}
+                          style={{
+                            background: 'var(--bg-card)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 10, padding: 0,
+                            textAlign: 'left', cursor: 'pointer',
+                            transition: 'var(--transition)',
+                            overflow: 'hidden', position: 'relative',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = 'var(--border-hover)';
+                            e.currentTarget.style.background = 'var(--bg-elevated)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = 'var(--border)';
+                            e.currentTarget.style.background = 'var(--bg-card)';
+                          }}
+                          onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
+                          onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
                         >
-                          <p className="text-pos-text text-xs font-semibold leading-tight truncate">{p.name}</p>
-                          <p className="text-pos-muted text-xs font-mono mt-0.5">{fmt(p.pricing?.retailPrice || 0)}</p>
-                          {p.stock?.quantity !== undefined && (
-                            <p className="text-pos-muted text-xs opacity-60">Qty: {p.stock.quantity}</p>
+                          {/* Category color bar */}
+                          <div className={catBarClass} style={{ height: 3, width: '100%' }} />
+                          {/* Age restriction badge */}
+                          {p.attributes?.ageRestricted && (
+                            <span style={{
+                              position: 'absolute', top: 7, right: 6,
+                              fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                              borderRadius: 4, background: 'var(--red-dim)', color: 'var(--red-light)',
+                            }}>18+</span>
                           )}
+                          <div style={{ padding: '8px 10px 10px' }}>
+                            <p style={{
+                              fontSize: 12, fontWeight: 500, color: 'var(--text-primary)',
+                              lineHeight: 1.3, marginBottom: 4,
+                              paddingRight: p.attributes?.ageRestricted ? 28 : 0,
+                            }} className="truncate">{p.name}</p>
+                            <p style={{
+                              fontSize: 15, fontWeight: 600, color: 'var(--blue-light)',
+                              fontFamily: 'monospace', lineHeight: 1,
+                            }}>{fmt(p.pricing?.retailPrice || 0)}</p>
+                            {p.stock?.quantity !== undefined && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>Qty: {p.stock.quantity}</p>
+                                {isLowStock && (
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 700, padding: '1px 4px',
+                                    borderRadius: 3, background: 'var(--red-dim)', color: 'var(--red-light)',
+                                  }}>LOW</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </button>
                       );
                     })}
@@ -1242,30 +1359,43 @@ export default function POSPage() {
       </div>
 
       {/* ── RIGHT PANEL — CART ── */}
-      <div className="w-80 xl:w-96 flex flex-col bg-pos-panel">
+      <div style={{
+        width: 260, display: 'flex', flexDirection: 'column',
+        background: 'var(--bg-card)', flexShrink: 0,
+      }}>
         {/* Cart header */}
-        <div className="p-4 border-b border-slate-700">
-          <div className="flex items-center justify-between">
-            <h2 className="text-pos-text font-black text-lg">Cart</h2>
-            <span className="bg-primary text-white text-xs font-bold px-2 py-1 rounded-full">{itemCount}</span>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2 style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>Cart</h2>
+            <span style={{
+              background: 'var(--blue)', color: 'white',
+              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+            }}>{itemCount}</span>
           </div>
           {customer && (
-            <div className="mt-2 flex items-center gap-2 bg-pos-card rounded-lg px-3 py-2">
-              <span className="text-sm">👤</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-pos-text text-xs font-semibold truncate">{customer.firstName} {customer.lastName}</p>
-                <p className="text-pos-muted text-xs">{customer.loyalty?.points || 0} pts</p>
+            <div style={{
+              marginTop: 8, display: 'flex', alignItems: 'center', gap: 8,
+              background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '6px 10px',
+              border: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: 13 }}>👤</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }} className="truncate">{customer.firstName} {customer.lastName}</p>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>{customer.loyalty?.points || 0} pts</p>
               </div>
-              <button onClick={() => setCustomer(null)} className="text-pos-muted hover:text-pos-text text-xs">✕</button>
+              <button onClick={() => setCustomer(null)} style={{ color: 'var(--text-muted)', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
             </div>
           )}
         </div>
 
         {/* Cart items */}
-        <div className="flex-1 overflow-y-auto px-4 pos-scroll">
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px' }} className="pos-scroll">
           {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-pos-muted text-sm">
-              <div className="text-4xl mb-2">🛒</div>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: 12,
+            }}>
+              <div style={{ fontSize: 36, marginBottom: 8, opacity: 0.4 }}>🛒</div>
               <p>Cart is empty</p>
             </div>
           ) : (
@@ -1282,38 +1412,57 @@ export default function POSPage() {
         </div>
 
         {/* Totals */}
-        <div className="p-4 border-t border-slate-700 space-y-2">
+        <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
           {promoDiscount > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-green-400">🏷️ Promotions</span>
-              <span className="text-green-400 font-mono font-bold">−{fmt(promoDiscount)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 12, color: 'var(--green-light)' }}>🏷️ Promotions</span>
+              <span style={{ fontSize: 12, color: 'var(--green-light)', fontFamily: 'monospace', fontWeight: 700 }}>−{fmt(promoDiscount)}</span>
             </div>
           )}
-          <div className="flex justify-between items-center pt-2 border-t border-slate-700">
-            <span className="text-pos-text font-bold text-lg">TOTAL</span>
-            <span className="text-pos-text font-black text-4xl font-mono">{fmt(total)}</span>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            paddingTop: 10, borderTop: '1px solid var(--border)',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>TOTAL</span>
+            <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>{fmt(total)}</span>
           </div>
         </div>
 
         {/* Action buttons */}
-        <div className="p-4 space-y-2 border-t border-slate-700">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => { if (items.length > 0) setShowPayment(true); else toast.error('Cart is empty'); }}
-              className="pos-btn-cash py-4 text-base col-span-2"
-            >
-              💷 Pay Now <span className="opacity-60 text-sm font-normal ml-1">(F12)</span>
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => clearCart()} className="pos-btn-secondary py-3 text-xs">🗑 Clear</button>
-            <button
-              onClick={() => toast('Transaction parked', { icon: '⏸' })}
-              className="pos-btn-secondary py-3 text-xs"
-            >
-              ⏸ Park
-            </button>
-            <button className="pos-btn-secondary py-3 text-xs">↩ Refund</button>
+        <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <button
+            onClick={() => { if (items.length > 0) setShowPayment(true); else toast.error('Cart is empty'); }}
+            style={{
+              width: '100%', height: 48, background: 'var(--green)',
+              color: 'white', borderRadius: 10, fontSize: 14, fontWeight: 800,
+              border: 'none', cursor: 'pointer', marginBottom: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              transition: 'var(--transition)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#15803D'}
+            onMouseLeave={e => e.currentTarget.style.background = 'var(--green)'}
+          >
+            💷 Pay Now
+            <span style={{ opacity: 0.6, fontSize: 11, fontWeight: 500 }}>(F12)</span>
+          </button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            {[
+              { label: '🗑 Clear', action: () => clearCart() },
+              { label: '⏸ Park', action: () => toast('Transaction parked', { icon: '⏸' }) },
+              { label: '↩ Refund', action: () => {} },
+            ].map(({ label, action }) => (
+              <button
+                key={label}
+                onClick={action}
+                style={{
+                  height: 34, background: 'rgba(255,255,255,0.05)',
+                  color: 'var(--text-secondary)', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                  border: '1px solid var(--border)', cursor: 'pointer', transition: 'var(--transition)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.09)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+              >{label}</button>
+            ))}
           </div>
         </div>
 
