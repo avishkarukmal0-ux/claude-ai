@@ -95,4 +95,10 @@ AppError.loyaltyInsufficient = (required, available) =>
 AppError.subscriptionLimit = (msg = 'Subscription limit reached') =>
   new AppError(msg, 402, 'SUBSCRIPTION_LIMIT');
 
+AppError.serverError = (msg = 'Internal server error') =>
+  new AppError(msg, 500, 'INTERNAL_ERROR');
+
+AppError.conflict = (msg = 'Conflict') =>
+  new AppError(msg, 409, 'CONFLICT');
+
 module.exports = AppError;
