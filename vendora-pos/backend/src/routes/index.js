@@ -30,6 +30,7 @@ const walletPassRoutes     = require('./walletPassRoutes');
 const openBankingRoutes    = require('./openBankingRoutes');
 const scheduleRoutes       = require('./scheduleRoutes');
 const stockTakeRoutes      = require('./stockTakeRoutes');
+const settingsRoutes       = require('./settingsRoutes');
 const challenge25Routes    = require('./challenge25Routes');
 
 // Public routes
@@ -66,6 +67,7 @@ router.use('/wallet-passes',    walletPassRoutes);
 router.use('/open-banking',     openBankingRoutes);
 router.use('/schedule',         scheduleRoutes);
 router.use('/stock-take',       stockTakeRoutes);
+router.use('/settings',         settingsRoutes);
 router.use('/pos/parked',       posParkedRoutes);
 router.use('/pos/promotions',   posPromotionRoutes);
 router.use('/pos/quick-keys',   posQuickKeyRoutes);

@@ -264,6 +264,24 @@ router.post('/reactivate', requireRole('owner'), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /subscriptions/billing-portal (alias used by SubscriptionPage.jsx)
+router.post('/billing-portal', requireRole('owner'), async (req, res, next) => {
+  try {
+    if (!stripe) {
+      return res.json({ success: true, portalUrl: `/subscription?mock=1`, mock: true });
+    }
+    const sub = await Subscription.findOne({ store: req.storeId });
+    if (!sub || !sub.stripeCustomerId) {
+      return res.status(400).json({ success: false, error: { message: 'No billing account found' } });
+    }
+    const session = await stripe.billingPortal.sessions.create({
+      customer: sub.stripeCustomerId,
+      return_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/subscription`,
+    });
+    res.json({ success: true, portalUrl: session.url });
+  } catch (err) { next(err); }
+});
+
 // GET /subscriptions/portal
 router.get('/portal', requireRole('owner'), async (req, res, next) => {
   try {

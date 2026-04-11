@@ -8,6 +8,9 @@ const Sale = require('../models/Sale');
 const AppError = require('../utils/AppError');
 const { requireRole } = require('../middleware/permissions');
 
+// In-memory age approval flags keyed by storeId (auto-clears on read)
+const ageApprovals = new Map();
+
 // POST /api/pos/self-checkout/start — requireRole manager
 router.post('/start', requireRole('manager'), async (req, res, next) => {
   try {
@@ -88,10 +91,21 @@ router.post('/approve-age', requireRole('supervisor'), async (req, res, next) =>
       });
     }
 
+    // Set polling flag so GET /age-check-status returns approved
+    ageApprovals.set(req.storeId.toString(), true);
+
     res.json({ success: true });
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/pos/self-checkout/age-check-status — polled by SelfCheckoutPage while waiting for supervisor
+router.get('/age-check-status', async (req, res) => {
+  const storeKey = req.storeId.toString();
+  const approved = ageApprovals.get(storeKey) || false;
+  if (approved) ageApprovals.delete(storeKey); // consume the flag
+  res.json({ success: true, approved });
 });
 
 // POST /api/pos/self-checkout/pay — authenticated

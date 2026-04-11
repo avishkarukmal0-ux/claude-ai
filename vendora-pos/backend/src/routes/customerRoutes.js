@@ -147,6 +147,23 @@ router.post('/:id/points/redeem', async (req, res, next) => {
   }
 });
 
+// POST /api/customers/:id/loyalty — manual loyalty point adjustment (used by LoyaltyPage)
+router.post('/:id/loyalty', requireRole('manager'), async (req, res, next) => {
+  try {
+    const { points, reason } = req.body;
+    if (points == null) return next(AppError.validationError('points is required'));
+    const newBalance = await loyaltyService.adjustPoints(
+      req.params.id,
+      Number(points),
+      reason || 'Manual adjustment',
+      req.user._id
+    );
+    res.json({ success: true, newBalance });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── Customer Segmentation (#117) ─────────────────────────────────────────────
 
 // GET /api/customers/segments — group customers by spend/frequency/tier
