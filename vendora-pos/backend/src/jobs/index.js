@@ -17,8 +17,8 @@ module.exports = (io) => {
   // Every 5 mins — send any due scheduled reports
   cron.schedule('*/5 * * * *', scheduledReports);
 
-  // 7am daily — check expiring products, emit alerts
-  cron.schedule('0 7 * * *', () => expiryCheck(io), { timezone: 'Europe/London' });
+  // 6am daily — check expiring products, auto-update statuses, emit alerts
+  cron.schedule('0 6 * * *', () => expiryCheck(io), { timezone: 'Europe/London' });
 
   // Every hour — expire parked transactions > 4 hours old
   cron.schedule('0 * * * *', expireParked);

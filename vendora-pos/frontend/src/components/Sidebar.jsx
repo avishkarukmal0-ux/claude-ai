@@ -19,6 +19,7 @@ const navSections = [
     { to: '/promotions',      icon: '🏷️', label: 'Promotions' },
     { to: '/smart-reorder',   icon: '🔁', label: 'Smart Reorder' },
     { to: '/stock-take',      icon: '📋', label: 'Stock Take' },
+    { to: '/expiry',          icon: '⏰', label: 'Expiry Tracker' },
     { to: '/label-printing',  icon: '🖨️', label: 'Label Printing' },
   ]},
   { label: 'People', minRole: 'cashier', items: [

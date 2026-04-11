@@ -4,9 +4,64 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
+const ExpiryMarkdownRule = require('../models/ExpiryMarkdownRule');
 const AppError = require('../utils/AppError');
 const { requireRole } = require('../middleware/permissions');
 const { todayStart } = require('../utils/helpers');
+
+const msPerDay = 1000 * 60 * 60 * 24;
+
+function computeExpiryStatus(product, rules) {
+  if (!product.expiryBatches || product.expiryBatches.length === 0) {
+    return { hasExpiryBatch: false };
+  }
+  // FIFO: find oldest non-depleted batch
+  const active = product.expiryBatches
+    .filter(b => b.quantity > 0)
+    .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+  if (active.length === 0) return { hasExpiryBatch: false };
+
+  const batch = active[0];
+  const daysLeft = Math.floor((new Date(batch.expiryDate) - new Date()) / msPerDay);
+  let status = 'ok';
+  if (daysLeft < 0) status = 'expired';
+  else if (daysLeft <= 3) status = 'expiring_soon';
+
+  const retailPrice = product.pricing?.retailPrice || 0;
+  let autoDiscountApplied = false;
+  let discountedPrice = retailPrice;
+  let discountPercent = 0;
+
+  if (rules && rules.length && status !== 'ok') {
+    const applicable = rules
+      .filter(r => r.active && daysLeft <= r.daysBeforeExpiry)
+      .sort((a, b) => a.daysBeforeExpiry - b.daysBeforeExpiry);
+    if (applicable.length) {
+      const rule = applicable[0];
+      if (rule.discountType === 'percentage') {
+        discountPercent = rule.discountAmount;
+        discountedPrice = Math.round(retailPrice * (1 - rule.discountAmount / 100) * 100) / 100;
+      } else {
+        discountedPrice = Math.max(0, Math.round((retailPrice - rule.discountAmount) * 100) / 100);
+        discountPercent = Math.round(((retailPrice - discountedPrice) / retailPrice) * 100);
+      }
+      autoDiscountApplied = true;
+    }
+  }
+
+  return {
+    hasExpiryBatch: true,
+    nearestExpiry: batch.expiryDate,
+    daysLeft,
+    status,
+    autoDiscountApplied,
+    originalPrice: retailPrice,
+    discountedPrice,
+    discountPercent,
+    batchId: batch.batchId,
+  };
+}
 
 // GET /api/products/barcode/:code  — PRIMARY POS endpoint
 router.get('/barcode/:code', async (req, res, next) => {
@@ -17,7 +72,15 @@ router.get('/barcode/:code', async (req, res, next) => {
       isActive: true,
     }).lean();
     if (!product) return next(AppError.barcodeNotFound(req.params.code));
-    res.json({ success: true, product });
+
+    // Enrich with expiry status using FIFO + markdown rules
+    let expiryStatus = { hasExpiryBatch: false };
+    try {
+      const rules = await ExpiryMarkdownRule.find({ store: req.storeId, active: true }).lean();
+      expiryStatus = computeExpiryStatus(product, rules);
+    } catch (_) { /* non-fatal */ }
+
+    res.json({ success: true, product, expiryStatus });
   } catch (err) {
     next(err);
   }

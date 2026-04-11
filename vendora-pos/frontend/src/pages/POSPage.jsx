@@ -608,54 +608,97 @@ function PaymentModal({ total, onClose, onComplete }) {
   );
 }
 
+// ── Expiry Banner ─────────────────────────────────────────────────────────────
+function ExpiryBanner({ expiryStatus }) {
+  if (!expiryStatus?.hasExpiryBatch) return null;
+  const { status, daysLeft, originalPrice, discountedPrice, discountPercent } = expiryStatus;
+
+  if (status === 'expired') {
+    return (
+      <div style={{
+        background: 'rgba(127,0,0,0.3)', border: '1px solid rgba(220,38,38,0.5)',
+        borderRadius: 6, padding: '5px 8px', margin: '4px 0',
+      }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: '#F87171' }}>❌ EXPIRED — Cannot sell · Remove from shelf</p>
+      </div>
+    );
+  }
+
+  const label = daysLeft === 0 ? 'Expires TODAY'
+    : daysLeft === 1 ? 'Expires TOMORROW'
+    : `Expires in ${daysLeft} days`;
+
+  const bgColor = daysLeft <= 1 ? 'rgba(220,38,38,0.12)' : 'rgba(217,119,6,0.12)';
+  const borderColor = daysLeft <= 1 ? 'rgba(220,38,38,0.35)' : 'rgba(217,119,6,0.35)';
+  const textColor = daysLeft <= 1 ? '#FCA5A5' : '#FCD34D';
+
+  return (
+    <div style={{
+      background: bgColor, border: `1px solid ${borderColor}`,
+      borderRadius: 6, padding: '5px 8px', margin: '4px 0',
+    }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: textColor }}>
+        ⚠ {label}
+        {discountPercent > 0 && originalPrice && (
+          <span style={{ marginLeft: 6, fontWeight: 400, color: 'var(--green-light)' }}>
+            {fmt(originalPrice)} → {fmt(discountedPrice)} (-{discountPercent}%)
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
 // ── Cart Item (#8 void button) ───────────────────────────────────────────────
 function CartItem({ item, index, onVoidRequest, onQtyChange }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
       padding: '10px 0', borderBottom: '1px solid var(--border)',
     }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }} className="truncate">{item.name}</p>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{fmt(item.unitPrice)}</p>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }} className="truncate">{item.name}</p>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{fmt(item.unitPrice)}</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            onClick={() => onQtyChange(index, item.quantity - 1)}
+            style={{
+              width: 24, height: 24, borderRadius: 6,
+              background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border)', fontSize: 14, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'var(--transition-fast)',
+            }}
+          >−</button>
+          <span style={{ width: 24, textAlign: 'center', color: 'var(--text-primary)', fontWeight: 700, fontSize: 13 }}>{item.quantity}</span>
+          <button
+            onClick={() => onQtyChange(index, item.quantity + 1)}
+            style={{
+              width: 24, height: 24, borderRadius: 6,
+              background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border)', fontSize: 14, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'var(--transition-fast)',
+            }}
+          >+</button>
+        </div>
+        <p style={{ width: 52, textAlign: 'right', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}>{fmt(item.lineTotal)}</p>
         <button
-          onClick={() => onQtyChange(index, item.quantity - 1)}
+          onClick={() => onVoidRequest(index)}
+          title="Void item (requires PIN)"
           style={{
-            width: 24, height: 24, borderRadius: 6,
-            background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border)', fontSize: 14, fontWeight: 700,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 36, height: 24, borderRadius: 5,
+            background: 'var(--red-dim)', color: 'var(--red-light)',
+            border: 'none', fontSize: 9, fontWeight: 700,
             cursor: 'pointer', transition: 'var(--transition-fast)',
+            letterSpacing: '0.05em',
           }}
-        >−</button>
-        <span style={{ width: 24, textAlign: 'center', color: 'var(--text-primary)', fontWeight: 700, fontSize: 13 }}>{item.quantity}</span>
-        <button
-          onClick={() => onQtyChange(index, item.quantity + 1)}
-          style={{
-            width: 24, height: 24, borderRadius: 6,
-            background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)',
-            border: '1px solid var(--border)', fontSize: 14, fontWeight: 700,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', transition: 'var(--transition-fast)',
-          }}
-        >+</button>
+        >
+          VOID
+        </button>
       </div>
-      <p style={{ width: 52, textAlign: 'right', color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}>{fmt(item.lineTotal)}</p>
-      <button
-        onClick={() => onVoidRequest(index)}
-        title="Void item (requires PIN)"
-        style={{
-          width: 36, height: 24, borderRadius: 5,
-          background: 'var(--red-dim)', color: 'var(--red-light)',
-          border: 'none', fontSize: 9, fontWeight: 700,
-          cursor: 'pointer', transition: 'var(--transition-fast)',
-          letterSpacing: '0.05em',
-        }}
-      >
-        VOID
-      </button>
+      {item.expiryStatus?.hasExpiryBatch && <ExpiryBanner expiryStatus={item.expiryStatus} />}
     </div>
   );
 }
@@ -898,7 +941,7 @@ export default function POSPage() {
       if (/^\d{8,14}$/.test(query.trim())) {
         const data = await productSvc.getByBarcode(query.trim());
         if (data.product) {
-          addProductToCart(data.product);
+          addProductToCart(data.product, data.expiryStatus);
           setSearch('');
           setSearchResults([]);
           return;
@@ -914,9 +957,17 @@ export default function POSPage() {
     }
   }, []);
 
-  const addProductToCart = useCallback((product) => {
+  const addProductToCart = useCallback((product, expiryStatus) => {
+    // Expired items cannot be sold
+    if (expiryStatus?.status === 'expired') {
+      toast.error(`${product.name} is EXPIRED — cannot sell. Remove from shelf.`, { duration: 5000 });
+      // Log the attempt
+      api.post('/ai/pos/expiry-override', { overrideReason: 'attempted sale of expired product' }).catch(() => {});
+      return;
+    }
+
     if (product.attributes?.ageRestricted) {
-      setPendingAgeVerify({ product, verified: false });
+      setPendingAgeVerify({ product, expiryStatus, verified: false });
       return;
     }
     // Mobile top-up: prompt for phone number
@@ -924,7 +975,30 @@ export default function POSPage() {
       setPendingTopUp(product);
       return;
     }
-    addItem({ ...product, barcode: product.barcode, name: product.name, unitPrice: product.pricing?.retailPrice ?? product.unitPrice ?? 0, quantity: 1, lineTotal: product.pricing?.retailPrice ?? product.unitPrice ?? 0, ageVerified: false });
+
+    // Use discounted price if auto-discount applied
+    const basePrice = product.pricing?.retailPrice ?? product.unitPrice ?? 0;
+    const unitPrice = (expiryStatus?.autoDiscountApplied && expiryStatus?.discountedPrice)
+      ? expiryStatus.discountedPrice
+      : basePrice;
+
+    // Show expiry toast warning
+    if (expiryStatus?.status === 'expiring_soon') {
+      const days = expiryStatus.daysLeft;
+      const msg = days === 0 ? 'Expires TODAY' : `Expires in ${days} day${days !== 1 ? 's' : ''}`;
+      toast(`${product.name}: ${msg}`, { icon: '⚠️', duration: 3000 });
+    }
+
+    addItem({
+      ...product,
+      barcode: product.barcode,
+      name: product.name,
+      unitPrice,
+      quantity: 1,
+      lineTotal: unitPrice,
+      ageVerified: false,
+      expiryStatus: expiryStatus || null,
+    });
     toast.success(`${product.name} added`, { duration: 1000 });
   }, [addItem]);
 
@@ -934,7 +1008,11 @@ export default function POSPage() {
 
   const confirmAge = () => {
     const p = pendingAgeVerify.product;
-    addItem({ ...p, barcode: p.barcode, name: p.name, unitPrice: p.pricing.retailPrice, quantity: 1, lineTotal: p.pricing.retailPrice, ageVerified: true });
+    const expiryStatus = pendingAgeVerify.expiryStatus;
+    const basePrice = p.pricing?.retailPrice ?? 0;
+    const unitPrice = (expiryStatus?.autoDiscountApplied && expiryStatus?.discountedPrice)
+      ? expiryStatus.discountedPrice : basePrice;
+    addItem({ ...p, barcode: p.barcode, name: p.name, unitPrice, quantity: 1, lineTotal: unitPrice, ageVerified: true, expiryStatus: expiryStatus || null });
     toast.success(`${p.name} added`, { duration: 1000 });
     setPendingAgeVerify(null);
   };

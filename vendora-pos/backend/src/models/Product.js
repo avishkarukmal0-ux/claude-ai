@@ -40,6 +40,15 @@ const ProductSchema = new Schema({
     enabled: { type: Boolean, default: false },
     dates: [{ date: Date, quantity: Number }],
   },
+  expiryBatches: [{
+    batchId: { type: String, default: () => new ObjectId().toHexString() },
+    quantity: { type: Number, default: 0 },
+    expiryDate: { type: Date, required: true },
+    receivedDate: { type: Date, default: Date.now },
+    supplierId: { type: ObjectId, ref: 'Supplier' },
+    costPrice: { type: Number, default: 0 },
+    status: { type: String, enum: ['ok', 'expiring_soon', 'expired'], default: 'ok' },
+  }],
   batchTracking: {
     enabled: { type: Boolean, default: false },
     batches: [{

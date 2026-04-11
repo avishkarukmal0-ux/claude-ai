@@ -168,6 +168,46 @@ async function seed() {
   }
   logger.info(`Created ${products.length} products`);
 
+  // ── EXPIRY BATCHES ─────────────────────────────────────────────────────────
+  const ExpiryMarkdownRule = require('../models/ExpiryMarkdownRule');
+  const { Types: { ObjectId: ObjId } } = require('mongoose');
+
+  // Default markdown rules for the store
+  await ExpiryMarkdownRule.insertMany([
+    { store: store._id, daysBeforeExpiry: 3, discountType: 'percentage', discountAmount: 20, active: true },
+    { store: store._id, daysBeforeExpiry: 1, discountType: 'percentage', discountAmount: 40, active: true },
+    { store: store._id, daysBeforeExpiry: 0, discountType: 'percentage', discountAmount: 50, active: true },
+  ]);
+  logger.info('Default expiry markdown rules created');
+
+  // Helper: today + N days
+  const daysFromNow = (n) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(23, 59, 0, 0); return d; };
+
+  // Add expiry batches to specific products for testing
+  const expiryData = [
+    // 3 items expiring TODAY (for immediate testing)
+    { barcode: '5010116030046', batches: [{ quantity: 12, expiryDate: daysFromNow(0), status: 'expiring_soon', costPrice: 0.65 }] }, // Carling 440ml
+    { barcode: '5449000000996', batches: [{ quantity: 24, expiryDate: daysFromNow(0), status: 'expiring_soon', costPrice: 0.28 }] }, // Coca-Cola 330ml
+    { barcode: '7622210100054', batches: [{ quantity: 8,  expiryDate: daysFromNow(0), status: 'expiring_soon', costPrice: 0.90 }] }, // Cadbury Dairy Milk
+
+    // 5 items expiring in 2 days
+    { barcode: '5000267013008', batches: [{ quantity: 18, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.85 }] }, // Stella Artois
+    { barcode: '5449000133328', batches: [{ quantity: 36, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.25 }] }, // Sprite
+    { barcode: '5000159461122', batches: [{ quantity: 20, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.28 }] }, // KitKat
+    { barcode: '5000328530012', batches: [{ quantity: 30, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.20 }] }, // Walkers Ready Salted
+    { barcode: '5010251012405', batches: [{ quantity: 12, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.65 }] }, // Red Bull
+
+    // 2 items with normal/upcoming expiry (this week)
+    { barcode: '5000267024004', batches: [{ quantity: 24, expiryDate: daysFromNow(5), status: 'ok', costPrice: 0.80 }] }, // Heineken
+    { barcode: '5449000054227', batches: [{ quantity: 12, expiryDate: daysFromNow(6), status: 'ok', costPrice: 0.95 }] }, // Coca-Cola 1.75L
+  ];
+
+  for (const { barcode, batches } of expiryData) {
+    const batched = batches.map(b => ({ batchId: new ObjId().toHexString(), receivedDate: new Date(), ...b }));
+    await Product.updateOne({ store: store._id, barcode }, { $push: { expiryBatches: { $each: batched } } });
+  }
+  logger.info(`Added expiry batches to ${expiryData.length} products`);
+
   // ── CUSTOMERS ─────────────────────────────────────────────────────────────
   const customersRaw = [
     { firstName: 'Mohammed', lastName: 'Ali',      phone: '07700900001', loyalty: { points: 450, tier: 'bronze', enrolled: true, tierMultiplier: 1 } },

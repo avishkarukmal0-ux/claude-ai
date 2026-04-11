@@ -76,11 +76,15 @@ const collectionOrderRoutes  = require('./collectionOrderRoutes');
 const selfCheckoutRoutes     = require('./selfCheckoutRoutes');
 const tapToPayRoutes         = require('./tapToPayRoutes');
 const queueBustRoutes        = require('./queueBustRoutes');
+const expiryRoutes           = require('./expiryRoutes');
+const aiRoutes               = require('./aiRoutes');
 
 router.use('/receipts',              receiptRoutes);
 router.use('/collection-orders',     collectionOrderRoutes);
 router.use('/pos/self-checkout',     selfCheckoutRoutes);
 router.use('/payments/tap-to-pay',   tapToPayRoutes);
 router.use('/pos/queue-bust',        queueBustRoutes);
+router.use('/expiry',                expiryRoutes);
+router.use('/ai',                    aiRoutes);
 
 module.exports = router;
