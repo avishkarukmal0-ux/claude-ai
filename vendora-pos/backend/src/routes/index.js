@@ -29,6 +29,7 @@ const digitalReceiptRoutes = require('./digitalReceiptRoutes');
 const walletPassRoutes     = require('./walletPassRoutes');
 const openBankingRoutes    = require('./openBankingRoutes');
 const scheduleRoutes       = require('./scheduleRoutes');
+const stockTakeRoutes      = require('./stockTakeRoutes');
 const challenge25Routes    = require('./challenge25Routes');
 
 // Public routes
@@ -64,6 +65,7 @@ router.use('/digital-receipts', digitalReceiptRoutes);
 router.use('/wallet-passes',    walletPassRoutes);
 router.use('/open-banking',     openBankingRoutes);
 router.use('/schedule',         scheduleRoutes);
+router.use('/stock-take',       stockTakeRoutes);
 router.use('/pos/parked',       posParkedRoutes);
 router.use('/pos/promotions',   posPromotionRoutes);
 router.use('/pos/quick-keys',   posQuickKeyRoutes);
