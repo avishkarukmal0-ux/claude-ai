@@ -101,10 +101,12 @@ const shutdown = async (signal) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('unhandledRejection', (err) => {
-  logger.error('Unhandled rejection:', err.message || err);
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled Rejection:', reason instanceof Error ? reason.message : reason);
+  if (reason instanceof Error && reason.stack) logger.error('Stack:', reason.stack);
 });
 process.on('uncaughtException', (err) => {
-  logger.error('Uncaught exception:', err.message || err);
-  // Do NOT exit — log and continue
+  logger.error('Uncaught Exception:', err instanceof Error ? err.message : String(err));
+  if (err instanceof Error && err.stack) logger.error('Stack:', err.stack);
+  // DO NOT call process.exit() — keep server running
 });

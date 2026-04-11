@@ -134,15 +134,20 @@ async function fetchGoogleTrends(keywords) {
   }
 
   // Fallback: return stored MarketTrend data
-  const stored = await MarketTrend.find({}).lean();
-  const fallback = stored.map(t => ({
-    keyword: t.productName,
-    trend: t.searchVolume,
-    change: t.searchVolumeChange,
-    score: t.trendScore,
-  }));
-  trendCache.set(cacheKey, fallback);
-  return fallback;
+  try {
+    const stored = await MarketTrend.find({}).lean();
+    const fallback = stored.map(t => ({
+      keyword: t.productName,
+      trend: t.searchVolume,
+      change: t.searchVolumeChange,
+      score: t.trendScore,
+    }));
+    trendCache.set(cacheKey, fallback);
+    return fallback;
+  } catch (err) {
+    logger.warn('Google Trends: DB fallback also failed:', err.message);
+    return [];
+  }
 }
 
 // ── analyseShopGaps ───────────────────────────────────────────────────────────
