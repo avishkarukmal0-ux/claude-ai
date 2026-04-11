@@ -124,7 +124,7 @@ router.get('/expected-denominations/:tillId', async (req, res, next) => {
 router.get('/activity/:tillId/today', async (req, res, next) => {
   try {
     const activity = await cashDrawerService.getActivityLog(req.storeId, req.params.tillId, new Date());
-    res.json({ success: true, activity });
+    res.json({ success: true, activity: Array.isArray(activity) ? activity : [] });
   } catch (err) { next(err); }
 });
 

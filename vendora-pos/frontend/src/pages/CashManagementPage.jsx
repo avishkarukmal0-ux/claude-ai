@@ -156,21 +156,15 @@ function BlindCountModal({ tillId, onClose, onDone }) {
   async function handleSubmit() {
     setSubmitting(true);
     try {
-      const { data } = await import('../services/api').then(m => m.default.post('/cash-drawer/blind-count', {
+      const res = await import('../services/api').then(m => m.default.post('/cash-drawer/blind-count', {
         tillId,
         denominations: counts,
         countedTotal: counted,
       }));
-      setResult(data);
+      setResult(res);
     } catch {
-      const cashSvc = await import('../services/cashDrawer');
-      try {
-        const resp = await cashSvc.default?.blindCount?.({ tillId, denominations: counts, countedTotal: counted });
-        setResult(resp);
-      } catch {
-        // Fallback: show local result without backend
-        setResult({ countedTotal: counted, expected: null, variance: null });
-      }
+      // Fallback: show local result without backend
+      setResult({ countedTotal: counted, expected: null, variance: null });
     } finally {
       setSubmitting(false);
     }
@@ -249,7 +243,7 @@ function ShiftHandoverModal({ tillId, onClose, onDone }) {
 
   useEffect(() => {
     import('../services/api').then(m => m.default.get('/staff?active=true')).then(r => {
-      setStaff(r.data?.staff || r.data || []);
+      setStaff(Array.isArray(r?.staff) ? r.staff : Array.isArray(r) ? r : []);
     }).catch(() => {});
   }, []);
 
@@ -259,7 +253,7 @@ function ShiftHandoverModal({ tillId, onClose, onDone }) {
     try {
       const api = (await import('../services/api')).default;
       const r = await api.post('/cash-drawer/handover/initiate', { tillId, incomingStaffId: incoming });
-      setHandoverId(r.data.handover?._id || r.data._id);
+      setHandoverId(r.handover?._id || r._id);
       setStep('outgoing_pin');
       toast.success('Handover initiated — outgoing staff please enter PIN');
     } catch (err) {
@@ -376,7 +370,10 @@ export default function CashManagementPage() {
         cashSvc.getActivityLog(tillId),
       ]);
       if (stateRes.status === 'fulfilled') setState(stateRes.value?.drawer || stateRes.value);
-      if (actRes.status === 'fulfilled') setActivity(actRes.value?.activities || actRes.value || []);
+      if (actRes.status === 'fulfilled') {
+        const val = actRes.value;
+        setActivity(Array.isArray(val) ? val : Array.isArray(val?.activity) ? val.activity : []);
+      }
     } finally {
       setLoading(false);
     }
