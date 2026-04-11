@@ -23,7 +23,7 @@ function QuickExpiryScan() {
     setSearching(true);
     try {
       const res = await api.get(`/products/barcode/${barcode.trim()}`);
-      setProduct(res.data.product);
+      setProduct(res.product || res);
       setScannedDate('');
       setQuantity('');
     } catch {

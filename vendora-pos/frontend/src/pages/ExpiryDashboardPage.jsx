@@ -166,7 +166,7 @@ function AddBatchModal({ onClose, onSaved }) {
     setSearching(true);
     try {
       const res = await api.get(`/products/barcode/${barcode.trim()}`);
-      setProduct(res.data.product);
+      setProduct(res.product || res);
     } catch {
       toast.error('Product not found');
       setProduct(null);

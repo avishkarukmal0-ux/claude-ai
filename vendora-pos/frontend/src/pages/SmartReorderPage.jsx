@@ -11,7 +11,7 @@ export default function SmartReorderPage() {
     setLoading(true);
     try {
       const res = await api.get('/smart-reorder/suggestions');
-      setSuggestions(res.suggestions || res.data || []);
+      setSuggestions(res.suggestions || (Array.isArray(res) ? res : []));
     } catch {
     } finally { setLoading(false); }
   }

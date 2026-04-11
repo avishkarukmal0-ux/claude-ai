@@ -65,14 +65,14 @@ export default function CameraExpiryScanner({ productId, productName, onDetected
         productId: productId || undefined,
       });
 
-      if (!res.data.expiryDate) {
+      if (!res.expiryDate) {
         setPhase('error');
         setErrorMsg('Could not detect an expiry date. Please try again with the date clearly visible.');
         return;
       }
 
-      setDetectedDate(res.data.expiryDate);
-      setDetectedFormatted(res.data.expiryDateFormatted);
+      setDetectedDate(res.expiryDate);
+      setDetectedFormatted(res.expiryDateFormatted);
       setPhase('confirmed');
     } catch (e) {
       setPhase('error');

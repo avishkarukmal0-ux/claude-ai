@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import api from '../services/api';
+import ErrorBoundary from './ErrorBoundary';
 
 // Challenge 25 Training Reminder (#24)
 function C25TrainingReminder({ onDismiss }) {
@@ -111,7 +112,9 @@ export default function Layout() {
           )}
 
         <main className="flex-1 overflow-auto">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

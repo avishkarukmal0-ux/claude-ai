@@ -72,7 +72,7 @@ function ManualMatchInput({ invoiceId, itemIndex, onMatched }) {
     setLoading(true);
     try {
       const res = await api.get('/products', { params: { search: query.trim(), active: true, limit: 8 } });
-      setResults(res.data.products || []);
+      setResults(res.products || []);
     } catch { toast.error('Search failed'); }
     finally { setLoading(false); }
   };
@@ -83,7 +83,7 @@ function ManualMatchInput({ invoiceId, itemIndex, onMatched }) {
       toast.success('Product matched');
       setResults([]);
       setQuery('');
-      onMatched(res.data.invoice);
+      onMatched(res.invoice);
     } catch { toast.error('Match failed'); }
   };
 
@@ -140,12 +140,12 @@ function ReviewTable({ invoice, onUpdate }) {
     const approvedItems = Object.entries(toggles).map(([idx, apply]) => ({ itemIndex: Number(idx), applyUpdate: apply }));
     try {
       const res = await api.post(`/invoice-reader/${invoice._id}/apply`, { approvedItems });
-      const { applied, marginsBreached } = res.data;
+      const { applied, marginsBreached } = res;
       toast.success(`Applied ${applied} price update${applied !== 1 ? 's' : ''}`);
       if (marginsBreached?.length) {
         toast(`⚠ ${marginsBreached.length} item${marginsBreached.length !== 1 ? 's' : ''} now below 10% margin`, { duration: 6000 });
       }
-      onUpdate(res.data.invoice);
+      onUpdate(res.invoice);
     } catch (e) {
       toast.error(e.response?.data?.error || 'Apply failed');
     } finally { setApplying(false); }
@@ -357,13 +357,13 @@ function UploadZone({ onUploaded }) {
     try {
       setProgress('Matching products to your inventory…');
       const res = await api.post(endpoint, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-      if (res.data.duplicate) {
-        setDuplicateInfo(res.data);
+      if (res.duplicate) {
+        setDuplicateInfo(res);
         setPhase('duplicate');
         return;
       }
       setPhase('idle');
-      onUploaded(res.data.invoice);
+      onUploaded(res.invoice);
       toast.success('Invoice scanned successfully');
     } catch (e) {
       setPhase('idle');
@@ -479,7 +479,7 @@ function HistoryTab({ onViewInvoice }) {
 
   useEffect(() => {
     setLoading(true);
-    api.get('/invoice-reader').then(r => setInvoices(r.data.invoices || [])).catch(() => {}).finally(() => setLoading(false));
+    api.get('/invoice-reader').then(r => setInvoices(r.invoices || [])).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const filtered = filter === 'all' ? invoices : invoices.filter(i => i.status === filter);
@@ -561,7 +561,7 @@ export default function InvoiceReaderPage() {
   const handleViewInvoice = useCallback(async (id) => {
     try {
       const res = await api.get(`/invoice-reader/${id}`);
-      setInvoice(res.data.invoice);
+      setInvoice(res.invoice);
       setTab('review');
     } catch { toast.error('Failed to load invoice'); }
   }, []);
