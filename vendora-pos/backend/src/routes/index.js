@@ -78,6 +78,7 @@ const tapToPayRoutes         = require('./tapToPayRoutes');
 const queueBustRoutes        = require('./queueBustRoutes');
 const expiryRoutes           = require('./expiryRoutes');
 const aiRoutes               = require('./aiRoutes');
+const invoiceReaderRoutes    = require('./invoiceReaderRoutes');
 
 router.use('/receipts',              receiptRoutes);
 router.use('/collection-orders',     collectionOrderRoutes);
@@ -86,5 +87,6 @@ router.use('/payments/tap-to-pay',   tapToPayRoutes);
 router.use('/pos/queue-bust',        queueBustRoutes);
 router.use('/expiry',                expiryRoutes);
 router.use('/ai',                    aiRoutes);
+router.use('/invoice-reader',        invoiceReaderRoutes);
 
 module.exports = router;

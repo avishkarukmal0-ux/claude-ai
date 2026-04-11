@@ -37,6 +37,7 @@ import CollectionOrdersPage from './pages/CollectionOrdersPage';
 import SelfCheckoutPage from './pages/SelfCheckoutPage';
 import QueueBustPage from './pages/QueueBustPage';
 import ExpiryDashboardPage from './pages/ExpiryDashboardPage';
+import InvoiceReaderPage from './pages/InvoiceReaderPage';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -74,6 +75,7 @@ export default function App() {
                       <Route path="transactions" element={<TransactionHistoryPage />} />
                       <Route path="stock-take" element={<StockTakePage />} />
                       <Route path="expiry" element={<ExpiryDashboardPage />} />
+                      <Route path="invoice-reader" element={<InvoiceReaderPage />} />
                       <Route path="schedule" element={<SchedulePage />} />
                       <Route path="invoices" element={<ProtectedRoute requiredRole="supervisor"><InvoicesPage /></ProtectedRoute>} />
                       <Route path="loyalty" element={<LoyaltyPage />} />

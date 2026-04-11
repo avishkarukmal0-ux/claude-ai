@@ -33,6 +33,7 @@ const navSections = [
     { to: '/suppliers',       icon: '🚛', label: 'Suppliers' },
     { to: '/purchase-orders', icon: '📋', label: 'Purchase Orders' },
     { to: '/invoices',        icon: '🧾', label: 'Invoices' },
+    { to: '/invoice-reader', icon: '📷', label: 'Invoice Reader' },
     { to: '/gift-cards',      icon: '🎁', label: 'Gift Cards' },
   ]},
   { label: 'Security', minRole: 'supervisor', items: [
