@@ -42,6 +42,7 @@ const navSections = [
   ]},
   { label: 'Insights', minRole: 'supervisor', items: [
     { to: '/reports',         icon: '📊', label: 'Reports' },
+    { to: '/market',          icon: '📡', label: 'Market Intel' },
   ]},
   { label: 'System', minRole: 'manager', items: [
     { to: '/settings',        icon: '⚙️', label: 'Settings' },

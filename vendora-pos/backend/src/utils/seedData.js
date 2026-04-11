@@ -17,6 +17,7 @@ const GiftCard = require('../models/GiftCard');
 const CashDrawer = require('../models/CashDrawer');
 const Sale = require('../models/Sale');
 const StockMovement = require('../models/StockMovement');
+const MarketTrend = require('../models/MarketTrend');
 const { generateCustomerCode } = require('./helpers');
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
@@ -351,6 +352,43 @@ async function seed() {
     salesCreated++;
   }
   logger.info(`Created ${salesCreated} historical sales`);
+
+  // ── MARKET TRENDS ─────────────────────────────────────────────────────────
+  await MarketTrend.deleteMany({});
+  await MarketTrend.insertMany([
+    // Viral / Very High Trend
+    { category: 'Energy Drinks', productName: 'Prime Energy Drink', brand: 'Prime', trendScore: 97, trendDirection: 'viral', searchVolume: 9200, searchVolumeChange: 340, avgRetailPrice: 1.99, estimatedCostPrice: 0.95, estimatedMargin: 52, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['viral','gen_z','influencer'], seasonalFactors: [{ month: 6, multiplier: 1.4 },{ month: 7, multiplier: 1.5 }] },
+    { category: 'Vapes', productName: 'Elf Bar Disposable Vape', brand: 'Elf Bar', trendScore: 91, trendDirection: 'viral', searchVolume: 8800, searchVolumeChange: 280, avgRetailPrice: 5.99, estimatedCostPrice: 2.20, estimatedMargin: 63, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['viral','vapes','tobacco_alt'], seasonalFactors: [] },
+    { category: 'Energy Drinks', productName: 'Ghost Energy Drink', brand: 'Ghost', trendScore: 85, trendDirection: 'rising', searchVolume: 5400, searchVolumeChange: 180, avgRetailPrice: 1.79, estimatedCostPrice: 0.80, estimatedMargin: 55, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['gen_z','fitness','viral'], seasonalFactors: [] },
+    { category: 'Health', productName: 'Grenade Protein Bar', brand: 'Grenade', trendScore: 82, trendDirection: 'rising', searchVolume: 4100, searchVolumeChange: 95, avgRetailPrice: 1.49, estimatedCostPrice: 0.65, estimatedMargin: 56, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['health','protein','gym'], seasonalFactors: [{ month: 1, multiplier: 1.6 },{ month: 9, multiplier: 1.3 }] },
+
+    // Rising trends
+    { category: 'Alcohol Free', productName: 'Heineken 0.0% Beer', brand: 'Heineken', trendScore: 79, trendDirection: 'rising', searchVolume: 3800, searchVolumeChange: 72, avgRetailPrice: 1.20, estimatedCostPrice: 0.55, estimatedMargin: 54, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['alcohol_free','health','dry_january'], seasonalFactors: [{ month: 1, multiplier: 2.8 },{ month: 8, multiplier: 1.2 }] },
+    { category: 'Health', productName: 'Kombucha GT\'s Original', brand: 'GT\'s', trendScore: 74, trendDirection: 'rising', searchVolume: 2900, searchVolumeChange: 58, avgRetailPrice: 2.49, estimatedCostPrice: 1.10, estimatedMargin: 56, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['health','probiotic','wellness'], seasonalFactors: [] },
+    { category: 'Soft Drinks', productName: 'Fever-Tree Sparkling Water', brand: 'Fever-Tree', trendScore: 72, trendDirection: 'rising', searchVolume: 2600, searchVolumeChange: 44, avgRetailPrice: 1.29, estimatedCostPrice: 0.55, estimatedMargin: 57, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['premium','sparkling','health'], seasonalFactors: [{ month: 6, multiplier: 1.5 },{ month: 7, multiplier: 1.6 }] },
+    { category: 'Vapes', productName: 'Lost Mary Disposable Vape', brand: 'Lost Mary', trendScore: 71, trendDirection: 'rising', searchVolume: 3100, searchVolumeChange: 110, avgRetailPrice: 5.49, estimatedCostPrice: 2.00, estimatedMargin: 64, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['vapes','tobacco_alt'], seasonalFactors: [] },
+    { category: 'Dairy Alt', productName: 'Oatly Barista Oat Milk', brand: 'Oatly', trendScore: 69, trendDirection: 'rising', searchVolume: 2200, searchVolumeChange: 38, avgRetailPrice: 1.80, estimatedCostPrice: 0.85, estimatedMargin: 53, suggestedSupplier: 'Costco', relevantFor: ['convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['health','dairy_free','vegan'], seasonalFactors: [] },
+
+    // Stable / Steady
+    { category: 'Beer', productName: 'Stella Artois 330ml Bottle', brand: 'Stella Artois', trendScore: 68, trendDirection: 'stable', searchVolume: 6500, searchVolumeChange: 3, avgRetailPrice: 1.50, estimatedCostPrice: 0.70, estimatedMargin: 53, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'internal', tags: ['beer','premium'], seasonalFactors: [{ month: 6, multiplier: 1.4 },{ month: 7, multiplier: 1.5 },{ month: 8, multiplier: 1.4 }] },
+    { category: 'Snacks', productName: 'Walkers Max Crisps 65g', brand: 'Walkers', trendScore: 66, trendDirection: 'stable', searchVolume: 4200, searchVolumeChange: 5, avgRetailPrice: 1.19, estimatedCostPrice: 0.52, estimatedMargin: 56, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['snacks','sharing'], seasonalFactors: [] },
+    { category: 'Chocolate', productName: 'Cadbury Caramilk 90g', brand: 'Cadbury', trendScore: 65, trendDirection: 'rising', searchVolume: 3100, searchVolumeChange: 29, avgRetailPrice: 1.09, estimatedCostPrice: 0.48, estimatedMargin: 56, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['chocolate','new','limited'], seasonalFactors: [{ month: 10, multiplier: 1.3 },{ month: 12, multiplier: 1.5 }] },
+    { category: 'Soft Drinks', productName: 'Celsius Energy Drink', brand: 'Celsius', trendScore: 63, trendDirection: 'rising', searchVolume: 2800, searchVolumeChange: 67, avgRetailPrice: 1.69, estimatedCostPrice: 0.75, estimatedMargin: 56, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['fitness','health','gen_z'], seasonalFactors: [] },
+
+    // New entrants
+    { category: 'Alcohol Free', productName: 'Lucky Saint Unfiltered Lager', brand: 'Lucky Saint', trendScore: 62, trendDirection: 'new', searchVolume: 1400, searchVolumeChange: 290, avgRetailPrice: 1.59, estimatedCostPrice: 0.72, estimatedMargin: 55, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['alcohol_free','premium','new'], seasonalFactors: [{ month: 1, multiplier: 2.5 }] },
+    { category: 'Health', productName: 'Pip & Nut Peanut Butter Cups', brand: 'Pip & Nut', trendScore: 61, trendDirection: 'new', searchVolume: 1200, searchVolumeChange: 220, avgRetailPrice: 1.29, estimatedCostPrice: 0.58, estimatedMargin: 55, suggestedSupplier: 'Costco', relevantFor: ['convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['health','protein','new'], seasonalFactors: [] },
+    { category: 'Snacks', productName: 'Takis Fuego 160g', brand: 'Takis', trendScore: 78, trendDirection: 'viral', searchVolume: 4300, searchVolumeChange: 190, avgRetailPrice: 1.99, estimatedCostPrice: 0.85, estimatedMargin: 57, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['viral','gen_z','spicy','tiktok'], seasonalFactors: [] },
+
+    // Falling
+    { category: 'Tobacco', productName: 'Marlboro Gold 20s', brand: 'Marlboro', trendScore: 58, trendDirection: 'falling', searchVolume: 7200, searchVolumeChange: -18, avgRetailPrice: 12.50, estimatedCostPrice: 11.20, estimatedMargin: 10, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['tobacco'], seasonalFactors: [] },
+    { category: 'Soft Drinks', productName: 'Lucozade Energy Original 500ml', brand: 'Lucozade', trendScore: 55, trendDirection: 'falling', searchVolume: 3800, searchVolumeChange: -12, avgRetailPrice: 1.29, estimatedCostPrice: 0.58, estimatedMargin: 55, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['energy','classic'], seasonalFactors: [] },
+
+    // Seasonal Specifics
+    { category: 'Halal / Ethnic', productName: 'Medjool Dates 500g', brand: 'Various', trendScore: 88, trendDirection: 'rising', searchVolume: 5600, searchVolumeChange: 240, avgRetailPrice: 3.99, estimatedCostPrice: 1.80, estimatedMargin: 55, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['ramadan','halal','seasonal'], seasonalFactors: [{ month: 3, multiplier: 4.0 },{ month: 4, multiplier: 3.5 }] },
+    { category: 'Sports Drinks', productName: 'Lucozade Sport Orange 500ml', brand: 'Lucozade', trendScore: 64, trendDirection: 'stable', searchVolume: 3200, searchVolumeChange: 8, avgRetailPrice: 1.29, estimatedCostPrice: 0.55, estimatedMargin: 57, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['sports','hydration'], seasonalFactors: [{ month: 5, multiplier: 1.4 },{ month: 6, multiplier: 1.6 },{ month: 7, multiplier: 1.7 }] },
+  ]);
+  logger.info('Market trends seeded (20 products)');
 
   logger.info('\n========================================');
   logger.info('SEED DATA COMPLETE!');

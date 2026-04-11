@@ -79,6 +79,7 @@ const queueBustRoutes        = require('./queueBustRoutes');
 const expiryRoutes           = require('./expiryRoutes');
 const aiRoutes               = require('./aiRoutes');
 const invoiceReaderRoutes    = require('./invoiceReaderRoutes');
+const marketIntelRoutes      = require('./marketIntelRoutes');
 
 router.use('/receipts',              receiptRoutes);
 router.use('/collection-orders',     collectionOrderRoutes);
@@ -88,5 +89,6 @@ router.use('/pos/queue-bust',        queueBustRoutes);
 router.use('/expiry',                expiryRoutes);
 router.use('/ai',                    aiRoutes);
 router.use('/invoice-reader',        invoiceReaderRoutes);
+router.use('/market',                marketIntelRoutes);
 
 module.exports = router;

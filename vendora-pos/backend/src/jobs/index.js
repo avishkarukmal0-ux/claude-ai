@@ -6,6 +6,7 @@ const { scheduledReports } = require('./scheduledReports');
 const { expiryCheck }      = require('./expiryCheck');
 const { expireParked }     = require('./expireParked');
 const { priceSync }        = require('./priceSync');
+const { trendUpdateJob }   = require('./trendUpdateJob');
 const logger = require('../utils/logger');
 
 module.exports = (io) => {
@@ -25,6 +26,9 @@ module.exports = (io) => {
 
   // 3am daily — sync supplier prices if APIs configured
   cron.schedule('0 3 * * *', priceSync, { timezone: 'Europe/London' });
+
+  // 3:30am daily — refresh market trends + AI insights
+  cron.schedule('30 3 * * *', () => trendUpdateJob(io), { timezone: 'Europe/London' });
 
   logger.info('Cron jobs scheduled');
 };

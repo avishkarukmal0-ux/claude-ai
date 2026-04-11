@@ -38,6 +38,7 @@ import SelfCheckoutPage from './pages/SelfCheckoutPage';
 import QueueBustPage from './pages/QueueBustPage';
 import ExpiryDashboardPage from './pages/ExpiryDashboardPage';
 import InvoiceReaderPage from './pages/InvoiceReaderPage';
+import MarketIntelPage from './pages/MarketIntelPage';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -76,6 +77,7 @@ export default function App() {
                       <Route path="stock-take" element={<StockTakePage />} />
                       <Route path="expiry" element={<ExpiryDashboardPage />} />
                       <Route path="invoice-reader" element={<InvoiceReaderPage />} />
+                      <Route path="market" element={<MarketIntelPage />} />
                       <Route path="schedule" element={<SchedulePage />} />
                       <Route path="invoices" element={<ProtectedRoute requiredRole="supervisor"><InvoicesPage /></ProtectedRoute>} />
                       <Route path="loyalty" element={<LoyaltyPage />} />
