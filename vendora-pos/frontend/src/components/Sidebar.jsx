@@ -36,6 +36,7 @@ const navSections = [
     { to: '/invoice-reader',  icon: '📷', label: 'Invoice Reader' },
     { to: '/gift-cards',      icon: '🎁', label: 'Gift Cards' },
     { to: '/accounting',      icon: '🧮', label: 'Accounting' },
+    { to: '/settings/margins', icon: '🎯', label: 'Margin Settings' },
   ]},
   { label: 'Security', minRole: 'supervisor', items: [
     { to: '/loss-prevention', icon: '🔒', label: 'Loss Prevention' },

@@ -347,10 +347,10 @@ router.post('/import', requireRole('manager'), async (req, res, next) => {
 });
 
 // POST /api/products/suggest-price — authenticated
+// Uses store's own MarginSettings (falls back to UK defaults)
 router.post('/suggest-price', async (req, res, next) => {
   try {
-    const Sale = require('../models/Sale');
-    const { costPrice, category, supplierId } = req.body;
+    const { costPrice, category, vatRate } = req.body;
 
     if (costPrice === undefined || costPrice === null) {
       return next(AppError.validationError('costPrice is required'));
@@ -364,108 +364,32 @@ router.post('/suggest-price', async (req, res, next) => {
       return next(AppError.validationError('costPrice must be a non-negative number'));
     }
 
-    const MARGINS = {
-      'Beer & Cider':    { min: 0.25, target: 0.30, max: 0.35 },
-      'Beer':            { min: 0.25, target: 0.30, max: 0.35 },
-      'Cider':           { min: 0.25, target: 0.30, max: 0.35 },
-      'Spirits':         { min: 0.25, target: 0.30, max: 0.35 },
-      'Wine':            { min: 0.25, target: 0.30, max: 0.35 },
-      'Tobacco':         { min: 0.08, target: 0.10, max: 0.12 },
-      'Soft Drinks':     { min: 0.35, target: 0.40, max: 0.45 },
-      'Snacks':          { min: 0.40, target: 0.45, max: 0.50 },
-      'Confectionery':   { min: 0.35, target: 0.40, max: 0.45 },
-      'Mobile Top-Up':   { min: 0.00, target: 0.00, max: 0.02 },
-      'Top-Up':          { min: 0.00, target: 0.00, max: 0.02 },
-      'Lottery':         { min: 0.00, target: 0.00, max: 0.01 },
-      default:           { min: 0.25, target: 0.30, max: 0.35 },
-    };
+    const { getOrCreate, getRule, calcBreakdown } = require('../services/marginService');
+    const settings = await getOrCreate(req.storeId);
+    const rule = getRule(settings, category);
+    if (vatRate !== undefined) rule.vatRate = parseInt(vatRate) || rule.vatRate;
 
-    const marginRule = MARGINS[category] || MARGINS['default'];
-    let { min: minMargin, target: targetMargin, max: maxMargin } = marginRule;
-
-    // Try to get historical avg margin from sales for this category
-    try {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-      const [historicalData] = await Sale.aggregate([
-        {
-          $match: {
-            store: req.storeId,
-            status: 'completed',
-            isTraining: { $ne: true },
-            createdAt: { $gte: thirtyDaysAgo },
-          },
-        },
-        { $unwind: '$items' },
-        {
-          $match: {
-            'items.unitPrice': { $gt: 0 },
-            'items.costPrice': { $gt: 0 },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            avgMargin: {
-              $avg: {
-                $divide: [
-                  { $subtract: ['$items.unitPrice', '$items.costPrice'] },
-                  '$items.unitPrice',
-                ],
-              },
-            },
-          },
-        },
-      ]);
-
-      if (historicalData && historicalData.avgMargin > 0) {
-        // Blend with category target (60% rule-based, 40% historical)
-        targetMargin = targetMargin * 0.6 + historicalData.avgMargin * 0.4;
-        // Keep within min/max bounds
-        targetMargin = Math.min(Math.max(targetMargin, minMargin), maxMargin > 0 ? maxMargin : targetMargin);
-      }
-    } catch (_) {
-      // Historical lookup failed — use category defaults
-    }
-
-    // Round to nearest £0.05: Math.ceil(cost / (1 - target) * 20) / 20
-    let suggestedPrice;
-    if (targetMargin >= 1) {
-      suggestedPrice = cost;
-    } else {
-      suggestedPrice = Math.ceil((cost / (1 - targetMargin)) * 20) / 20;
-    }
-
-    const margin = suggestedPrice > 0 ? (suggestedPrice - cost) / suggestedPrice : 0;
-    const marginPercent = Math.round(margin * 100);
-
-    // Price range
-    const calcPrice = (m) => {
-      if (m >= 1) return cost;
-      return Math.ceil((cost / (1 - m)) * 20) / 20;
-    };
-    const priceRangeMin = calcPrice(minMargin);
-    const priceRangeMax = maxMargin > 0 ? calcPrice(maxMargin) : suggestedPrice;
+    const breakdown = calcBreakdown(cost, rule);
+    const margin = breakdown.actualMargin / 100;
 
     let marginRating;
-    if (margin > 0.30) {
-      marginRating = 'good';
-    } else if (margin > 0.15) {
-      marginRating = 'amber';
-    } else {
-      marginRating = 'poor';
-    }
+    if (breakdown.actualMargin >= rule.minMargin * 1.5) marginRating = 'good';
+    else if (breakdown.actualMargin >= rule.minMargin)   marginRating = 'amber';
+    else                                                  marginRating = 'poor';
 
     res.json({
       success: true,
-      suggestedPrice,
-      margin: Math.round(margin * 10000) / 10000,
-      marginPercent,
-      reasoning: `Based on ${category} category (target ${Math.round(targetMargin * 100)}% margin)`,
+      suggestedPrice:  breakdown.suggestedRetailIncVat,
+      margin:          Math.round(margin * 10000) / 10000,
+      marginPercent:   Math.round(breakdown.actualMargin),
+      marginPct:       Math.round(breakdown.actualMargin),
+      reasoning:       `Based on ${category} category (target ${rule.targetMargin}% margin) from your margin settings`,
       priceRange: {
-        min: priceRangeMin,
-        max: priceRangeMax,
+        min: breakdown.minRetailPrice,
+        max: breakdown.maxRetailPrice || breakdown.suggestedRetailIncVat,
       },
       marginRating,
+      breakdown,
     });
   } catch (err) {
     next(err);

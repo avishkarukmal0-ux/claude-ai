@@ -1,7 +1,43 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import api from '../services/api';
+import * as marginSvc from '../services/margins';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
+
+// ── Margin helpers (client-side calc, mirrors marginService.js) ───────────────
+function calcSuggestedRetail(cost, rule) {
+  if (!cost || !rule) return null;
+  const { targetMargin = 30, minMargin = 15, vatRate = 20 } = rule;
+  const vat = vatRate / 100;
+  const calcInc = (m) => {
+    if (m >= 100) return cost * (1 + vat);
+    return Math.ceil((cost / (1 - m / 100)) * (1 + vat) * 20) / 20;
+  };
+  const suggested = calcInc(targetMargin);
+  const minRetail = calcInc(minMargin);
+  const excVat = suggested / (1 + vat);
+  const actualMargin = excVat > 0 ? (excVat - cost) / excVat * 100 : 0;
+  return { suggested, minRetail, actualMargin: Math.round(actualMargin * 10) / 10, targetMargin, minMargin };
+}
+
+function getRule(settings, category) {
+  if (!settings) return { targetMargin: 30, minMargin: 15, maxMargin: 0, vatRate: 20 };
+  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cats = settings.categories || [];
+  let match = cats.find(c => norm(c.name) === norm(category || ''));
+  if (!match) match = cats.find(c => norm(category || '').includes(norm(c.name)) || norm(c.name).includes(norm(category || '')));
+  return match || { targetMargin: settings.defaultMargin || 30, minMargin: Math.round((settings.defaultMargin || 30) * 0.6), maxMargin: 0, vatRate: 20 };
+}
+
+function marginStatusColor(currentRetail, newCost, rule) {
+  if (!currentRetail || !newCost || !rule) return 'gray';
+  const { minMargin = 15, vatRate = 20 } = rule;
+  const excVat = currentRetail / (1 + vatRate / 100);
+  const actual = excVat > 0 ? (excVat - newCost) / excVat * 100 : 0;
+  if (actual < minMargin)           return 'red';
+  if (actual < minMargin * 1.2)     return 'amber';
+  return 'green';
+}
 
 const fmt = (n) => n != null ? `£${Number(n).toFixed(2)}` : '—';
 const pct = (n) => n != null ? `${n > 0 ? '+' : ''}${Number(n).toFixed(1)}%` : '—';
@@ -127,23 +163,45 @@ function ReviewTable({ invoice, onUpdate }) {
     invoice.items.forEach((it, i) => { t[i] = it.applyUpdate; });
     return t;
   });
+  const [retailToggles, setRetailToggles] = useState({});
+  const [retailInputs, setRetailInputs] = useState({});
   const [showUnmatched, setShowUnmatched] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [marginSettings, setMarginSettings] = useState(null);
+
+  useEffect(() => {
+    marginSvc.getMarginSettings().then(r => setMarginSettings(r.settings)).catch(() => {});
+  }, []);
 
   const matched = invoice.items.map((it, i) => ({ ...it, _idx: i })).filter(it => it.matchMethod !== 'none');
   const unmatched = invoice.items.map((it, i) => ({ ...it, _idx: i })).filter(it => it.matchMethod === 'none');
 
   const handleToggle = (i) => setToggles(prev => ({ ...prev, [i]: !prev[i] }));
+  const handleRetailToggle = (i) => setRetailToggles(prev => ({ ...prev, [i]: !prev[i] }));
+
+  // Count items with retail status RED
+  const redItems = matched.filter(item => {
+    if (!item.priceChanged) return false;
+    const category = item.matchedProduct?.category || '';
+    const rule = getRule(marginSettings, category);
+    const currentRetail = item.matchedProduct?.pricing?.retailPrice;
+    return marginStatusColor(currentRetail, item.unitCost, rule) === 'red';
+  });
 
   const handleApply = async () => {
     setApplying(true);
-    const approvedItems = Object.entries(toggles).map(([idx, apply]) => ({ itemIndex: Number(idx), applyUpdate: apply }));
+    const approvedItems = Object.entries(toggles).map(([idx, apply]) => ({
+      itemIndex:        Number(idx),
+      applyUpdate:      apply,
+      applyRetailUpdate: !!retailToggles[idx],
+      newRetailPrice:   retailInputs[idx] ? parseFloat(retailInputs[idx]) : undefined,
+    }));
     try {
       const res = await api.post(`/invoice-reader/${invoice._id}/apply`, { approvedItems });
-      const { applied, marginsBreached } = res;
-      toast.success(`Applied ${applied} price update${applied !== 1 ? 's' : ''}`);
+      const { applied, retailUpdated, marginsBreached } = res;
+      toast.success(`Applied ${applied} cost update${applied !== 1 ? 's' : ''}${retailUpdated ? ` + ${retailUpdated} retail price${retailUpdated !== 1 ? 's' : ''}` : ''}`);
       if (marginsBreached?.length) {
-        toast(`⚠ ${marginsBreached.length} item${marginsBreached.length !== 1 ? 's' : ''} now below 10% margin`, { duration: 6000 });
+        toast(`⚠ ${marginsBreached.length} product${marginsBreached.length !== 1 ? 's' : ''} still below minimum margin`, { duration: 6000 });
       }
       onUpdate(res.invoice);
     } catch (e) {
@@ -169,6 +227,21 @@ function ReviewTable({ invoice, onUpdate }) {
         <StatCard label="Total Value" value={fmt(invoice.summary.totalValue)} color="blue" />
       </div>
 
+      {/* Red margin alert banner */}
+      {redItems.length > 0 && marginSettings?.alertBelowMinMargin !== false && (
+        <div style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.35)', borderRadius: 10, padding: '10px 16px', marginBottom: 12, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>⚠</span>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#F87171' }}>
+              {redItems.length} product{redItems.length !== 1 ? 's' : ''} need retail price updates
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+              Supplier cost increases have dropped {redItems.length === 1 ? 'it' : 'them'} below your minimum margin. Toggle "Update retail" on these rows.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Matched items table */}
       <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
         <div style={{ padding: '10px 14px', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -178,6 +251,7 @@ function ReviewTable({ invoice, onUpdate }) {
             <button onClick={() => toggleAll(false)} style={{ fontSize: 10, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Deselect All</button>
           </div>
         </div>
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
@@ -187,20 +261,34 @@ function ReviewTable({ invoice, onUpdate }) {
               <th style={{ padding: '8px 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Old Cost</th>
               <th style={{ padding: '8px 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>New Cost</th>
               <th style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Change</th>
+              {marginSettings?.autoSuggestPrice !== false && <>
+                <th style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Target%</th>
+                <th style={{ padding: '8px 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Suggested Retail</th>
+              </>}
               <th style={{ padding: '8px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Apply</th>
             </tr>
           </thead>
           <tbody>
-            {matched.map((item) => (
+            {matched.map((item) => {
+              const category = item.matchedProduct?.category || '';
+              const rule = getRule(marginSettings, category);
+              const suggestion = item.priceChanged ? calcSuggestedRetail(item.unitCost, rule) : null;
+              const currentRetail = item.matchedProduct?.pricing?.retailPrice;
+              const status = item.priceChanged ? marginStatusColor(currentRetail, item.unitCost, rule) : 'gray';
+              const statusColor = status === 'red' ? '#F87171' : status === 'amber' ? '#FCD34D' : status === 'green' ? '#4ADE80' : 'var(--text-muted)';
+              const statusBg = status === 'red' ? 'rgba(220,38,38,0.08)' : status === 'amber' ? 'rgba(217,119,6,0.06)' : 'transparent';
+
+              return (
               <tr key={item._idx} style={{
                 borderLeft: rowBorder(item),
                 borderBottom: '1px solid var(--border)',
-                background: item.marginWarning ? 'rgba(217,119,6,0.04)' : 'transparent',
+                background: status === 'red' ? 'rgba(220,38,38,0.04)' : item.marginWarning ? 'rgba(217,119,6,0.04)' : 'transparent',
                 opacity: !item.priceChanged && !item.isNewProduct ? 0.6 : 1,
               }}>
                 <td style={{ padding: '10px 12px' }}>
                   <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.productName}</p>
                   {item.barcode && <p style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{item.barcode}</p>}
+                  {category && <p style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>{category}</p>}
                 </td>
                 <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                   <ConfidenceBadge confidence={item.matchConfidence} method={item.matchMethod} isNew={item.isNewProduct} />
@@ -209,6 +297,53 @@ function ReviewTable({ invoice, onUpdate }) {
                 <td style={{ padding: '10px 8px', textAlign: 'right', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{fmt(item.previousCost)}</td>
                 <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: item.changeDirection === 'up' ? '#F87171' : item.changeDirection === 'down' ? '#4ADE80' : 'var(--text-primary)' }}>{fmt(item.unitCost)}</td>
                 <td style={{ padding: '10px 8px', textAlign: 'center' }}><PriceChangeCell item={item} /></td>
+
+                {/* Margin columns — only shown when autoSuggestPrice is on */}
+                {marginSettings?.autoSuggestPrice !== false && <>
+                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                    {suggestion ? (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: statusColor, background: statusBg, padding: '2px 6px', borderRadius: 6 }}>
+                        {suggestion.targetMargin}%
+                      </span>
+                    ) : <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                  <td style={{ padding: '10px 8px', textAlign: 'right', minWidth: 120 }}>
+                    {suggestion ? (
+                      <div>
+                        {retailToggles[item._idx] ? (
+                          <input
+                            type="number" step="0.01" min="0"
+                            style={{ width: 72, border: `1px solid ${statusColor}`, borderRadius: 5, padding: '2px 5px', fontFamily: 'monospace', fontSize: 11, background: 'var(--bg-card)', color: 'var(--text-primary)', textAlign: 'right' }}
+                            value={retailInputs[item._idx] !== undefined ? retailInputs[item._idx] : suggestion.suggested}
+                            onChange={e => setRetailInputs(p => ({ ...p, [item._idx]: e.target.value }))}
+                          />
+                        ) : (
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: statusColor }}>
+                            {fmt(suggestion.suggested)}
+                          </span>
+                        )}
+                        {currentRetail && (
+                          <p style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>
+                            current: {fmt(currentRetail)}
+                          </p>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                          <input
+                            type="checkbox"
+                            id={`retail-${item._idx}`}
+                            checked={!!retailToggles[item._idx]}
+                            onChange={() => handleRetailToggle(item._idx)}
+                            style={{ accentColor: statusColor }}
+                          />
+                          <label htmlFor={`retail-${item._idx}`} style={{ fontSize: 9, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                            Update retail
+                          </label>
+                        </div>
+                      </div>
+                    ) : <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>—</span>}
+                  </td>
+                </>}
+
                 <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                   {item.priceChanged || item.isNewProduct ? (
                     <button
@@ -231,9 +366,11 @@ function ReviewTable({ invoice, onUpdate }) {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Unmatched items */}
@@ -271,6 +408,53 @@ function ReviewTable({ invoice, onUpdate }) {
           )}
         </div>
       )}
+
+      {/* Margin summary */}
+      {marginSettings?.autoSuggestPrice !== false && matched.some(it => it.priceChanged) && (() => {
+        const changedItems = matched.filter(it => it.priceChanged);
+        const withSuggestions = changedItems.map(item => {
+          const rule = getRule(marginSettings, item.matchedProduct?.category || '');
+          const sugg = calcSuggestedRetail(item.unitCost, rule);
+          const currentRetail = item.matchedProduct?.pricing?.retailPrice;
+          const status = marginStatusColor(currentRetail, item.unitCost, rule);
+          return { sugg, status, rule };
+        });
+        const redCount   = withSuggestions.filter(x => x.status === 'red').length;
+        const amberCount = withSuggestions.filter(x => x.status === 'amber').length;
+        const greenCount = withSuggestions.filter(x => x.status === 'green').length;
+        const avgTarget  = Math.round(withSuggestions.reduce((s, x) => s + (x.rule?.targetMargin || 0), 0) / (withSuggestions.length || 1));
+        const allToggled = changedItems.filter((_, i) => retailToggles[changedItems[i]._idx]);
+        const toUpdate   = Object.values(retailToggles).filter(Boolean).length;
+
+        return (
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              Margin Summary — If you apply all suggestions
+            </p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+              {greenCount > 0 && (
+                <span style={{ background: 'rgba(22,163,74,0.12)', color: '#4ADE80', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>
+                  ✓ {greenCount} healthy
+                </span>
+              )}
+              {amberCount > 0 && (
+                <span style={{ background: 'rgba(217,119,6,0.12)', color: '#FCD34D', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>
+                  ⚠ {amberCount} near minimum
+                </span>
+              )}
+              {redCount > 0 && (
+                <span style={{ background: 'rgba(220,38,38,0.12)', color: '#F87171', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700 }}>
+                  ✗ {redCount} below minimum — prices need increasing
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Your store's avg target margin for these categories: <strong style={{ color: 'var(--text-secondary)' }}>{avgTarget}%</strong>
+              {toUpdate > 0 && <span style={{ marginLeft: 8, color: '#60A5FA' }}>· {toUpdate} retail price{toUpdate !== 1 ? 's' : ''} selected for update</span>}
+            </p>
+          </div>
+        );
+      })()}
 
       {/* Action bar */}
       {invoice.status !== 'applied' && invoice.status !== 'rejected' && (

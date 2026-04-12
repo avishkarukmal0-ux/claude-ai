@@ -98,4 +98,7 @@ router.use('/market',                marketIntelRoutes);
 const accountingRoutes = require('./accountingRoutes');
 router.use('/accounting',            accountingRoutes);
 
+const marginRoutes = require('./marginRoutes');
+router.use('/margins',               marginRoutes);
+
 module.exports = router;

@@ -10,6 +10,7 @@ import {
 import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 import * as acct from '../services/accounting';
+import * as marginSvc from '../services/margins';
 
 const fmt  = (n) => `£${Number(n || 0).toFixed(2)}`;
 const fmtK = (n) => {
@@ -749,6 +750,11 @@ function ReportsTab() {
   const [loading, setLoading] = useState(false);
   const [from, setFrom] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [to, setTo]     = useState(dayjs().format('YYYY-MM-DD'));
+  const [marginSettings, setMarginSettings] = useState(null);
+
+  useEffect(() => {
+    marginSvc.getMarginSettings().then(r => setMarginSettings(r.settings)).catch(() => {});
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -761,6 +767,14 @@ function ReportsTab() {
       setLoading(false);
     }
   };
+
+  // Compute overall target margin from margin settings
+  const overallTargetMargin = marginSettings
+    ? Math.round(
+        (marginSettings.categories || []).reduce((s, c) => s + (c.targetMargin || 0), marginSettings.defaultMargin || 30) /
+        ((marginSettings.categories?.length || 0) + 1)
+      )
+    : null;
 
   const Row = ({ label, value, indent = 0, bold = false, highlight = false, positive = true }) => (
     <tr className={highlight ? 'bg-blue-50' : ''}>
@@ -833,6 +847,7 @@ function ReportsTab() {
       </div>
 
       {pl && (
+        <>
         <div className="bg-white rounded-xl border p-6">
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-lg font-bold text-gray-900">Profit &amp; Loss Statement</h2>
@@ -880,6 +895,96 @@ function ReportsTab() {
             </tbody>
           </table>
         </div>
+
+        {/* Margin Analysis */}
+        <div className="bg-white rounded-xl border p-6">
+          <h2 className="text-base font-bold text-gray-900 mb-1">Margin Analysis</h2>
+          <p className="text-xs text-gray-400 mb-4">Gross margin by category compared to your targets</p>
+
+          {/* Overall comparison */}
+          <div className="flex flex-wrap gap-4 mb-5 pb-5 border-b">
+            <div className="flex-1 min-w-[180px] bg-gray-50 rounded-lg p-4">
+              <p className="text-xs text-gray-500 mb-1">Overall Gross Margin (This Period)</p>
+              <p className={`text-3xl font-bold ${pl.grossMarginPct >= (overallTargetMargin || 25) ? 'text-green-600' : 'text-amber-600'}`}>
+                {pl.grossMarginPct}%
+                {overallTargetMargin && (
+                  <span className={`ml-2 text-sm font-normal ${pl.grossMarginPct >= overallTargetMargin ? 'text-green-500' : 'text-amber-500'}`}>
+                    {pl.grossMarginPct >= overallTargetMargin ? '✓ Above target' : '⚠ Below target'}
+                  </span>
+                )}
+              </p>
+            </div>
+            {overallTargetMargin && (
+              <div className="flex-1 min-w-[180px] bg-blue-50 rounded-lg p-4">
+                <p className="text-xs text-gray-500 mb-1">Your Avg Target Margin</p>
+                <p className="text-3xl font-bold text-blue-700">{overallTargetMargin}%</p>
+                <p className="text-xs text-gray-400 mt-1">Weighted avg across {(marginSettings?.categories?.length || 0)} categories</p>
+              </div>
+            )}
+          </div>
+
+          {/* Category breakdown from P&L COGS by category */}
+          {pl.costOfGoodsSold?.byCategory && Object.keys(pl.costOfGoodsSold.byCategory).length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 text-xs font-semibold text-gray-500 uppercase">Category</th>
+                    <th className="text-right py-2 text-xs font-semibold text-gray-500 uppercase">Revenue</th>
+                    <th className="text-right py-2 text-xs font-semibold text-gray-500 uppercase">CoGS</th>
+                    <th className="text-right py-2 text-xs font-semibold text-gray-500 uppercase">Gross Profit</th>
+                    <th className="text-right py-2 text-xs font-semibold text-gray-500 uppercase">Margin</th>
+                    <th className="text-right py-2 text-xs font-semibold text-gray-500 uppercase">Target</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {Object.entries(pl.costOfGoodsSold.byCategory).map(([cat, cogs]) => {
+                    const rev = pl.income?.byCategory?.[cat] || 0;
+                    const profit = rev - cogs;
+                    const margin = rev > 0 ? Math.round((profit / rev) * 100) : 0;
+                    const rule = marginSettings
+                      ? (() => {
+                          const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+                          const cats = marginSettings.categories || [];
+                          let m = cats.find(c => norm(c.name) === norm(cat));
+                          if (!m) m = cats.find(c => norm(cat).includes(norm(c.name)) || norm(c.name).includes(norm(cat)));
+                          return m || null;
+                        })()
+                      : null;
+                    const target = rule?.targetMargin ?? overallTargetMargin;
+                    const minTarget = rule?.minMargin ?? 0;
+                    const isRed = target && margin < minTarget;
+                    const isAmber = !isRed && target && margin < target;
+                    return (
+                      <tr key={cat} className="hover:bg-gray-50">
+                        <td className="py-2.5 font-medium text-gray-900">
+                          {isRed && <span className="mr-1" title="Below minimum margin">⚠</span>}
+                          {cat}
+                        </td>
+                        <td className="py-2.5 text-right font-mono">{fmt(rev)}</td>
+                        <td className="py-2.5 text-right font-mono text-red-600">{fmt(cogs)}</td>
+                        <td className="py-2.5 text-right font-mono font-semibold">{fmt(profit)}</td>
+                        <td className="py-2.5 text-right">
+                          <span className={`font-bold ${isRed ? 'text-red-600' : isAmber ? 'text-amber-600' : 'text-green-600'}`}>
+                            {margin}%
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-right text-gray-400 text-xs">
+                          {target != null ? `${target}%` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-6">
+              Category breakdown not available — P&L was generated without category-level COGS data.
+            </p>
+          )}
+        </div>
+        </>
       )}
     </div>
   );

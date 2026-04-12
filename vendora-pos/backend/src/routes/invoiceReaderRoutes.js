@@ -266,19 +266,25 @@ router.post('/:id/apply', async (req, res) => {
     if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
     if (invoice.status === 'applied') return res.status(409).json({ error: 'Already applied' });
 
-    const { approvedItems } = req.body; // [{ itemIndex, applyUpdate }]
+    const { approvedItems } = req.body; // [{ itemIndex, applyUpdate, applyRetailUpdate, newRetailPrice }]
     const approvalMap = {};
     if (approvedItems) {
-      for (const a of approvedItems) approvalMap[a.itemIndex] = a.applyUpdate;
+      for (const a of approvedItems) approvalMap[a.itemIndex] = a;
     }
+
+    // Load store margin settings for threshold checks
+    const { getOrCreate: getMarginSettings, getRule, calcBreakdown } = require('../services/marginService');
+    const marginSettings = await getMarginSettings(req.storeId);
 
     let applied = 0;
     let marginsBreached = [];
+    let retailUpdated = 0;
     const supplierInfo = { supplierId: invoice.supplier, supplierName: invoice.supplierName };
 
     for (let i = 0; i < invoice.items.length; i++) {
       const item = invoice.items[i];
-      const shouldApply = approvalMap[i] !== undefined ? approvalMap[i] : item.applyUpdate;
+      const approval = approvalMap[i];
+      const shouldApply = approval?.applyUpdate !== undefined ? approval.applyUpdate : item.applyUpdate;
       if (!shouldApply || !item.matchedProduct || !item.priceChanged) continue;
 
       const product = await Product.findOne({ _id: item.matchedProduct, store: req.storeId });
@@ -293,12 +299,29 @@ router.post('/:id/apply', async (req, res) => {
       // Add stock for received quantity
       if (item.quantity > 0) product.stock.quantity += item.quantity;
 
-      // Check margin warning
+      // Optionally update retail price
+      if (approval?.applyRetailUpdate) {
+        const newRetail = parseFloat(approval.newRetailPrice);
+        if (newRetail > 0) {
+          product.pricing.retailPrice = newRetail;
+          retailUpdated++;
+        } else {
+          // Use margin suggestion
+          const rule = getRule(marginSettings, product.category || '');
+          const breakdown = calcBreakdown(item.unitCost, rule);
+          product.pricing.retailPrice = breakdown.suggestedRetailIncVat;
+          retailUpdated++;
+        }
+      }
+
+      // Check margin warning against store min margin
       const retail = product.pricing.retailPrice || 0;
       if (retail > 0) {
-        const newMargin = ((retail - item.unitCost) / retail) * 100;
-        if (newMargin < 10) {
-          marginsBreached.push({ name: product.name, margin: Math.round(newMargin) });
+        const rule = getRule(marginSettings, product.category || '');
+        const excVat = retail / (1 + (rule.vatRate || 20) / 100);
+        const newMargin = excVat > 0 ? (excVat - item.unitCost) / excVat * 100 : 0;
+        if (newMargin < (rule.minMargin || 10)) {
+          marginsBreached.push({ name: product.name, margin: Math.round(newMargin), minMargin: rule.minMargin });
         }
       }
 
@@ -322,6 +345,7 @@ router.post('/:id/apply', async (req, res) => {
     res.json({
       success: true,
       applied,
+      retailUpdated,
       marginsBreached,
       invoice,
     });
@@ -359,7 +383,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const invoice = await ScannedInvoice.findOne({ _id: req.params.id, store: req.storeId })
-      .populate('items.matchedProduct', 'name barcode pricing')
+      .populate('items.matchedProduct', 'name barcode pricing category')
       .lean();
     if (!invoice) return res.status(404).json({ error: 'Not found' });
     res.json({ invoice });

@@ -20,6 +20,8 @@ const StockMovement = require('../models/StockMovement');
 const MarketTrend = require('../models/MarketTrend');
 const Expense = require('../models/Expense');
 const AccountingSettings = require('../models/AccountingSettings');
+const MarginSettings = require('../models/MarginSettings');
+const { UK_DEFAULTS } = require('../services/marginService');
 const { generateCustomerCode } = require('./helpers');
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
@@ -477,6 +479,18 @@ async function seed() {
     },
   ]);
   logger.info('Sample expenses created (7 records)');
+
+  // ── MARGIN SETTINGS ──────────────────────────────────────────────────────
+  await MarginSettings.deleteMany({ store: store._id });
+  await MarginSettings.create({
+    store: store._id,
+    defaultMargin: 30,
+    categories: UK_DEFAULTS,
+    alertBelowMinMargin: true,
+    autoSuggestPrice: true,
+    showMarginOnPOS: false,
+  });
+  logger.info('Margin settings seeded (UK c-store defaults)');
 
   logger.info('\n========================================');
   logger.info('SEED DATA COMPLETE!');
