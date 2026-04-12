@@ -8,6 +8,7 @@ import * as salesSvc from '../services/sales';
 import * as cashDrawerSvc from '../services/cashDrawer';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import logo from '../assets/logo.svg';
 import dayjs from 'dayjs';
 
 const fmt = (n) => `£${(Number(n) || 0).toFixed(2)}`;
@@ -388,6 +389,15 @@ function ReceiptPreviewModal({ saleData, items, total, storeName, onClose }) {
 
         {/* Receipt */}
         <div className="bg-pos-card rounded-xl p-4 mb-4 font-mono text-xs">
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 12px', borderBottom: '1px dashed rgba(255,255,255,0.12)', marginBottom: 12 }}>
+            <svg width="120" height="30" viewBox="0 0 220 52" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0" y="2" width="48" height="48" rx="11" fill="#2563EB"/>
+              <path d="M13 17 L24 37 L35 17" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="24" cy="17" r="4" fill="white"/>
+              <text x="62" y="23" fontFamily="sans-serif" fontSize="20" fontWeight="600" fill="white" letterSpacing="-0.3">Vendora</text>
+              <text x="63" y="41" fontFamily="sans-serif" fontSize="12" fontWeight="400" fill="rgba(255,255,255,0.45)" letterSpacing="1.5">POS</text>
+            </svg>
+          </div>
           <div className="text-center mb-3">
             <p className="font-bold text-pos-text text-sm">{storeName}</p>
             <p className="text-pos-muted mt-0.5">{receiptDate}</p>

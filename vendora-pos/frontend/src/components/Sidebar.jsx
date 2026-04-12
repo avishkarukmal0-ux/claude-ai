@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import toast from 'react-hot-toast';
+import logo from '../assets/logo.svg';
 
 const navSections = [
   { label: 'POS', minRole: 'cashier', items: [
@@ -133,18 +134,8 @@ export default function Sidebar({ onClose }) {
       borderRight: '1px solid var(--border)'
     }}>
       {/* Logo */}
-      <div style={{ padding: '16px 12px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2.5">
-          <div style={{
-            width: 30, height: 30, borderRadius: 8,
-            background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14
-          }}>🛒</div>
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>Vendora POS</p>
-            <p style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>v3.0</p>
-          </div>
-        </div>
+      <div style={{ padding: '20px 16px 16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
+        <img src={logo} alt="Vendora POS" style={{ height: 34, width: 'auto', display: 'block' }} />
       </div>
 
       {/* Nav */}

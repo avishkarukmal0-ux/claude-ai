@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import logo from '../assets/logo.svg';
 
 const DEFAULT_STORE_ID = import.meta.env.VITE_STORE_ID || '';
 
@@ -43,10 +44,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-pos-bg flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🛒</div>
-          <h1 className="text-3xl font-black text-white">Vendora POS</h1>
-          <p className="text-pos-muted mt-1">v3.0 — UK Independent Retail</p>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
+          <img src={logo} alt="Vendora POS" style={{ height: 40, width: 'auto' }} />
         </div>
 
         <div className="bg-pos-panel rounded-2xl p-6 shadow-2xl">
