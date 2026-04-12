@@ -139,7 +139,7 @@ export default function TapToPayModal({ amount, onSuccess, onCancel }) {
                   Hold your card, phone, or watch<br />to the payment screen
                 </p>
 
-                {process.env.NODE_ENV !== 'production' && (
+                {import.meta.env.DEV && (
                   <button
                     onClick={handleSimulateSuccess}
                     className="mt-6 text-xs text-white/25 hover:text-white/50 underline"

@@ -452,7 +452,7 @@ export default function SelfCheckoutPage() {
               <HelpCircle size={24} /> CALL STAFF NOW
             </button>
             {/* Dev override */}
-            {process.env.NODE_ENV !== 'production' && (
+            {import.meta.env.DEV && (
               <button
                 onClick={handleAgeApproved}
                 className="text-white/30 text-sm hover:text-white/50 underline mt-2"

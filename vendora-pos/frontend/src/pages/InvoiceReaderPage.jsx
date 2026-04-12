@@ -607,7 +607,7 @@ export default function InvoiceReaderPage() {
       {tab === 'scan' && (
         <div style={{ maxWidth: 600 }}>
           <UploadZone onUploaded={handleUploaded} />
-          {!process.env.ANTHROPIC_API_KEY && (
+          {import.meta.env.DEV && (
             <div style={{ marginTop: 14, padding: '12px 16px', background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.25)', borderRadius: 8 }}>
               <p style={{ fontSize: 11, color: '#FCD34D' }}>⚠ Set <code>ANTHROPIC_API_KEY</code> in your backend .env file to enable AI scanning.</p>
             </div>
