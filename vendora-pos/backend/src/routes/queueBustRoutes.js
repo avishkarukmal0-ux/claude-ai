@@ -42,14 +42,12 @@ router.post('/start', async (req, res, next) => {
 router.post('/end', async (req, res, next) => {
   try {
     const { tillId } = req.body;
-    if (!tillId) return next(AppError.validationError('tillId is required'));
-
-    activeSessions.delete(tillId);
-
-    if (req.io) {
-      req.io.to(`store:${req.storeId}`).emit('queuebust:ended', { tillId });
+    if (tillId) {
+      activeSessions.delete(tillId);
+      if (req.io) {
+        req.io.to(`store:${req.storeId}`).emit('queuebust:ended', { tillId });
+      }
     }
-
     res.json({ success: true });
   } catch (err) {
     next(err);

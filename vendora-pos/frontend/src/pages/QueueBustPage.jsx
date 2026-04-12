@@ -92,6 +92,7 @@ export default function QueueBustPage() {
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
   const [tillId, setTillId] = useState('MOBILE-...');
+  const tillIdRef = useRef(null); // ref so cleanup closure always has current tillId
   const [isActive, setIsActive] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [lastSaleId, setLastSaleId] = useState(null);
@@ -104,10 +105,13 @@ export default function QueueBustPage() {
     const startSession = async () => {
       try {
         const res = await api.post('/pos/queue-bust/start');
-        setTillId(res?.tillId || `MOBILE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`);
+        const id = res?.tillId || `MOBILE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+        tillIdRef.current = id;
+        setTillId(id);
         setIsActive(true);
       } catch {
         const fallback = `MOBILE-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+        tillIdRef.current = fallback;
         setTillId(fallback);
         setIsActive(true);
       }
@@ -115,7 +119,9 @@ export default function QueueBustPage() {
     startSession();
 
     return () => {
-      api.post('/pos/queue-bust/end').catch(() => {});
+      if (tillIdRef.current) {
+        api.post('/pos/queue-bust/end', { tillId: tillIdRef.current }).catch(() => {});
+      }
     };
   }, []);
 
@@ -204,7 +210,7 @@ export default function QueueBustPage() {
 
   const handleExit = async () => {
     try {
-      await api.post('/pos/queue-bust/end');
+      await api.post('/pos/queue-bust/end', { tillId });
     } catch {}
     navigate('/pos');
   };
