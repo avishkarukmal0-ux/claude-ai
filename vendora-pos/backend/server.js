@@ -12,14 +12,25 @@ const lossPreventionService = require('./src/services/lossPreventionService');
 const customerDisplayService = require('./src/services/customerDisplayService');
 
 const PORT = process.env.PORT || 3001;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+
+// Mirrors the CORS logic in app.js — keep in sync
+const _explicitOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean);
+if (process.env.FRONTEND_URL) _explicitOrigins.push(process.env.FRONTEND_URL.trim());
+const _originPatterns = [/^https?:\/\/.*\.vercel\.app$/, /^https?:\/\/.*\.railway\.app$/];
+function isSocketOriginAllowed(origin) {
+  if (!origin) return true;
+  if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (_explicitOrigins.includes(origin)) return true;
+  return _originPatterns.some(re => re.test(origin));
+}
 
 // Create HTTP server and Socket.io immediately — do NOT wait for DB
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: CORS_ORIGIN,
+    origin: (origin, callback) => callback(null, isSocketOriginAllowed(origin)),
     methods: ['GET', 'POST'],
     credentials: true,
   },

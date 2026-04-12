@@ -75,19 +75,28 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// CORS
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
-  .split(',').map(o => o.trim());
+// CORS — explicit origins + wildcard patterns for Vercel/Railway deployments
+const explicitOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean);
+
+if (process.env.FRONTEND_URL) explicitOrigins.push(process.env.FRONTEND_URL.trim());
+
+const ORIGIN_PATTERNS = [
+  /^https?:\/\/.*\.vercel\.app$/,
+  /^https?:\/\/.*\.railway\.app$/,
+];
+
+function isOriginAllowed(origin) {
+  if (!origin) return true; // curl, same-origin, mobile apps
+  if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (explicitOrigins.includes(origin)) return true;
+  if (ORIGIN_PATTERNS.some(re => re.test(origin))) return true;
+  return false;
+}
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, mobile apps, same-origin)
-    if (!origin) return callback(null, true);
-    // In development allow any localhost port
-    if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) {
-      return callback(null, true);
-    }
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
