@@ -10,6 +10,9 @@ const { authenticate } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimit');
 const { getRedis, isRedisAvailable } = require('../config/redis');
 
+const PIN_MAX_FAILURES = 5;
+const PIN_LOCK_SECS    = 10 * 60; // 10 minutes
+
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req, res, next) => {
   try {
@@ -21,6 +24,20 @@ router.post('/login', authLimiter, async (req, res, next) => {
 
     const store = await Store.findById(storeId);
     if (!store || !store.isActive) return next(AppError.authInvalidCredentials('Store not found'));
+
+    // ── PIN lockout check ─────────────────────────────────────────────────────
+    if (pin && isRedisAvailable()) {
+      const redis = getRedis();
+      const lockKey = `pin_lock:${storeId}`;
+      const locked = await redis.get(lockKey);
+      if (locked) {
+        const ttl = await redis.ttl(lockKey);
+        return res.status(429).json({
+          success: false,
+          error: { code: 'TILL_LOCKED', message: `Too many failed PIN attempts. Till locked for ${Math.ceil(ttl / 60)} more minute(s).` },
+        });
+      }
+    }
 
     const query = { store: storeId };
     if (email) query.email = email.toLowerCase();
@@ -44,7 +61,43 @@ router.post('/login', authLimiter, async (req, res, next) => {
       authenticated = await bcrypt.compare(password, staff.password);
     }
 
-    if (!authenticated) return next(AppError.authInvalidCredentials());
+    if (!authenticated) {
+      // Track PIN failures in Redis and lock after threshold
+      if (pin && isRedisAvailable()) {
+        const redis = getRedis();
+        const failKey = `pin_fail:${storeId}`;
+        const failures = await redis.incr(failKey);
+        if (failures === 1) await redis.expire(failKey, PIN_LOCK_SECS);
+
+        if (failures >= PIN_MAX_FAILURES) {
+          await redis.set(`pin_lock:${storeId}`, '1', 'EX', PIN_LOCK_SECS);
+          await redis.del(failKey);
+          // Alert owner via socket
+          if (req.io) {
+            req.io.to(`store:${storeId}`).emit('security:till_locked', {
+              reason: 'Too many failed PIN attempts',
+              attempts: failures,
+              lockedUntil: new Date(Date.now() + PIN_LOCK_SECS * 1000).toISOString(),
+            });
+          }
+          return res.status(429).json({
+            success: false,
+            error: { code: 'TILL_LOCKED', message: 'Too many wrong PINs — till locked for 10 minutes. Store owner has been alerted.' },
+          });
+        }
+        const remaining = PIN_MAX_FAILURES - failures;
+        return res.status(401).json({
+          success: false,
+          error: { code: 'AUTH_INVALID', message: `Wrong PIN. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining before lockout.` },
+        });
+      }
+      return next(AppError.authInvalidCredentials());
+    }
+
+    // Success — clear failure counter
+    if (pin && isRedisAvailable()) {
+      await getRedis().del(`pin_fail:${storeId}`);
+    }
 
     if (isDuress) {
       // Emit panic alert silently
@@ -137,7 +190,7 @@ router.post('/refresh', async (req, res, next) => {
     try {
       decoded = jwt.verify(refreshToken, config.jwt.refreshSecret);
     } catch {
-      await redis.del(`refresh:${refreshToken}`);
+      if (isRedisAvailable()) await getRedis().del(`refresh:${refreshToken}`);
       return next(AppError.authRefreshInvalid());
     }
 

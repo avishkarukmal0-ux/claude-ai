@@ -305,4 +305,88 @@ router.post('/:id/account/payment', requireRole('supervisor'), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// ── GDPR Endpoints ───────────────────────────────────────────────────────────
+
+// GET /api/customers/:id/export — full data export (GDPR Article 20)
+router.get('/:id/export', requireRole('manager'), async (req, res, next) => {
+  try {
+    const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId });
+    if (!customer) return next(AppError.notFound('Customer'));
+
+    const purchases = await Sale.find({ customer: req.params.id, store: req.storeId })
+      .sort({ completedAt: -1 })
+      .select('receiptNumber total status completedAt items payments staffName');
+
+    const export_ = {
+      exportedAt: new Date().toISOString(),
+      exportedBy: req.user?._id,
+      profile: {
+        customerCode: customer.customerCode,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        phone: customer.phone,
+        dateOfBirth: customer.dateOfBirth,
+        address: customer.address,
+        marketingConsent: customer.marketingConsent,
+        createdAt: customer.createdAt,
+      },
+      loyalty: {
+        points: customer.loyalty?.points,
+        tier: customer.loyalty?.tier,
+        totalEarned: customer.loyalty?.totalEarned,
+        totalRedeemed: customer.loyalty?.totalRedeemed,
+        joinedAt: customer.loyalty?.joinedAt,
+        pointsHistory: customer.loyalty?.pointsHistory,
+      },
+      purchases,
+      stats: customer.stats,
+    };
+
+    res.setHeader('Content-Disposition', `attachment; filename="customer-export-${customer.customerCode}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(export_);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/customers/:id/gdpr-delete — anonymise personal data (GDPR Article 17)
+// Keeps transaction records for tax/legal compliance, nulls personal identifiers.
+router.delete('/:id/gdpr-delete', requireRole('manager'), async (req, res, next) => {
+  try {
+    const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId });
+    if (!customer) return next(AppError.notFound('Customer'));
+
+    await Customer.findByIdAndUpdate(req.params.id, {
+      firstName: 'Deleted',
+      lastName: 'User',
+      email: null,
+      phone: null,
+      dateOfBirth: null,
+      address: null,
+      marketingConsent: false,
+      isActive: false,
+      'loyalty.pointsHistory': [],
+    });
+
+    // Log the deletion for audit trail
+    console.info(JSON.stringify({
+      type: 'gdpr_delete',
+      customerId: req.params.id,
+      customerCode: customer.customerCode,
+      storeId: req.storeId,
+      deletedBy: req.user?._id,
+      ts: new Date().toISOString(),
+    }));
+
+    res.json({
+      success: true,
+      message: 'Customer personal data anonymised. Transaction records retained for tax compliance.',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

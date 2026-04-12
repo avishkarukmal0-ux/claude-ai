@@ -2,10 +2,31 @@
 
 require('dotenv').config();
 
+// ── Startup security checks ───────────────────────────────────────────────────
+const WEAK_SECRETS = ['vendora-dev-secret-fallback', 'vendora-refresh-secret-fallback', 'change-me', 'secret'];
+const jwtSecret        = process.env.JWT_SECRET || '';
+const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || '';
+
+if (!jwtSecret || jwtSecret.length < 32 || WEAK_SECRETS.some(w => jwtSecret.includes(w))) {
+  console.error('\n╔══════════════════════════════════════════════════════════╗');
+  console.error('║  FATAL: JWT_SECRET is missing or weak                   ║');
+  console.error('║  Generate one with:                                     ║');
+  console.error('║  node -e "console.log(require(\'crypto\')               ║');
+  console.error('║           .randomBytes(64).toString(\'hex\'))"           ║');
+  console.error('╚══════════════════════════════════════════════════════════╝\n');
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+  else console.warn('  ⚠  Running with weak JWT_SECRET — NOT safe for production\n');
+}
+if (!jwtRefreshSecret || jwtRefreshSecret.length < 32 || WEAK_SECRETS.some(w => jwtRefreshSecret.includes(w))) {
+  console.warn('  ⚠  JWT_REFRESH_SECRET is weak or missing\n');
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const requestLogger = require('./middleware/requestLogger');
+const auditLog = require('./middleware/auditLog');
 const errorHandler = require('./middleware/errorHandler');
 const storeContext = require('./middleware/storeContext');
 const { generalLimiter } = require('./middleware/rateLimit');
@@ -18,12 +39,30 @@ const app = express();
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1);
 
-// Security — HSTS in production (#178)
+// Security headers
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
   hsts: process.env.NODE_ENV === 'production'
     ? { maxAge: 31536000, includeSubDomains: true, preload: true }
     : false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc:      ["'self'", 'data:', 'blob:'],
+      connectSrc:  ["'self'",
+        'https://*.mongodb.net',
+        'https://*.upstash.io',
+        'wss://localhost:*', 'ws://localhost:*',
+        ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : []),
+      ],
+      objectSrc:   ["'none'"],
+      frameSrc:    ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+    },
+  },
 }));
 
 // HTTPS redirect in production (#178)
@@ -62,6 +101,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging
 app.use(requestLogger);
+
+// Security audit log (sensitive routes)
+app.use('/api', auditLog);
 
 // Rate limiting
 app.use('/api', generalLimiter);
