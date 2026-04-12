@@ -46,12 +46,20 @@ const connectRedis = () => {
     return null;
   }
 
-  redisClient = new Redis(config.redis.url, {
+  const redisUrl = config.redis.url;
+  const isTls = redisUrl.startsWith('rediss://');
+
+  redisClient = new Redis(redisUrl, {
     lazyConnect: true,
     enableOfflineQueue: false,
-    maxRetriesPerRequest: 1,
-    retryStrategy() {
-      return null; // disable auto-reconnect; we handle it manually
+    maxRetriesPerRequest: 3,
+    connectTimeout: 10000,
+    // Upstash (and most managed Redis) requires TLS; rejectUnauthorized:false
+    // is needed because Upstash uses a wildcard cert that ioredis can reject.
+    ...(isTls && { tls: { rejectUnauthorized: false } }),
+    retryStrategy(times) {
+      if (times > 3) return null; // give up after 3 retries
+      return Math.min(times * 500, 3000);
     },
   });
 
@@ -60,8 +68,13 @@ const connectRedis = () => {
     logger.info('Redis connected');
   });
 
-  redisClient.on('error', () => {
-    // errors are suppressed after the first connection attempt warning
+  redisClient.on('error', (err) => {
+    // Suppress noisy recurring error logs after first connect failure;
+    // the connect().catch() below handles the initial failure message.
+    if (redisAvailable) {
+      logger.warn(`Redis error: ${err.message}`);
+      redisAvailable = false;
+    }
   });
 
   redisClient.connect().catch((err) => {
