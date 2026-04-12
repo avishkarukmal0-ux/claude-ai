@@ -85,7 +85,7 @@ function TransactionReplayModal({ saleId, onClose }) {
 
   useEffect(() => {
     api.get(`/loss-prevention/transaction-replay/${saleId}`)
-      .then(r => { setData(r.data); setCctvRef(r.data.sale?.cctvReference || ''); })
+      .then(r => { setData(r); setCctvRef(r.sale?.cctvReference || ''); })
       .catch(() => toast.error('Failed to load transaction'))
       .finally(() => setLoading(false));
   }, [saleId]);
@@ -188,8 +188,8 @@ function LoneWorkerPanel() {
   async function startSession() {
     setLoading(true);
     try {
-      const { data } = await api.post('/loss-prevention/lone-worker/start', { tillId, settings: { checkIntervalMinutes: intervalMin } });
-      setSession({ ...(data.session || data), startedAt: new Date().toISOString() });
+      const res = await api.post('/loss-prevention/lone-worker/start', { tillId, settings: { checkIntervalMinutes: intervalMin } });
+      setSession({ ...(res.session || res), startedAt: new Date().toISOString() });
       toast.success(`Lone worker session started — check-in every ${intervalMin} min`);
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to start session');
@@ -314,8 +314,8 @@ export default function LossPreventionPage() {
     if (!replaySearch.trim()) return;
     setReplayLoading(true);
     try {
-      const { data } = await api.get('/sales', { params: { search: replaySearch.trim(), limit: 20 } });
-      setReplaySales(data.sales || data || []);
+      const res = await api.get('/sales', { params: { search: replaySearch.trim(), limit: 20 } });
+      setReplaySales(res.sales || (Array.isArray(res) ? res : []));
     } catch { toast.error('Search failed'); }
     finally { setReplayLoading(false); }
   }, [replaySearch]);

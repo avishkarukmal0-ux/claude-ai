@@ -7,7 +7,7 @@ const STATUS_COLORS = { draft:'bg-gray-100 text-gray-600', sent:'bg-blue-100 tex
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState([]); const [loading, setLoading] = useState(true);
-  useEffect(() => { poSvc.getPurchaseOrders().then(r => setOrders(r.orders || r.data || r || [])).catch(()=>{}).finally(()=>setLoading(false)); }, []);
+  useEffect(() => { poSvc.getPurchaseOrders().then(r => setOrders(r.orders || (Array.isArray(r) ? r : []))).catch(()=>{}).finally(()=>setLoading(false)); }, []);
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6"><div><h1 className="text-2xl font-bold text-gray-900">Purchase Orders</h1><p className="text-sm text-gray-500 mt-1">Stock replenishment orders</p></div></div>

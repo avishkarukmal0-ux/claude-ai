@@ -23,7 +23,7 @@ export default function Challenge25Page() {
   const loadStats = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/challenge25/stats');
+      const data = await api.get('/challenge25/stats');
       setStats(data);
     } catch { toast.error('Failed to load stats'); }
     finally { setLoading(false); }
@@ -32,7 +32,7 @@ export default function Challenge25Page() {
   const loadAudit = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/challenge25/audit', { params: { from, to, limit: 200 } });
+      const data = await api.get('/challenge25/audit', { params: { from, to, limit: 200 } });
       setAudit(data.refusals || []);
       setAuditTotal(data.total || 0);
     } catch { toast.error('Failed to load audit'); }

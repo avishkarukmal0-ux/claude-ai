@@ -327,7 +327,7 @@ function CustomReportBuilder() {
   async function runReport() {
     setLoading(true);
     try {
-      const { data } = await api.post('/reports/custom', { from, to, metrics, groupBy });
+      const data = await api.post('/reports/custom', { from, to, metrics, groupBy });
       setResult(data);
     } catch { }
     finally { setLoading(false); }

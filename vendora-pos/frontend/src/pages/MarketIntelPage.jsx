@@ -449,7 +449,7 @@ function AskAITab() {
     setMessages(m => [...m, { role: 'user', text: question }]);
     setLoading(true);
     try {
-      const { data } = await api.post('/market/ask', { question });
+      const data = await api.post('/market/ask', { question });
       setMessages(m => [...m, { role: 'ai', text: data.answer }]);
     } catch (err) {
       setMessages(m => [...m, { role: 'ai', text: `Sorry, I couldn't process that question. ${err.response?.data?.error || err.message}`, error: true }]);
@@ -564,7 +564,7 @@ export default function MarketIntelPage() {
   async function loadTrends() {
     setLoading(l => ({ ...l, trends: true }));
     try {
-      const { data } = await api.get('/market/trends?limit=30');
+      const data = await api.get('/market/trends?limit=30');
       setTrends(data.trends || []);
     } catch { /* ignore */ }
     finally { setLoading(l => ({ ...l, trends: false })); }
@@ -573,7 +573,7 @@ export default function MarketIntelPage() {
   async function loadGaps() {
     setLoading(l => ({ ...l, gaps: true }));
     try {
-      const { data } = await api.get('/market/gaps');
+      const data = await api.get('/market/gaps');
       setGaps(data.gaps || []);
     } catch { /* ignore */ }
     finally { setLoading(l => ({ ...l, gaps: false })); }
@@ -582,7 +582,7 @@ export default function MarketIntelPage() {
   async function loadSeasonal() {
     setLoading(l => ({ ...l, seasonal: true }));
     try {
-      const { data } = await api.get('/market/seasonal');
+      const data = await api.get('/market/seasonal');
       setSeasonal(data.events || []);
     } catch { /* ignore */ }
     finally { setLoading(l => ({ ...l, seasonal: false })); }
@@ -591,7 +591,7 @@ export default function MarketIntelPage() {
   async function loadInsights() {
     setLoading(l => ({ ...l, insights: true }));
     try {
-      const { data } = await api.get('/market/insights');
+      const data = await api.get('/market/insights');
       setInsights(data.insights || []);
       setInsightCount((data.insights || []).length);
     } catch { /* ignore */ }
@@ -600,7 +600,7 @@ export default function MarketIntelPage() {
 
   async function loadMyTrends() {
     try {
-      const { data } = await api.get('/market/my-trends');
+      const data = await api.get('/market/my-trends');
       setMyTrends(data);
     } catch { /* ignore */ }
   }
@@ -608,7 +608,7 @@ export default function MarketIntelPage() {
   async function refreshInsights() {
     setLoading(l => ({ ...l, insights: true }));
     try {
-      const { data } = await api.post('/market/refresh');
+      const data = await api.post('/market/refresh');
       setInsights(data.insights || []);
     } catch { /* ignore */ }
     finally { setLoading(l => ({ ...l, insights: false })); }
