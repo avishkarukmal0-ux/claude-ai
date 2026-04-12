@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import toast from 'react-hot-toast';
-import logo from '../assets/logo.svg';
+import Logo from './common/Logo';
 
 const navSections = [
   { label: 'POS', minRole: 'cashier', items: [
@@ -135,7 +135,7 @@ export default function Sidebar({ onClose }) {
     }}>
       {/* Logo */}
       <div style={{ padding: '20px 16px 16px', borderBottom: '0.5px solid rgba(255,255,255,0.08)' }}>
-        <img src={logo} alt="Vendora POS" style={{ height: 34, width: 'auto', display: 'block' }} />
+        <Logo width={148} variant="dark" />
       </div>
 
       {/* Nav */}

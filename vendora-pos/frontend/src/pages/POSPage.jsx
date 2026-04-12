@@ -8,7 +8,6 @@ import * as salesSvc from '../services/sales';
 import * as cashDrawerSvc from '../services/cashDrawer';
 import api from '../services/api';
 import toast from 'react-hot-toast';
-import logo from '../assets/logo.svg';
 import dayjs from 'dayjs';
 
 const fmt = (n) => `£${(Number(n) || 0).toFixed(2)}`;

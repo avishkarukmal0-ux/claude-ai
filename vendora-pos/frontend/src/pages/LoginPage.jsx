@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import logo from '../assets/logo.svg';
+import Logo from '../components/common/Logo';
 
 const DEFAULT_STORE_ID = import.meta.env.VITE_STORE_ID || '';
 
@@ -45,7 +45,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
-          <img src={logo} alt="Vendora POS" style={{ height: 40, width: 'auto' }} />
+          <Logo width={160} variant="dark" />
         </div>
 
         <div className="bg-pos-panel rounded-2xl p-6 shadow-2xl">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import logo from '../assets/logo.svg';
+import Logo from './common/Logo';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import api from '../services/api';
@@ -89,7 +89,7 @@ export default function Layout() {
           >
             ☰
           </button>
-          <img src={logo} alt="Vendora POS" style={{ height: 28, width: 'auto' }} />
+          <Logo width={130} variant="dark" />
         </div>
 
         {/* Trial expiry banner */}
