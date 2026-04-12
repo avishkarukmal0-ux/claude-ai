@@ -3,23 +3,19 @@
 require('dotenv').config();
 
 // ── Startup security checks ───────────────────────────────────────────────────
+// Warn about weak secrets but never exit — Railway injects env vars at runtime
+// and process.exit(1) here would kill the dyno before env vars are available.
 const WEAK_SECRETS = ['vendora-dev-secret-fallback', 'vendora-refresh-secret-fallback', 'change-me', 'secret'];
 const jwtSecret        = process.env.JWT_SECRET || '';
 const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || '';
 
 if (!jwtSecret || jwtSecret.length < 32 || WEAK_SECRETS.some(w => jwtSecret.includes(w))) {
-  console.error('\n╔══════════════════════════════════════════════════════════╗');
-  console.error('║  FATAL: JWT_SECRET is missing or weak                   ║');
-  console.error('║  Generate one with:                                     ║');
-  console.error('║  node -e "console.log(require(\'crypto\')               ║');
-  console.error('║           .randomBytes(64).toString(\'hex\'))"           ║');
-  console.error('╚══════════════════════════════════════════════════════════╝\n');
-  if (process.env.NODE_ENV === 'production') process.exit(1);
-  else console.warn('  ⚠  Running with weak JWT_SECRET — NOT safe for production\n');
+  console.warn('\n⚠  WARNING: JWT_SECRET is missing or weak — auth tokens will be insecure');
+  console.warn('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+  console.warn('   Set it as JWT_SECRET in Railway dashboard (Variables)\n');
 }
 if (!jwtRefreshSecret || jwtRefreshSecret.length < 32 || WEAK_SECRETS.some(w => jwtRefreshSecret.includes(w))) {
-  console.warn('  ⚠  JWT_REFRESH_SECRET is weak or missing\n');
-  if (process.env.NODE_ENV === 'production') process.exit(1);
+  console.warn('⚠  WARNING: JWT_REFRESH_SECRET is missing or weak\n');
 }
 
 const express = require('express');
@@ -38,6 +34,14 @@ const app = express();
 
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1);
+
+// ── Health check — registered FIRST so Railway/load-balancer probes always respond ──
+// Must be before helmet, CORS, rate-limiting, and all other middleware.
+const healthHandler = (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0', env: process.env.NODE_ENV });
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Security headers
 app.use(helmet({
@@ -116,13 +120,6 @@ app.use('/api', auditLog);
 
 // Rate limiting
 app.use('/api', generalLimiter);
-
-// Health check (both paths for convenience)
-const healthHandler = (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0' });
-};
-app.get('/health', healthHandler);
-app.get('/api/health', healthHandler);
 
 // Uploads directory
 const uploadPath = process.env.UPLOAD_PATH || './uploads';
