@@ -18,6 +18,8 @@ const CashDrawer = require('../models/CashDrawer');
 const Sale = require('../models/Sale');
 const StockMovement = require('../models/StockMovement');
 const MarketTrend = require('../models/MarketTrend');
+const Expense = require('../models/Expense');
+const AccountingSettings = require('../models/AccountingSettings');
 const { generateCustomerCode } = require('./helpers');
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
@@ -58,10 +60,10 @@ async function seed() {
 
   // ── STAFF ─────────────────────────────────────────────────────────────────
   const staffData = [
-    { employeeId: 'EMP001', displayName: 'Raj Patel',  email: 'raj@rajsofflicence.co.uk', pin: '1111', password: 'owner123',   role: 'owner',      permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 100, maxRefundAmount: 9999 } },
-    { employeeId: 'EMP002', displayName: 'Sarah Jones', email: 'sarah@rajsofflicence.co.uk', pin: '2222', password: 'manager123', role: 'manager',    permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 50, maxRefundAmount: 500 } },
-    { employeeId: 'EMP003', displayName: 'Tom Brown',  pin: '3333', role: 'supervisor', permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, maxDiscountPercent: 20, maxRefundAmount: 100 } },
-    { employeeId: 'EMP004', displayName: 'Lisa Ahmed', pin: '4444', role: 'cashier',    permissions: { canVoid: false, canRefund: false, canDiscount: false, canOpenDrawer: true, maxDiscountPercent: 0, maxRefundAmount: 0 } },
+    { employeeId: 'EMP001', displayName: 'Raj Patel',  email: 'raj@rajsofflicence.co.uk', pin: '1111', password: 'owner123',   role: 'owner',      permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 100, maxRefundAmount: 9999 }, payroll: { hourlyRate: 15.00, weeklyHours: 40 } },
+    { employeeId: 'EMP002', displayName: 'Sarah Jones', email: 'sarah@rajsofflicence.co.uk', pin: '2222', password: 'manager123', role: 'manager',    permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 50, maxRefundAmount: 500 }, payroll: { hourlyRate: 13.00, weeklyHours: 35 } },
+    { employeeId: 'EMP003', displayName: 'Tom Brown',  pin: '3333', role: 'supervisor', permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, maxDiscountPercent: 20, maxRefundAmount: 100 }, payroll: { hourlyRate: 12.21, weeklyHours: 30 } },
+    { employeeId: 'EMP004', displayName: 'Lisa Ahmed', pin: '4444', role: 'cashier',    permissions: { canVoid: false, canRefund: false, canDiscount: false, canOpenDrawer: true, maxDiscountPercent: 0, maxRefundAmount: 0 }, payroll: { hourlyRate: 12.50, weeklyHours: 20 } },
   ];
 
   const staffMembers = [];
@@ -389,6 +391,92 @@ async function seed() {
     { category: 'Sports Drinks', productName: 'Lucozade Sport Orange 500ml', brand: 'Lucozade', trendScore: 64, trendDirection: 'stable', searchVolume: 3200, searchVolumeChange: 8, avgRetailPrice: 1.29, estimatedCostPrice: 0.55, estimatedMargin: 57, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['sports','hydration'], seasonalFactors: [{ month: 5, multiplier: 1.4 },{ month: 6, multiplier: 1.6 },{ month: 7, multiplier: 1.7 }] },
   ]);
   logger.info('Market trends seeded (20 products)');
+
+  // ── ACCOUNTING SETTINGS ──────────────────────────────────────────────────
+  await AccountingSettings.deleteMany({});
+  await AccountingSettings.create({
+    store: store._id,
+    vat: {
+      registered:      true,
+      vatNumber:       'GB123456789',
+      scheme:          'standard',
+      returnFrequency: 'quarterly',
+      quarterGroup:    'jan_apr_jul_oct',
+    },
+    financialYearStart: { month: 4, day: 6 },
+    payroll: {
+      enabled:             true,
+      frequency:           'monthly',
+      payDay:              25,
+      payeReference:       '123/AB45678',
+      accountsOfficeRef:   '123PX00000000',
+      pensionProvider:     'NEST',
+      pensionRateEmployee: 5,
+      pensionRateEmployer: 3,
+    },
+  });
+  logger.info('Accounting settings created');
+
+  // ── SAMPLE EXPENSES ───────────────────────────────────────────────────────
+  await Expense.deleteMany({});
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  await Expense.insertMany([
+    // This month
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 1),
+      category: 'rent_rates', description: 'Monthly shop rent — April 2026',
+      supplier: 'Highstreet Property Ltd', netAmount: 1200.00, vatAmount: 0, grossAmount: 1200.00,
+      vatRate: 0, vatReclaimable: false, paymentMethod: 'bacs', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 3),
+      category: 'utilities', description: 'Electricity bill — April 2026',
+      supplier: 'British Gas', netAmount: 155.83, vatAmount: 31.17, grossAmount: 187.00,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'direct_debit', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 5),
+      category: 'software', description: 'Vendora POS subscription — April 2026',
+      supplier: 'Vendora Ltd', netAmount: 49.00, vatAmount: 9.80, grossAmount: 58.80,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'card', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 7),
+      category: 'insurance', description: 'Business insurance — annual instalment',
+      supplier: 'Aviva Commercial', netAmount: 83.33, vatAmount: 0, grossAmount: 83.33,
+      vatRate: 0, vatReclaimable: false, paymentMethod: 'direct_debit', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    // Last month
+    {
+      store: store._id, date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1),
+      category: 'rent_rates', description: 'Monthly shop rent — March 2026',
+      supplier: 'Highstreet Property Ltd', netAmount: 1200.00, vatAmount: 0, grossAmount: 1200.00,
+      vatRate: 0, vatReclaimable: false, paymentMethod: 'bacs', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 3),
+      category: 'utilities', description: 'Electricity bill — March 2026',
+      supplier: 'British Gas', netAmount: 170.00, vatAmount: 34.00, grossAmount: 204.00,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'direct_debit', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 15),
+      category: 'repairs', description: 'CCTV system repair',
+      supplier: 'SecureTech Ltd', netAmount: 120.00, vatAmount: 24.00, grossAmount: 144.00,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'card', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+  ]);
+  logger.info('Sample expenses created (7 records)');
 
   logger.info('\n========================================');
   logger.info('SEED DATA COMPLETE!');

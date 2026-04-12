@@ -95,4 +95,7 @@ router.use('/ai',                    aiRoutes);
 router.use('/invoice-reader',        invoiceReaderRoutes);
 router.use('/market',                marketIntelRoutes);
 
+const accountingRoutes = require('./accountingRoutes');
+router.use('/accounting',            accountingRoutes);
+
 module.exports = router;

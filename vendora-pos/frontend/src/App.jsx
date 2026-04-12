@@ -39,6 +39,7 @@ import QueueBustPage from './pages/QueueBustPage';
 import ExpiryDashboardPage from './pages/ExpiryDashboardPage';
 import InvoiceReaderPage from './pages/InvoiceReaderPage';
 import MarketIntelPage from './pages/MarketIntelPage';
+import AccountingPage from './pages/AccountingPage';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -85,6 +86,7 @@ export default function App() {
                       <Route path="offline-queue" element={<OfflineQueuePage />} />
                       <Route path="training" element={<TrainingModePage />} />
                       <Route path="challenge25" element={<ProtectedRoute requiredRole="supervisor"><Challenge25Page /></ProtectedRoute>} />
+                      <Route path="accounting" element={<ProtectedRoute requiredRole="supervisor"><AccountingPage /></ProtectedRoute>} />
                       <Route path="settings" element={<ProtectedRoute requiredRole="manager"><SettingsPage /></ProtectedRoute>} />
                       <Route path="collection-orders" element={<CollectionOrdersPage />} />
                       <Route path="subscription" element={<SubscriptionPage />} />
