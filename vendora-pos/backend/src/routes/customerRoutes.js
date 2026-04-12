@@ -2,8 +2,10 @@
 
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const Customer = require('../models/Customer');
 const Sale = require('../models/Sale');
+const Staff = require('../models/Staff');
 const AppError = require('../utils/AppError');
 const { requireRole } = require('../middleware/permissions');
 const loyaltyService = require('../services/loyaltyService');
@@ -352,9 +354,23 @@ router.get('/:id/export', requireRole('manager'), async (req, res, next) => {
 });
 
 // DELETE /api/customers/:id/gdpr-delete — anonymise personal data (GDPR Article 17)
-// Keeps transaction records for tax/legal compliance, nulls personal identifiers.
-router.delete('/:id/gdpr-delete', requireRole('manager'), async (req, res, next) => {
+// Requires owner role + PIN confirmation. Keeps transactions for tax compliance.
+router.delete('/:id/gdpr-delete', requireRole('owner'), async (req, res, next) => {
   try {
+    const { confirmPin } = req.body;
+    if (!confirmPin) return next(AppError.validation('confirmPin is required'));
+
+    // Verify owner PIN before proceeding
+    const owner = await Staff.findById(req.user._id);
+    if (!owner?.pin) return next(AppError.authInvalidCredentials());
+    const pinValid = await bcrypt.compare(String(confirmPin), owner.pin);
+    if (!pinValid) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_INVALID', message: 'Invalid PIN — deletion cancelled' },
+      });
+    }
+
     const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId });
     if (!customer) return next(AppError.notFound('Customer'));
 
@@ -368,15 +384,17 @@ router.delete('/:id/gdpr-delete', requireRole('manager'), async (req, res, next)
       marketingConsent: false,
       isActive: false,
       'loyalty.pointsHistory': [],
+      gdprDeletedAt: new Date(),
+      gdprDeletedBy: req.user._id,
     });
 
-    // Log the deletion for audit trail
+    // Audit log
     console.info(JSON.stringify({
       type: 'gdpr_delete',
       customerId: req.params.id,
       customerCode: customer.customerCode,
       storeId: req.storeId,
-      deletedBy: req.user?._id,
+      deletedBy: req.user._id,
       ts: new Date().toISOString(),
     }));
 
