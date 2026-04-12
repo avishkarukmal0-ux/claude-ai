@@ -79,11 +79,12 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start HTTP server immediately — MongoDB connection is non-blocking
-server.listen(PORT, () => {
-  logger.info(`Vendora POS v3.0 running on port ${PORT} [${process.env.NODE_ENV}]`);
-  logger.info(`API: http://localhost:${PORT}/api`);
-  logger.info(`Health: http://localhost:${PORT}/health`);
+// Start HTTP server — bind to 0.0.0.0 so Railway can route traffic to the container.
+// Without an explicit host Node defaults to 127.0.0.1 which is unreachable externally.
+server.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Vendora POS v3.0 running on 0.0.0.0:${PORT} [${process.env.NODE_ENV}]`);
+  logger.info(`API: http://0.0.0.0:${PORT}/api`);
+  logger.info(`Health: http://0.0.0.0:${PORT}/health`);
 
   // Start cron jobs after server is up
   if (process.env.NODE_ENV !== 'test') {
@@ -113,11 +114,13 @@ const shutdown = async (signal) => {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled Rejection:', reason instanceof Error ? reason.message : reason);
-  if (reason instanceof Error && reason.stack) logger.error('Stack:', reason.stack);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  logger.error('Unhandled Rejection', { error: msg, stack });
 });
 process.on('uncaughtException', (err) => {
-  logger.error('Uncaught Exception:', err instanceof Error ? err.message : String(err));
-  if (err instanceof Error && err.stack) logger.error('Stack:', err.stack);
+  const msg = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  logger.error('Uncaught Exception', { error: msg, stack });
   // DO NOT call process.exit() — keep server running
 });

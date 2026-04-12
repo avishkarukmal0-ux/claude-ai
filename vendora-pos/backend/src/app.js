@@ -35,13 +35,16 @@ const app = express();
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1);
 
-// ── Health check — registered FIRST so Railway/load-balancer probes always respond ──
+// ── Health check + root — registered FIRST so Railway/load-balancer probes always respond ──
 // Must be before helmet, CORS, rate-limiting, and all other middleware.
 const healthHandler = (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0', env: process.env.NODE_ENV });
 };
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+app.get('/', (req, res) => {
+  res.json({ message: 'Vendora POS API', version: '3.0.0', status: 'running' });
+});
 
 // Security headers
 app.use(helmet({
