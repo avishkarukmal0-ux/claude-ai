@@ -392,24 +392,22 @@ function PayrollTab() {
     setEditingEmployee(null);
   };
 
-  const handleDeleteEmployee = async () => {
+  const handleDeleteEmployee = () => {
     if (!deleteConfirm) return;
-    try {
-      await acct.deletePayrollEmployee(preview._id, deleteConfirm.staffId);
-      const newEmps = preview.employees.filter(e => e.staffId !== deleteConfirm.staffId);
-      const newTotals = { ...preview.totals };
-      newTotals.grossPay = (newTotals.grossPay || 0) - (deleteConfirm.grossPay || 0);
-      newTotals.incomeTax = (newTotals.incomeTax || 0) - (deleteConfirm.incomeTax || 0);
-      newTotals.employeeNI = (newTotals.employeeNI || 0) - (deleteConfirm.employeeNI || 0);
-      newTotals.netPay = (newTotals.netPay || 0) - (deleteConfirm.netPay || 0);
-      newTotals.employerNI = (newTotals.employerNI || 0) - (deleteConfirm.employerNI || 0);
-      newTotals.employerCost = (newTotals.employerCost || 0) - (deleteConfirm.grossPay || 0);
-      setPreview({ ...preview, employees: newEmps, totals: newTotals });
-      toast.success(`${deleteConfirm.name} removed from payroll`);
-      setDeleteConfirm(null);
-    } catch {
-      toast.error('Failed to remove employee');
-    }
+    const newEmps = preview.employees.filter(e => e.staffId !== deleteConfirm.staffId);
+    const newTotals = { ...preview.totals };
+    newTotals.grossPay = (newTotals.grossPay || 0) - (deleteConfirm.grossPay || 0);
+    newTotals.incomeTax = (newTotals.incomeTax || 0) - (deleteConfirm.incomeTax || 0);
+    newTotals.employeeNI = (newTotals.employeeNI || 0) - (deleteConfirm.employeeNI || 0);
+    newTotals.netPay = (newTotals.netPay || 0) - (deleteConfirm.netPay || 0);
+    newTotals.employerNI = (newTotals.employerNI || 0) - (deleteConfirm.employerNI || 0);
+    newTotals.pensionEmployee = (newTotals.pensionEmployee || 0) - (deleteConfirm.pensionEmployee || 0);
+    newTotals.pensionEmployer = (newTotals.pensionEmployer || 0) - (deleteConfirm.pensionEmployer || 0);
+    newTotals.totalDeductions = (newTotals.totalDeductions || 0) - (deleteConfirm.totalDeductions || 0);
+    newTotals.employerCost = (newTotals.employerCost || 0) - ((deleteConfirm.grossPay || 0) + (deleteConfirm.employerNI || 0) + (deleteConfirm.pensionEmployer || 0));
+    setPreview({ ...preview, employees: newEmps, totals: newTotals });
+    toast.success(`${deleteConfirm.name} removed from payroll`);
+    setDeleteConfirm(null);
   };
 
   return (
@@ -500,13 +498,15 @@ function PayrollTab() {
                         ? <CheckCircle size={14} className="text-green-500 mx-auto" />
                         : <AlertTriangle size={14} className="text-red-500 mx-auto" />}
                     </td>
-                    <td className="px-3 py-2 text-center flex gap-2 justify-center">
-                      <button onClick={() => setEditingEmployee(e)} className="text-blue-600 hover:text-blue-800 p-1">
-                        <Edit3 size={14} />
-                      </button>
-                      <button onClick={() => setDeleteConfirm(e)} className="text-red-600 hover:text-red-800 p-1">
-                        <Trash2 size={14} />
-                      </button>
+                    <td className="px-3 py-2 text-center">
+                      <div className="flex gap-2 justify-center">
+                        <button onClick={() => setEditingEmployee(e)} className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50">
+                          <Edit3 size={14} />
+                        </button>
+                        <button onClick={() => setDeleteConfirm(e)} className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -584,15 +584,17 @@ function PayrollTab() {
                   <td className="px-4 py-3 text-right font-semibold text-green-700">{fmt(r.totals?.netPay)}</td>
                   <td className="px-4 py-3 text-right">{fmt(r.totals?.employerCost)}</td>
                   <td className="px-4 py-3 text-center"><StatusBadge status={r.status} /></td>
-                  <td className="px-4 py-3 text-center flex gap-2 justify-center">
-                    {r.status === 'draft' && (
-                      <button onClick={() => handleApprove(r._id)} className="text-xs text-blue-600 hover:underline">Approve</button>
-                    )}
-                    {(r.employees || []).map(e => (
-                      <a key={e.staffId} href={acct.downloadPayslip(r._id, e.staffId)} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline flex items-center gap-1">
-                        <Download size={10} />{e.name.split(' ')[0]}
-                      </a>
-                    ))}
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex gap-2 justify-center flex-wrap">
+                      {r.status === 'draft' && (
+                        <button onClick={() => handleApprove(r._id)} className="text-xs text-blue-600 hover:underline">Approve</button>
+                      )}
+                      {(r.employees || []).map(e => (
+                        <a key={e.staffId} href={acct.downloadPayslip(r._id, e.staffId)} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:underline flex items-center gap-1">
+                          <Download size={10} />{e.name.split(' ')[0]}
+                        </a>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}
