@@ -123,6 +123,16 @@ router.patch('/vat/:id', async (req, res, next) => {
   }
 });
 
+router.delete('/vat/:id', async (req, res, next) => {
+  try {
+    const vatReturn = await VatReturn.findOneAndDelete({ _id: req.params.id, store: req.storeId });
+    if (!vatReturn) throw new AppError('VAT return not found', 404);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PAYROLL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -230,6 +240,16 @@ router.patch('/payroll/:id', async (req, res, next) => {
     );
     if (!run) throw new AppError('Payroll run not found', 404);
     res.json({ success: true, run });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/payroll/:id', async (req, res, next) => {
+  try {
+    const run = await PayrollRun.findOneAndDelete({ _id: req.params.id, store: req.storeId });
+    if (!run) throw new AppError('Payroll run not found', 404);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

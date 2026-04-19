@@ -11,6 +11,7 @@ export const createVatReturn = (periodStart, periodEnd) =>
   api.post('/accounting/vat', { periodStart, periodEnd });
 export const getVatReturn  = (id) => api.get(`/accounting/vat/${id}`);
 export const updateVatReturn = (id, data) => api.patch(`/accounting/vat/${id}`, data);
+export const deleteVatReturn = (id) => api.delete(`/accounting/vat/${id}`);
 
 // Payroll
 export const listPayrollRuns = () => api.get('/accounting/payroll');
@@ -20,6 +21,7 @@ export const createPayrollRun = (periodStart, periodEnd, frequency, employees = 
   api.post('/accounting/payroll', { periodStart, periodEnd, frequency, ...(employees && { employees }) });
 export const getPayrollRun = (id) => api.get(`/accounting/payroll/${id}`);
 export const updatePayrollRun = (id, data) => api.patch(`/accounting/payroll/${id}`, data);
+export const deletePayrollRun = (id) => api.delete(`/accounting/payroll/${id}`);
 export const updatePayrollEmployee = (runId, staffId, data) =>
   api.put(`/accounting/payroll/${runId}/employee/${staffId}`, data);
 export const deletePayrollEmployee = (runId, staffId) =>

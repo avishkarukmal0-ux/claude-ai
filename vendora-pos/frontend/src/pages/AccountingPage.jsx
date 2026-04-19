@@ -163,6 +163,8 @@ function VatTab() {
   const [calculating, setCalculating] = useState(false);
   const [periodStart, setPeriodStart] = useState(dayjs().startOf('quarter').format('YYYY-MM-DD'));
   const [periodEnd, setPeriodEnd] = useState(dayjs().endOf('quarter').format('YYYY-MM-DD'));
+  const [editingVat, setEditingVat] = useState(null); // { id, status }
+  const [deleteVatConfirm, setDeleteVatConfirm] = useState(null); // id
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -202,13 +204,27 @@ function VatTab() {
     }
   };
 
-  const markSubmitted = async (id) => {
+  const handleUpdateStatus = async () => {
+    if (!editingVat) return;
     try {
-      await acct.updateVatReturn(id, { status: 'submitted' });
-      toast.success('Marked as submitted');
+      await acct.updateVatReturn(editingVat.id, { status: editingVat.status });
+      toast.success('Status updated');
+      setEditingVat(null);
       load();
     } catch {
       toast.error('Failed to update status');
+    }
+  };
+
+  const handleDeleteVat = async () => {
+    if (!deleteVatConfirm) return;
+    try {
+      await acct.deleteVatReturn(deleteVatConfirm);
+      toast.success('VAT return deleted');
+      setDeleteVatConfirm(null);
+      load();
+    } catch {
+      toast.error('Failed to delete');
     }
   };
 
@@ -303,9 +319,16 @@ function VatTab() {
                   <td className="px-4 py-3 text-right font-semibold text-blue-700">{fmt(r.box5)}</td>
                   <td className="px-4 py-3 text-center"><StatusBadge status={r.status} /></td>
                   <td className="px-4 py-3 text-center">
-                    {r.status === 'draft' && (
-                      <button onClick={() => markSubmitted(r._id)} className="text-xs text-blue-600 hover:underline">Mark Submitted</button>
-                    )}
+                    <div className="flex gap-1 justify-center">
+                      <button onClick={() => setEditingVat({ id: r._id, status: r.status })}
+                        className="text-blue-600 hover:bg-blue-50 p-1 rounded" title="Change status">
+                        <Edit3 size={14} />
+                      </button>
+                      <button onClick={() => setDeleteVatConfirm(r._id)}
+                        className="text-red-500 hover:bg-red-50 p-1 rounded" title="Delete">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -313,6 +336,40 @@ function VatTab() {
           </table>
         )}
       </div>
+
+      {/* Edit status modal */}
+      {editingVat && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="font-semibold text-gray-900 mb-4">Edit VAT Return Status</h3>
+            <label className="block text-xs text-gray-500 mb-1">Status</label>
+            <select value={editingVat.status} onChange={e => setEditingVat({ ...editingVat, status: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm mb-4">
+              <option value="draft">Draft</option>
+              <option value="submitted">Submitted</option>
+              <option value="filed">Filed</option>
+            </select>
+            <div className="flex gap-2">
+              <button onClick={() => setEditingVat(null)} className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleUpdateStatus} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {deleteVatConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <p className="font-semibold text-gray-900 mb-2">Delete this VAT return?</p>
+            <p className="text-sm text-gray-600 mb-4">This cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteVatConfirm(null)} className="flex-1 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDeleteVat} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -386,6 +443,7 @@ function PayrollTab() {
   const [preview, setPreview] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteRunConfirm, setDeleteRunConfirm] = useState(null); // run id
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -453,6 +511,16 @@ function PayrollTab() {
       toast.success('Payroll approved');
       loadHistory();
     } catch { toast.error('Failed to approve'); }
+  };
+
+  const handleDeleteRun = async () => {
+    if (!deleteRunConfirm) return;
+    try {
+      await acct.deletePayrollRun(deleteRunConfirm);
+      toast.success('Payroll run deleted');
+      setDeleteRunConfirm(null);
+      loadHistory();
+    } catch { toast.error('Failed to delete'); }
   };
 
   const handleEmployeeSaved = (updated) => {
@@ -753,7 +821,7 @@ function PayrollTab() {
                   <td className="px-4 py-3 text-right">{fmt(r.totals?.employerCost)}</td>
                   <td className="px-4 py-3 text-center"><StatusBadge status={r.status} /></td>
                   <td className="px-4 py-3 text-center">
-                    <div className="flex gap-2 justify-center flex-wrap">
+                    <div className="flex gap-2 justify-center flex-wrap items-center">
                       {r.status === 'draft' && (
                         <button onClick={() => handleApprove(r._id)} className="text-xs text-blue-600 hover:underline">Approve</button>
                       )}
@@ -762,6 +830,10 @@ function PayrollTab() {
                           <Download size={10} />{e.name.split(' ')[0]}
                         </a>
                       ))}
+                      <button onClick={() => setDeleteRunConfirm(r._id)}
+                        className="text-red-500 hover:bg-red-50 p-1 rounded" title="Delete run">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -770,6 +842,20 @@ function PayrollTab() {
           </table>
         )}
       </div>
+
+      {/* Delete run confirmation */}
+      {deleteRunConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <p className="font-semibold text-gray-900 mb-2">Delete this payroll run?</p>
+            <p className="text-sm text-gray-600 mb-4">All employee payroll data for this period will be permanently removed. This cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteRunConfirm(null)} className="flex-1 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDeleteRun} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -793,14 +879,18 @@ const CATEGORIES = [
   { value: 'other',           label: 'Other' },
 ];
 
+const BLANK_EXPENSE = { date: dayjs().format('YYYY-MM-DD'), category: 'other', description: '', netAmount: '', vatAmount: '', vatRate: '20', vatReclaimable: false, paymentMethod: 'card' };
+
 function ExpensesTab() {
   const [expenses, setExpenses] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null); // expense object being edited
+  const [deleteExpenseConfirm, setDeleteExpenseConfirm] = useState(null); // id
   const [from, setFrom] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [to, setTo]     = useState(dayjs().format('YYYY-MM-DD'));
-  const [form, setForm] = useState({ date: dayjs().format('YYYY-MM-DD'), category: 'other', description: '', netAmount: '', vatAmount: '', vatRate: '20', vatReclaimable: false, paymentMethod: 'card' });
+  const [form, setForm] = useState(BLANK_EXPENSE);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -825,7 +915,7 @@ function ExpensesTab() {
       await acct.createExpense(form);
       toast.success('Expense added');
       setShowAdd(false);
-      setForm({ date: dayjs().format('YYYY-MM-DD'), category: 'other', description: '', netAmount: '', vatAmount: '', vatRate: '20', vatReclaimable: false, paymentMethod: 'card' });
+      setForm(BLANK_EXPENSE);
       load();
     } catch {
       toast.error('Failed to add expense');
@@ -834,11 +924,42 @@ function ExpensesTab() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this expense?')) return;
+  const handleEditOpen = (ex) => {
+    setEditingExpense(ex);
+    setForm({
+      date: dayjs(ex.date).format('YYYY-MM-DD'),
+      category: ex.category || 'other',
+      description: ex.description || '',
+      netAmount: String(ex.netAmount || ''),
+      vatAmount: String(ex.vatAmount || ''),
+      vatRate: String(ex.vatRate || '20'),
+      vatReclaimable: !!ex.vatReclaimable,
+      paymentMethod: ex.paymentMethod || 'card',
+    });
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
     try {
-      await acct.deleteExpense(id);
+      await acct.updateExpense(editingExpense._id, form);
+      toast.success('Expense updated');
+      setEditingExpense(null);
+      setForm(BLANK_EXPENSE);
+      load();
+    } catch {
+      toast.error('Failed to update');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!deleteExpenseConfirm) return;
+    try {
+      await acct.deleteExpense(deleteExpenseConfirm);
       toast.success('Deleted');
+      setDeleteExpenseConfirm(null);
       load();
     } catch {
       toast.error('Failed to delete');
@@ -868,14 +989,14 @@ function ExpensesTab() {
         </div>
       </div>
 
-      {/* Add form */}
-      {showAdd && (
+      {/* Add / Edit form (shared) */}
+      {(showAdd || editingExpense) && (
         <div className="bg-white rounded-xl border border-blue-200 p-5">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-gray-800">New Expense</h3>
-            <button onClick={() => setShowAdd(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <h3 className="font-semibold text-gray-800">{editingExpense ? 'Edit Expense' : 'New Expense'}</h3>
+            <button onClick={() => { setShowAdd(false); setEditingExpense(null); setForm(BLANK_EXPENSE); }} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
           </div>
-          <form onSubmit={handleAdd} className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <form onSubmit={editingExpense ? handleEditSave : handleAdd} className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Date *</label>
               <input type="date" required className="w-full border rounded-lg px-3 py-2 text-sm" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
@@ -914,9 +1035,10 @@ function ExpensesTab() {
             </div>
             <div className="col-span-2 md:col-span-3 flex gap-2">
               <button type="submit" disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
-                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />} Save
+                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+                {editingExpense ? 'Update' : 'Save'}
               </button>
-              <button type="button" onClick={() => setShowAdd(false)} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={() => { setShowAdd(false); setEditingExpense(null); setForm(BLANK_EXPENSE); }} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
             </div>
           </form>
         </div>
@@ -963,7 +1085,14 @@ function ExpensesTab() {
                       : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button onClick={() => handleDelete(ex._id)} className="text-red-400 hover:text-red-600"><Trash2 size={14} /></button>
+                    <div className="flex gap-1 justify-center">
+                      <button onClick={() => handleEditOpen(ex)} className="text-blue-600 hover:bg-blue-50 p-1 rounded" title="Edit">
+                        <Edit3 size={14} />
+                      </button>
+                      <button onClick={() => setDeleteExpenseConfirm(ex._id)} className="text-red-500 hover:bg-red-50 p-1 rounded" title="Delete">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -980,6 +1109,20 @@ function ExpensesTab() {
           </table>
         )}
       </div>
+
+      {/* Delete expense confirmation */}
+      {deleteExpenseConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <p className="font-semibold text-gray-900 mb-2">Delete this expense?</p>
+            <p className="text-sm text-gray-600 mb-4">This cannot be undone.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteExpenseConfirm(null)} className="flex-1 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDeleteConfirmed} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
