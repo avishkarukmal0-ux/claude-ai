@@ -152,10 +152,49 @@ router.post('/payroll/calculate', async (req, res, next) => {
 
 router.post('/payroll', async (req, res, next) => {
   try {
-    const { periodStart, periodEnd, frequency } = req.body;
+    const { periodStart, periodEnd, frequency, employees } = req.body;
     if (!periodStart || !periodEnd) throw new AppError('periodStart and periodEnd required', 400);
 
-    const run = await payrollService.calculatePayroll(req.storeId, periodStart, periodEnd, frequency || 'monthly');
+    let run;
+    if (employees && Array.isArray(employees) && employees.length > 0) {
+      // Manual mode: use pre-calculated employee data from frontend
+      const freq = frequency || 'monthly';
+      const r2 = (n) => Math.round((n || 0) * 100) / 100;
+      const totals = employees.reduce((acc, e) => {
+        acc.grossPay        += e.grossPay || 0;
+        acc.incomeTax       += e.incomeTax || 0;
+        acc.employeeNI      += e.employeeNI || 0;
+        acc.employerNI      += e.employerNI || 0;
+        acc.pensionEmployee += e.pensionEmployee || 0;
+        acc.pensionEmployer += e.pensionEmployer || 0;
+        acc.studentLoan     += e.studentLoan || 0;
+        acc.totalDeductions += e.totalDeductions || 0;
+        acc.netPay          += e.netPay || 0;
+        return acc;
+      }, { grossPay:0, incomeTax:0, employeeNI:0, employerNI:0, pensionEmployee:0, pensionEmployer:0, studentLoan:0, totalDeductions:0, netPay:0 });
+      Object.keys(totals).forEach(k => { totals[k] = r2(totals[k]); });
+      totals.employerCost = r2(totals.grossPay + totals.employerNI + totals.pensionEmployer);
+      const start = new Date(periodStart);
+      const end   = new Date(periodEnd);
+      const y = start.getFullYear();
+      const taxYear = start < new Date(y, 3, 6)
+        ? `${y - 1}/${String(y).slice(2)}`
+        : `${y}/${String(y + 1).slice(2)}`;
+      run = new PayrollRun({
+        store: req.storeId,
+        period: {
+          start, end, frequency: freq,
+          payDate: end,
+          taxYear,
+          taxPeriod: start.getMonth() < 3 ? start.getMonth() + 10 : start.getMonth() - 2,
+        },
+        employees,
+        totals,
+        status: 'draft',
+      });
+    } else {
+      run = await payrollService.calculatePayroll(req.storeId, periodStart, periodEnd, frequency || 'monthly');
+    }
     await run.save();
     res.status(201).json({ success: true, run });
   } catch (err) {

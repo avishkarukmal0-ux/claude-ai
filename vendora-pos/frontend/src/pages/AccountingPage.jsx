@@ -11,7 +11,9 @@ import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 import * as acct from '../services/accounting';
 import * as marginSvc from '../services/margins';
+import * as staffSvc from '../services/staff';
 import EditEmployeeModal from '../components/payroll/EditEmployeeModal';
+import NumericKeyboard from '../components/common/NumericKeyboard';
 
 const fmt  = (n) => `£${Number(n || 0).toFixed(2)}`;
 const fmtK = (n) => {
@@ -316,106 +318,175 @@ function VatTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB: PAYROLL
+// TAB: PAYROLL — UK 2025/26 tax helpers (client-side)
 // ─────────────────────────────────────────────────────────────────────────────
+const PTAX = {
+  pa: 12570, basicRate: 0.20, basicBand: 50270,
+  higherRate: 0.40, higherBand: 125140, addRate: 0.45,
+  niPT: 12570, niUEL: 50270, niPrimary: 0.08, niUpper: 0.02,
+  niST: 9100, niEr: 0.138,
+  penLow: 6240, penHigh: 50270, nmw: 12.21,
+};
+const pr2 = (n) => Math.round((n || 0) * 100) / 100;
+function pTax(g) {
+  const t = Math.max(0, g - PTAX.pa);
+  if (!t) return 0;
+  const b = Math.min(t, PTAX.basicBand - PTAX.pa);
+  const h = t > PTAX.basicBand - PTAX.pa ? Math.min(t - (PTAX.basicBand - PTAX.pa), PTAX.higherBand - PTAX.basicBand) : 0;
+  const a = t > PTAX.higherBand - PTAX.pa ? t - (PTAX.higherBand - PTAX.pa) : 0;
+  return b * PTAX.basicRate + h * PTAX.higherRate + a * PTAX.addRate;
+}
+function pEeNI(g) {
+  if (g <= PTAX.niPT) return 0;
+  return (Math.min(g, PTAX.niUEL) - PTAX.niPT) * PTAX.niPrimary + Math.max(0, g - PTAX.niUEL) * PTAX.niUpper;
+}
+function pErNI(g) { return g <= PTAX.niST ? 0 : (g - PTAX.niST) * PTAX.niEr; }
+function pScale(freq) { return freq === 'weekly' ? 52 : freq === 'fortnightly' ? 26 : 12; }
+function pRecalc(base, hours, overtime, hourlyRate, freq) {
+  const basicPay = pr2(hours * hourlyRate);
+  const overtimePay = pr2(overtime * hourlyRate * 1.5);
+  const grossPay = pr2(basicPay + overtimePay);
+  const sc = pScale(freq);
+  const annual = grossPay * sc;
+  const incomeTax = pr2(pTax(annual) / sc);
+  const employeeNI = pr2(pEeNI(annual) / sc);
+  const employerNI = pr2(pErNI(annual) / sc);
+  const aq = Math.max(0, Math.min(annual, PTAX.penHigh) - PTAX.penLow);
+  const pensionEmployee = pr2(aq / sc * 0.05);
+  const pensionEmployer = pr2(aq / sc * 0.03);
+  const totalDeductions = pr2(incomeTax + employeeNI + pensionEmployee);
+  const netPay = pr2(grossPay - totalDeductions);
+  const totalH = hours + overtime;
+  const nmwCompliant = totalH > 0 ? (grossPay / totalH) >= PTAX.nmw : hourlyRate >= PTAX.nmw;
+  return { ...base, hoursWorked: hours, overtimeHours: overtime, hourlyRate, basicPay, overtimePay, grossPay, incomeTax, employeeNI, employerNI, pensionEmployee, pensionEmployer, totalDeductions, netPay, nmwCompliant, bonus: 0, studentLoan: 0, nmwRate: PTAX.nmw };
+}
+function pSumTotals(employees) {
+  const t = employees.reduce((a, e) => {
+    a.grossPay += e.grossPay; a.incomeTax += e.incomeTax; a.employeeNI += e.employeeNI;
+    a.employerNI += e.employerNI; a.pensionEmployee += e.pensionEmployee;
+    a.pensionEmployer += e.pensionEmployer; a.totalDeductions += e.totalDeductions; a.netPay += e.netPay;
+    return a;
+  }, { grossPay:0, incomeTax:0, employeeNI:0, employerNI:0, pensionEmployee:0, pensionEmployer:0, totalDeductions:0, netPay:0 });
+  Object.keys(t).forEach(k => { t[k] = pr2(t[k]); });
+  t.employerCost = pr2(t.grossPay + t.employerNI + t.pensionEmployer);
+  return t;
+}
+
 function PayrollTab() {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [preview, setPreview] = useState(null);
-  const [calculating, setCalculating] = useState(false);
+  const [staff, setStaff] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(true);
+  // hours: { [staffId]: { hours, overtime, hourlyRate, include } }
+  const [hours, setHours] = useState({});
+  const [keyboardFor, setKeyboardFor] = useState(null); // { staffId, field }
   const [periodStart, setPeriodStart] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [periodEnd, setPeriodEnd]   = useState(dayjs().endOf('month').format('YYYY-MM-DD'));
   const [freq, setFreq] = useState('monthly');
+  const [preview, setPreview] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const load = useCallback(async () => {
+  const loadHistory = useCallback(async () => {
     setLoading(true);
     try {
       const res = await acct.listPayrollRuns();
       setRuns(res.runs || []);
-    } catch {
-      toast.error('Failed to load payroll runs');
-    } finally {
-      setLoading(false);
-    }
+    } catch { toast.error('Failed to load payroll runs'); }
+    finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const handleCalculate = async () => {
-    setCalculating(true);
+  const loadStaff = useCallback(async () => {
+    setStaffLoading(true);
     try {
-      const res = await acct.calculatePayroll(periodStart, periodEnd, freq);
-      setPreview(res.run);
-    } catch {
-      toast.error('Failed to calculate payroll');
-    } finally {
-      setCalculating(false);
-    }
+      const res = await staffSvc.getStaff();
+      const active = (res.staff || []).filter(s => s.status === 'active');
+      setStaff(active);
+      setHours(prev => {
+        const next = {};
+        active.forEach(s => {
+          next[s._id] = prev[s._id] || {
+            hours: 0, overtime: 0,
+            hourlyRate: s.payroll?.hourlyRate || 0,
+            include: (s.payroll?.hourlyRate || 0) > 0,
+          };
+        });
+        return next;
+      });
+    } catch { toast.error('Failed to load staff'); }
+    finally { setStaffLoading(false); }
+  }, []);
+
+  useEffect(() => { loadHistory(); loadStaff(); }, [loadHistory, loadStaff]);
+
+  const setField = (staffId, field, value) =>
+    setHours(prev => ({ ...prev, [staffId]: { ...prev[staffId], [field]: value } }));
+
+  const handleCalculate = () => {
+    const included = staff.filter(s => hours[s._id]?.include && (hours[s._id]?.hourlyRate || 0) > 0);
+    if (!included.length) { toast.error('No employees included or no rates set'); return; }
+    const employees = included.map(s => {
+      const h = hours[s._id];
+      return pRecalc({
+        staffId: s._id,
+        name: s.displayName || s.name,
+        taxCode: s.payroll?.taxCode || '1257L',
+        niCategory: s.payroll?.niCategory || 'A',
+        paymentMethod: s.payroll?.paymentMethod || 'bacs',
+      }, h.hours || 0, h.overtime || 0, h.hourlyRate, freq);
+    });
+    setPreview({ employees, totals: pSumTotals(employees), period: { start: periodStart, end: periodEnd, frequency: freq } });
   };
 
   const handleSave = async () => {
     try {
-      await acct.createPayrollRun(periodStart, periodEnd, freq);
+      await acct.createPayrollRun(periodStart, periodEnd, freq, preview.employees);
       toast.success('Payroll run saved');
       setPreview(null);
-      load();
-    } catch {
-      toast.error('Failed to save payroll run');
-    }
+      loadHistory();
+    } catch { toast.error('Failed to save payroll run'); }
   };
 
   const handleApprove = async (id) => {
     try {
       await acct.updatePayrollRun(id, { status: 'approved' });
       toast.success('Payroll approved');
-      load();
-    } catch {
-      toast.error('Failed to approve');
-    }
+      loadHistory();
+    } catch { toast.error('Failed to approve'); }
   };
 
   const handleEmployeeSaved = (updated) => {
     const newEmps = preview.employees.map(e => e.staffId === updated.staffId ? updated : e);
-    const newTotals = { ...preview.totals };
-    const oldEmp = preview.employees.find(e => e.staffId === updated.staffId);
-    if (oldEmp) {
-      newTotals.grossPay = (newTotals.grossPay || 0) - (oldEmp.grossPay || 0) + (updated.grossPay || 0);
-      newTotals.incomeTax = (newTotals.incomeTax || 0) - (oldEmp.incomeTax || 0) + (updated.incomeTax || 0);
-      newTotals.employeeNI = (newTotals.employeeNI || 0) - (oldEmp.employeeNI || 0) + (updated.employeeNI || 0);
-      newTotals.netPay = (newTotals.netPay || 0) - (oldEmp.netPay || 0) + (updated.netPay || 0);
-      newTotals.employerNI = (newTotals.employerNI || 0) - (oldEmp.employerNI || 0) + (updated.employerNI || 0);
-      newTotals.employerCost = (newTotals.employerCost || 0) - (oldEmp.grossPay || 0) + (updated.grossPay || 0);
-    }
-    setPreview({ ...preview, employees: newEmps, totals: newTotals });
-    setEditingEmployee(null);
+    setPreview({ ...preview, employees: newEmps, totals: pSumTotals(newEmps) });
   };
 
   const handleDeleteEmployee = () => {
     if (!deleteConfirm) return;
     const newEmps = preview.employees.filter(e => e.staffId !== deleteConfirm.staffId);
-    const newTotals = { ...preview.totals };
-    newTotals.grossPay = (newTotals.grossPay || 0) - (deleteConfirm.grossPay || 0);
-    newTotals.incomeTax = (newTotals.incomeTax || 0) - (deleteConfirm.incomeTax || 0);
-    newTotals.employeeNI = (newTotals.employeeNI || 0) - (deleteConfirm.employeeNI || 0);
-    newTotals.netPay = (newTotals.netPay || 0) - (deleteConfirm.netPay || 0);
-    newTotals.employerNI = (newTotals.employerNI || 0) - (deleteConfirm.employerNI || 0);
-    newTotals.pensionEmployee = (newTotals.pensionEmployee || 0) - (deleteConfirm.pensionEmployee || 0);
-    newTotals.pensionEmployer = (newTotals.pensionEmployer || 0) - (deleteConfirm.pensionEmployer || 0);
-    newTotals.totalDeductions = (newTotals.totalDeductions || 0) - (deleteConfirm.totalDeductions || 0);
-    newTotals.employerCost = (newTotals.employerCost || 0) - ((deleteConfirm.grossPay || 0) + (deleteConfirm.employerNI || 0) + (deleteConfirm.pensionEmployer || 0));
-    setPreview({ ...preview, employees: newEmps, totals: newTotals });
-    toast.success(`${deleteConfirm.name} removed from payroll`);
+    setPreview({ ...preview, employees: newEmps, totals: pSumTotals(newEmps) });
+    toast.success(`${deleteConfirm.name} removed`);
     setDeleteConfirm(null);
   };
 
+  const totalEstGross = staff.reduce((sum, s) => {
+    const h = hours[s._id];
+    if (!h?.include) return sum;
+    return sum + pr2((h.hours || 0) * h.hourlyRate + (h.overtime || 0) * h.hourlyRate * 1.5);
+  }, 0);
+
+  const kbStaff = keyboardFor ? staff.find(s => s._id === keyboardFor.staffId) : null;
+  const kbCurrent = keyboardFor
+    ? (hours[keyboardFor.staffId]?.[keyboardFor.field] || 0) : 0;
+
   return (
     <div className="space-y-5">
-      {/* Calculate */}
+
+      {/* ── Hours Entry ── */}
       <div className="bg-white rounded-xl border p-5">
         <h3 className="font-semibold text-gray-800 mb-4">Run Payroll</h3>
-        <div className="flex flex-wrap gap-3 items-end">
+
+        {/* Period */}
+        <div className="flex flex-wrap gap-3 items-end mb-5">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Period Start</label>
             <input type="date" className="border rounded-lg px-3 py-2 text-sm" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
@@ -432,14 +503,105 @@ function PayrollTab() {
               <option value="monthly">Monthly</option>
             </select>
           </div>
-          <button onClick={handleCalculate} disabled={calculating} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {calculating ? <RefreshCw size={14} className="animate-spin" /> : <Users size={14} />}
-            Calculate
-          </button>
         </div>
+
+        {/* Staff hours grid */}
+        {staffLoading ? (
+          <div className="flex justify-center p-6"><RefreshCw className="animate-spin text-blue-600" size={20} /></div>
+        ) : staff.length === 0 ? (
+          <p className="text-sm text-center text-gray-400 py-6">No active staff found. Add staff with hourly rates in the Staff section.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-lg border mb-4">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-3 py-3 w-8 text-center">✓</th>
+                    <th className="px-3 py-3 text-left">Employee</th>
+                    <th className="px-3 py-3 text-right">Rate / hr</th>
+                    <th className="px-3 py-3 text-right">Reg Hours</th>
+                    <th className="px-3 py-3 text-right">OT Hours</th>
+                    <th className="px-3 py-3 text-right">Est. Gross</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {staff.map(s => {
+                    const h = hours[s._id] || { hours: 0, overtime: 0, hourlyRate: 0, include: false };
+                    const gross = pr2((h.hours || 0) * h.hourlyRate + (h.overtime || 0) * h.hourlyRate * 1.5);
+                    const isActive = !!h.include;
+                    return (
+                      <tr key={s._id} className={isActive ? '' : 'opacity-40 bg-gray-50'}>
+                        <td className="px-3 py-3 text-center">
+                          <input type="checkbox" checked={isActive} onChange={e => setField(s._id, 'include', e.target.checked)} className="w-4 h-4 rounded text-blue-600 cursor-pointer" />
+                        </td>
+                        <td className="px-3 py-3">
+                          <p className="font-medium">{s.displayName || s.name}</p>
+                          {s.role && <p className="text-xs text-gray-400">{s.role}</p>}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <button disabled={!isActive} onClick={() => setKeyboardFor({ staffId: s._id, field: 'hourlyRate' })}
+                            className="font-mono text-blue-600 hover:bg-blue-50 rounded px-2 py-1 w-full text-right disabled:pointer-events-none">
+                            {fmt(h.hourlyRate)}
+                          </button>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <button disabled={!isActive} onClick={() => setKeyboardFor({ staffId: s._id, field: 'hours' })}
+                            className="font-mono text-blue-600 hover:bg-blue-50 rounded px-2 py-1 w-full text-right disabled:pointer-events-none">
+                            {Number(h.hours || 0).toFixed(1)}
+                          </button>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <button disabled={!isActive} onClick={() => setKeyboardFor({ staffId: s._id, field: 'overtime' })}
+                            className="font-mono text-blue-600 hover:bg-blue-50 rounded px-2 py-1 w-full text-right disabled:pointer-events-none">
+                            {Number(h.overtime || 0).toFixed(1)}
+                          </button>
+                        </td>
+                        <td className="px-3 py-3 text-right font-semibold">
+                          {isActive && gross > 0 ? fmt(gross) : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="border-t-2 border-gray-200 bg-gray-50">
+                  <tr>
+                    <td colSpan={5} className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">Total Est. Gross</td>
+                    <td className="px-3 py-2 text-right font-bold text-gray-900">{fmt(totalEstGross)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Inline NumericKeyboard (mobile: fixed bottom, desktop: inline) */}
+            {keyboardFor && (
+              <div className="mb-4">
+                <p className="text-xs text-gray-500 mb-2">
+                  Editing <strong>{kbStaff?.displayName || kbStaff?.name}</strong> —{' '}
+                  {keyboardFor.field === 'hours' ? 'Regular Hours' : keyboardFor.field === 'overtime' ? 'Overtime Hours' : 'Hourly Rate'}
+                </p>
+                <NumericKeyboard
+                  value={kbCurrent}
+                  onValueChange={val => setField(keyboardFor.staffId, keyboardFor.field,
+                    Math.min(val, keyboardFor.field === 'hourlyRate' ? 999.99 : 168))}
+                  onDone={() => setKeyboardFor(null)}
+                  decimal={keyboardFor.field === 'hourlyRate'}
+                  label=""
+                />
+              </div>
+            )}
+
+            <div className="flex justify-between items-center pt-2">
+              <p className="text-xs text-gray-400">{staff.filter(s => hours[s._id]?.include).length} of {staff.length} employees included</p>
+              <button onClick={handleCalculate}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 active:bg-blue-800">
+                <Calculator size={16} /> Calculate Payroll
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Preview */}
+      {/* ── Preview ── */}
       {preview && (
         <div className="bg-white rounded-xl border border-blue-200 p-5">
           <div className="flex justify-between items-center mb-4">
@@ -447,7 +609,7 @@ function PayrollTab() {
             <button onClick={() => setPreview(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
           </div>
 
-          {/* Totals summary */}
+          {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-xs text-gray-500">Gross Pay</p>
@@ -473,14 +635,15 @@ function PayrollTab() {
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>
                   <th className="px-3 py-2 text-left">Employee</th>
-                  <th className="px-3 py-2 text-right">Hours</th>
+                  <th className="px-3 py-2 text-right">Hrs</th>
+                  <th className="px-3 py-2 text-right">OT</th>
                   <th className="px-3 py-2 text-right">Gross</th>
                   <th className="px-3 py-2 text-right">PAYE</th>
                   <th className="px-3 py-2 text-right">NI (Ee)</th>
                   <th className="px-3 py-2 text-right">Pension</th>
                   <th className="px-3 py-2 text-right">Net Pay</th>
                   <th className="px-3 py-2 text-center">NMW</th>
-                  <th className="px-3 py-2 text-center">Actions</th>
+                  <th className="px-3 py-2 text-center">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -488,6 +651,7 @@ function PayrollTab() {
                   <tr key={i} className={!e.nmwCompliant ? 'bg-red-50' : ''}>
                     <td className="px-3 py-2 font-medium">{e.name}</td>
                     <td className="px-3 py-2 text-right">{e.hoursWorked?.toFixed(1)}</td>
+                    <td className="px-3 py-2 text-right text-orange-500">{(e.overtimeHours || 0).toFixed(1)}</td>
                     <td className="px-3 py-2 text-right">{fmt(e.grossPay)}</td>
                     <td className="px-3 py-2 text-right text-red-600">{fmt(e.incomeTax)}</td>
                     <td className="px-3 py-2 text-right text-red-600">{fmt(e.employeeNI)}</td>
@@ -496,14 +660,14 @@ function PayrollTab() {
                     <td className="px-3 py-2 text-center">
                       {e.nmwCompliant
                         ? <CheckCircle size={14} className="text-green-500 mx-auto" />
-                        : <AlertTriangle size={14} className="text-red-500 mx-auto" />}
+                        : <AlertTriangle size={14} className="text-red-500 mx-auto" title="Below NMW" />}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <div className="flex gap-2 justify-center">
-                        <button onClick={() => setEditingEmployee(e)} className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50">
+                      <div className="flex gap-1 justify-center">
+                        <button onClick={() => setEditingEmployee(e)} className="text-blue-600 hover:bg-blue-50 p-1 rounded">
                           <Edit3 size={14} />
                         </button>
-                        <button onClick={() => setDeleteConfirm(e)} className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50">
+                        <button onClick={() => setDeleteConfirm(e)} className="text-red-500 hover:bg-red-50 p-1 rounded">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -511,11 +675,22 @@ function PayrollTab() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="border-t-2 border-gray-200 bg-gray-50 text-xs font-semibold text-gray-600 uppercase">
+                <tr>
+                  <td colSpan={3} className="px-3 py-2">Totals</td>
+                  <td className="px-3 py-2 text-right">{fmt(preview.totals?.grossPay)}</td>
+                  <td className="px-3 py-2 text-right text-red-600">{fmt(preview.totals?.incomeTax)}</td>
+                  <td className="px-3 py-2 text-right text-red-600">{fmt(preview.totals?.employeeNI)}</td>
+                  <td className="px-3 py-2 text-right text-gray-500">{fmt(preview.totals?.pensionEmployee)}</td>
+                  <td className="px-3 py-2 text-right text-green-700">{fmt(preview.totals?.netPay)}</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
 
           <div className="flex items-center justify-between bg-blue-50 rounded-lg p-3 mb-4">
-            <span className="text-sm font-medium text-blue-800">Total Employer Cost (inc. Er NI + pension)</span>
+            <span className="text-sm font-medium text-blue-800">Total Employer Cost (gross + Er NI + pension)</span>
             <span className="text-xl font-bold text-blue-800">{fmt(preview.totals?.employerCost)}</span>
           </div>
 
@@ -526,22 +701,15 @@ function PayrollTab() {
             <button onClick={() => setPreview(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Discard</button>
           </div>
 
-          {/* Edit modal */}
           {editingEmployee && (
-            <EditEmployeeModal
-              employee={editingEmployee}
-              run={preview}
-              onSave={handleEmployeeSaved}
-              onClose={() => setEditingEmployee(null)}
-            />
+            <EditEmployeeModal employee={editingEmployee} run={preview} onSave={handleEmployeeSaved} onClose={() => setEditingEmployee(null)} />
           )}
 
-          {/* Delete confirmation */}
           {deleteConfirm && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-white rounded-lg p-6 max-w-sm">
+              <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
                 <p className="font-semibold text-gray-900 mb-2">Remove {deleteConfirm.name}?</p>
-                <p className="text-sm text-gray-600 mb-4">This only removes them from this payroll run — not from staff records.</p>
+                <p className="text-sm text-gray-600 mb-4">Removes them from this payroll run only — not from staff records.</p>
                 <div className="flex gap-2">
                   <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
                   <button onClick={handleDeleteEmployee} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Remove</button>
@@ -552,11 +720,11 @@ function PayrollTab() {
         </div>
       )}
 
-      {/* Runs list */}
+      {/* ── Payroll History ── */}
       <div className="bg-white rounded-xl border">
         <div className="p-4 border-b flex justify-between items-center">
           <h3 className="font-semibold text-gray-800">Payroll History</h3>
-          <button onClick={load} className="text-gray-400 hover:text-gray-600"><RefreshCw size={15} /></button>
+          <button onClick={loadHistory} className="text-gray-400 hover:text-gray-600"><RefreshCw size={15} /></button>
         </div>
         {loading ? (
           <div className="flex justify-center p-8"><RefreshCw className="animate-spin text-blue-600" size={22} /></div>
@@ -567,7 +735,7 @@ function PayrollTab() {
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
               <tr>
                 <th className="px-4 py-3 text-left">Period</th>
-                <th className="px-4 py-3 text-right">Employees</th>
+                <th className="px-4 py-3 text-right">Staff</th>
                 <th className="px-4 py-3 text-right">Gross Pay</th>
                 <th className="px-4 py-3 text-right">Net Pay</th>
                 <th className="px-4 py-3 text-right">Employer Cost</th>

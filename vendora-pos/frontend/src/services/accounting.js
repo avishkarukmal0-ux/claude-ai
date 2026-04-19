@@ -16,8 +16,8 @@ export const updateVatReturn = (id, data) => api.patch(`/accounting/vat/${id}`, 
 export const listPayrollRuns = () => api.get('/accounting/payroll');
 export const calculatePayroll = (periodStart, periodEnd, frequency) =>
   api.post('/accounting/payroll/calculate', { periodStart, periodEnd, frequency });
-export const createPayrollRun = (periodStart, periodEnd, frequency) =>
-  api.post('/accounting/payroll', { periodStart, periodEnd, frequency });
+export const createPayrollRun = (periodStart, periodEnd, frequency, employees = null) =>
+  api.post('/accounting/payroll', { periodStart, periodEnd, frequency, ...(employees && { employees }) });
 export const getPayrollRun = (id) => api.get(`/accounting/payroll/${id}`);
 export const updatePayrollRun = (id, data) => api.patch(`/accounting/payroll/${id}`, data);
 export const updatePayrollEmployee = (runId, staffId, data) =>
