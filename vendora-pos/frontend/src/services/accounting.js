@@ -20,6 +20,10 @@ export const createPayrollRun = (periodStart, periodEnd, frequency) =>
   api.post('/accounting/payroll', { periodStart, periodEnd, frequency });
 export const getPayrollRun = (id) => api.get(`/accounting/payroll/${id}`);
 export const updatePayrollRun = (id, data) => api.patch(`/accounting/payroll/${id}`, data);
+export const updatePayrollEmployee = (runId, staffId, data) =>
+  api.put(`/accounting/payroll/${runId}/employee/${staffId}`, data);
+export const deletePayrollEmployee = (runId, staffId) =>
+  api.delete(`/accounting/payroll/${runId}/employee/${staffId}`);
 export const downloadPayslip = (runId, staffId) =>
   `/api/accounting/payroll/${runId}/payslip/${staffId}`;
 

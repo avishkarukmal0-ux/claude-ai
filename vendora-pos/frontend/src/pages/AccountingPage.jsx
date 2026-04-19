@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import toast from 'react-hot-toast';
 import * as acct from '../services/accounting';
 import * as marginSvc from '../services/margins';
+import EditEmployeeModal from '../components/payroll/EditEmployeeModal';
 
 const fmt  = (n) => `£${Number(n || 0).toFixed(2)}`;
 const fmtK = (n) => {
@@ -325,6 +326,8 @@ function PayrollTab() {
   const [periodStart, setPeriodStart] = useState(dayjs().startOf('month').format('YYYY-MM-DD'));
   const [periodEnd, setPeriodEnd]   = useState(dayjs().endOf('month').format('YYYY-MM-DD'));
   const [freq, setFreq] = useState('monthly');
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -370,6 +373,42 @@ function PayrollTab() {
       load();
     } catch {
       toast.error('Failed to approve');
+    }
+  };
+
+  const handleEmployeeSaved = (updated) => {
+    const newEmps = preview.employees.map(e => e.staffId === updated.staffId ? updated : e);
+    const newTotals = { ...preview.totals };
+    const oldEmp = preview.employees.find(e => e.staffId === updated.staffId);
+    if (oldEmp) {
+      newTotals.grossPay = (newTotals.grossPay || 0) - (oldEmp.grossPay || 0) + (updated.grossPay || 0);
+      newTotals.incomeTax = (newTotals.incomeTax || 0) - (oldEmp.incomeTax || 0) + (updated.incomeTax || 0);
+      newTotals.employeeNI = (newTotals.employeeNI || 0) - (oldEmp.employeeNI || 0) + (updated.employeeNI || 0);
+      newTotals.netPay = (newTotals.netPay || 0) - (oldEmp.netPay || 0) + (updated.netPay || 0);
+      newTotals.employerNI = (newTotals.employerNI || 0) - (oldEmp.employerNI || 0) + (updated.employerNI || 0);
+      newTotals.employerCost = (newTotals.employerCost || 0) - (oldEmp.grossPay || 0) + (updated.grossPay || 0);
+    }
+    setPreview({ ...preview, employees: newEmps, totals: newTotals });
+    setEditingEmployee(null);
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await acct.deletePayrollEmployee(preview._id, deleteConfirm.staffId);
+      const newEmps = preview.employees.filter(e => e.staffId !== deleteConfirm.staffId);
+      const newTotals = { ...preview.totals };
+      newTotals.grossPay = (newTotals.grossPay || 0) - (deleteConfirm.grossPay || 0);
+      newTotals.incomeTax = (newTotals.incomeTax || 0) - (deleteConfirm.incomeTax || 0);
+      newTotals.employeeNI = (newTotals.employeeNI || 0) - (deleteConfirm.employeeNI || 0);
+      newTotals.netPay = (newTotals.netPay || 0) - (deleteConfirm.netPay || 0);
+      newTotals.employerNI = (newTotals.employerNI || 0) - (deleteConfirm.employerNI || 0);
+      newTotals.employerCost = (newTotals.employerCost || 0) - (deleteConfirm.grossPay || 0);
+      setPreview({ ...preview, employees: newEmps, totals: newTotals });
+      toast.success(`${deleteConfirm.name} removed from payroll`);
+      setDeleteConfirm(null);
+    } catch {
+      toast.error('Failed to remove employee');
     }
   };
 
@@ -443,6 +482,7 @@ function PayrollTab() {
                   <th className="px-3 py-2 text-right">Pension</th>
                   <th className="px-3 py-2 text-right">Net Pay</th>
                   <th className="px-3 py-2 text-center">NMW</th>
+                  <th className="px-3 py-2 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -459,6 +499,14 @@ function PayrollTab() {
                       {e.nmwCompliant
                         ? <CheckCircle size={14} className="text-green-500 mx-auto" />
                         : <AlertTriangle size={14} className="text-red-500 mx-auto" />}
+                    </td>
+                    <td className="px-3 py-2 text-center flex gap-2 justify-center">
+                      <button onClick={() => setEditingEmployee(e)} className="text-blue-600 hover:text-blue-800 p-1">
+                        <Edit3 size={14} />
+                      </button>
+                      <button onClick={() => setDeleteConfirm(e)} className="text-red-600 hover:text-red-800 p-1">
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -477,6 +525,30 @@ function PayrollTab() {
             </button>
             <button onClick={() => setPreview(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">Discard</button>
           </div>
+
+          {/* Edit modal */}
+          {editingEmployee && (
+            <EditEmployeeModal
+              employee={editingEmployee}
+              run={preview}
+              onSave={handleEmployeeSaved}
+              onClose={() => setEditingEmployee(null)}
+            />
+          )}
+
+          {/* Delete confirmation */}
+          {deleteConfirm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-sm">
+                <p className="font-semibold text-gray-900 mb-2">Remove {deleteConfirm.name}?</p>
+                <p className="text-sm text-gray-600 mb-4">This only removes them from this payroll run — not from staff records.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+                  <button onClick={handleDeleteEmployee} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Remove</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

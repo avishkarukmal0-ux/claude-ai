@@ -230,4 +230,58 @@ function getPayDate(periodEnd) {
   return pay;
 }
 
-module.exports = { calculatePayroll, calcAnnualTax, calcAnnualEmployeeNI, calcAnnualEmployerNI, TAX };
+/**
+ * Recalculate a single employee's payroll for a given frequency.
+ * Used when editing an employee record to update tax/NI based on new hours/rate.
+ */
+function recalculateEmployee(employee, frequency) {
+  const hoursWorked = employee.hoursWorked || 0;
+  const overtimeHours = employee.overtimeHours || 0;
+  const hourlyRate = employee.hourlyRate || 0;
+
+  const basicPay = r2(hoursWorked * hourlyRate);
+  const overtimePay = r2(overtimeHours * hourlyRate * 1.5);
+  const bonus = 0;
+  const grossPay = r2(basicPay + overtimePay + bonus);
+
+  // Annualise for tax / NI calculation
+  const annualGross = grossPay * (frequency === 'weekly' ? 52 : frequency === 'fortnightly' ? 26 : 12);
+
+  const periodTax = r2(periodFraction(calcAnnualTax(annualGross), frequency));
+  const periodEmployeeNI = r2(periodFraction(calcAnnualEmployeeNI(annualGross), frequency));
+  const periodEmployerNI = r2(periodFraction(calcAnnualEmployerNI(annualGross), frequency));
+
+  // Auto-enrolment pension (employee 5%, employer 3%) on qualifying earnings
+  const annualQualifying = Math.max(0, Math.min(annualGross, TAX.pensionUpper) - TAX.pensionLower);
+  const periodQualifying = r2(periodFraction(annualQualifying, frequency));
+  const pensionEmployee = r2(periodQualifying * 0.05);
+  const pensionEmployer = r2(periodQualifying * 0.03);
+
+  const totalDeductions = r2(periodTax + periodEmployeeNI + pensionEmployee);
+  const netPay = r2(grossPay - totalDeductions);
+
+  // NMW compliance
+  const totalHours = hoursWorked + overtimeHours;
+  const effectiveHourly = totalHours > 0 ? grossPay / totalHours : hourlyRate;
+  const nmwCompliant = effectiveHourly >= TAX.nmwAdult;
+
+  // Update employee object
+  employee.basicPay = basicPay;
+  employee.overtimePay = overtimePay;
+  employee.bonus = bonus;
+  employee.grossPay = grossPay;
+  employee.incomeTax = periodTax;
+  employee.employeeNI = periodEmployeeNI;
+  employee.employerNI = periodEmployerNI;
+  employee.pensionEmployee = pensionEmployee;
+  employee.pensionEmployer = pensionEmployer;
+  employee.studentLoan = 0;
+  employee.totalDeductions = totalDeductions;
+  employee.netPay = netPay;
+  employee.nmwRate = TAX.nmwAdult;
+  employee.nmwCompliant = nmwCompliant;
+
+  return employee;
+}
+
+module.exports = { calculatePayroll, recalculateEmployee, calcAnnualTax, calcAnnualEmployeeNI, calcAnnualEmployerNI, TAX };

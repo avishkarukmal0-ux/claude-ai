@@ -222,6 +222,90 @@ router.get('/payroll/:runId/payslip/:staffId', async (req, res, next) => {
   }
 });
 
+// Update employee in payroll run
+router.put('/payroll/:runId/employee/:staffId', async (req, res, next) => {
+  try {
+    const run = await PayrollRun.findOne({ _id: req.params.runId, store: req.storeId });
+    if (!run) throw new AppError('Payroll run not found', 404);
+
+    const empIdx = run.employees.findIndex(e => e.staffId.toString() === req.params.staffId);
+    if (empIdx === -1) throw new AppError('Employee not found in this payroll run', 404);
+
+    const { hoursWorked, overtimeHours = 0, hourlyRate, taxCode, niCategory, paymentMethod, notes } = req.body;
+    if (hoursWorked === undefined || hourlyRate === undefined) {
+      throw new AppError('hoursWorked and hourlyRate required', 400);
+    }
+
+    const emp = run.employees[empIdx];
+    emp.hoursWorked = hoursWorked;
+    emp.overtimeHours = overtimeHours || 0;
+    emp.hourlyRate = hourlyRate;
+    emp.taxCode = taxCode || emp.taxCode;
+    emp.niCategory = niCategory || emp.niCategory;
+    emp.paymentMethod = paymentMethod || emp.paymentMethod;
+    emp.notes = notes || '';
+
+    // Recalculate pay using payroll service
+    const updated = await payrollService.recalculateEmployee(emp, run.period.frequency);
+    run.employees[empIdx] = updated;
+
+    // Recalculate totals
+    const newTotals = { grossPay: 0, incomeTax: 0, employeeNI: 0, employerNI: 0, pensionEmployee: 0, pensionEmployer: 0, studentLoan: 0, totalDeductions: 0, netPay: 0, employerCost: 0 };
+    run.employees.forEach(e => {
+      newTotals.grossPay += e.grossPay || 0;
+      newTotals.incomeTax += e.incomeTax || 0;
+      newTotals.employeeNI += e.employeeNI || 0;
+      newTotals.employerNI += e.employerNI || 0;
+      newTotals.pensionEmployee += e.pensionEmployee || 0;
+      newTotals.pensionEmployer += e.pensionEmployer || 0;
+      newTotals.studentLoan += e.studentLoan || 0;
+      newTotals.totalDeductions += e.totalDeductions || 0;
+      newTotals.netPay += e.netPay || 0;
+      newTotals.employerCost += (e.grossPay || 0) + (e.employerNI || 0) + (e.pensionEmployer || 0);
+    });
+    run.totals = newTotals;
+
+    await run.save();
+    res.json({ success: true, employee: updated, totals: newTotals });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Remove employee from payroll run
+router.delete('/payroll/:runId/employee/:staffId', async (req, res, next) => {
+  try {
+    const run = await PayrollRun.findOne({ _id: req.params.runId, store: req.storeId });
+    if (!run) throw new AppError('Payroll run not found', 404);
+
+    const empIdx = run.employees.findIndex(e => e.staffId.toString() === req.params.staffId);
+    if (empIdx === -1) throw new AppError('Employee not found in this payroll run', 404);
+
+    const removed = run.employees.splice(empIdx, 1)[0];
+
+    // Recalculate totals
+    const newTotals = { grossPay: 0, incomeTax: 0, employeeNI: 0, employerNI: 0, pensionEmployee: 0, pensionEmployer: 0, studentLoan: 0, totalDeductions: 0, netPay: 0, employerCost: 0 };
+    run.employees.forEach(e => {
+      newTotals.grossPay += e.grossPay || 0;
+      newTotals.incomeTax += e.incomeTax || 0;
+      newTotals.employeeNI += e.employeeNI || 0;
+      newTotals.employerNI += e.employerNI || 0;
+      newTotals.pensionEmployee += e.pensionEmployee || 0;
+      newTotals.pensionEmployer += e.pensionEmployer || 0;
+      newTotals.studentLoan += e.studentLoan || 0;
+      newTotals.totalDeductions += e.totalDeductions || 0;
+      newTotals.netPay += e.netPay || 0;
+      newTotals.employerCost += (e.grossPay || 0) + (e.employerNI || 0) + (e.pensionEmployer || 0);
+    });
+    run.totals = newTotals;
+
+    await run.save();
+    res.json({ success: true, removed: removed.name, totals: newTotals });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPENSES
 // ─────────────────────────────────────────────────────────────────────────────
