@@ -102,3 +102,6 @@ const marginRoutes = require('./marginRoutes');
 router.use('/margins',               marginRoutes);
 
 module.exports = router;
+
+const payrollRoutes = require('./payrollRoutes');
+router.use('/payroll', payrollRoutes);
