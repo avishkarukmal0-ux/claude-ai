@@ -14,7 +14,12 @@ Back to [[Home]] · Related: [[Domains-Index]] · [[Accounting]] · [[Competitor
 - **71% of stores are independent** (symbol or unaffiliated); **unaffiliated independents run below benchmark margins** and lack the "managed EPOS" perk symbol groups dangle.
 - Admin overhead is brutal: one retailer went from **5 hrs/month on data → minutes** with a good EPOS.
 
-**Implication:** the buyer's pain is not "I need to take card payments." It's **"my margin is vanishing to wages, waste, theft and admin."** Whoever owns *that* problem wins the corner shop.
+**Implication:** the buyer's pain is not "I need to take card payments." It's **"my margin is vanishing to theft, waste and admin."** Whoever owns *that* problem wins the corner shop.
+
+### ⚠️ Ground-truth correction (from owner, 2026-07-13)
+- **Wages are NOT the wedge.** UK c-stores already run on low/minimum wages (family labour, part-time) and are *not* anxious about wage-rise cost. → **Dropped the "cost of a wage rise" simulator.** Payroll/VAT stay in-product as **credibility + back-office depth** (moat vs AI clones), not as the headline.
+- **Theft/shrinkage IS the lead wedge.** ACS Crime Report: **£316m/yr cost of crime, £6,000+ per store, a "10p crime tax" per transaction, 6.2m thefts, robbery +50.8%,** and stores already spend **£265m/yr** on prevention. This is the expensive, emotive, daily pain.
+- **Lead order:** Theft/shrinkage → Waste → Margin/ordering. Payroll/VAT = proof of depth, not the pitch.
 
 ## The competitive landscape
 See [[Competitor-Teardown]] for detail. Summary of where everyone sits:
@@ -50,12 +55,12 @@ A generic AI competitor would need to *know* HMRC rules, ACS guidance, NLW figur
 - **Anti-positioning vs symbol groups:** "Symbol-group back office, without joining a symbol group."
 
 ## Product priorities that reinforce positioning
-Rank future work by how much it deepens the *back-office / compliance moat* (hard to copy) over shiny-but-generic POS features (easy to copy):
-1. **Owner dashboard = "your P&L this week"** — wage %, waste £, shrinkage £, margin trend on one screen. Makes the positioning visible in 5 seconds.
-2. **Payroll → "cost of a wage rise" simulator** — model the NMW hit; nobody else does this.
-3. **Shrinkage/theft insights surfaced proactively**, not buried.
-4. **Expiry/waste £ saved** counter — quantify the value we return.
-5. Keep VAT/payroll **provably correct & current** with UK tax-year updates (our credibility depends on it).
+Rank future work by how much it deepens the *back-office / compliance moat* (hard to copy) over shiny-but-generic POS features (easy to copy). **Reprioritised after owner feedback 2026-07-13:**
+1. ⭐ **Owner "This Week" dashboard** — lead with **£ lost to theft/shrinkage** and **£ saved from waste/markdowns**, then margin & sales trend, on one screen. Makes the positioning visible in 5 seconds. *(APPROVED — flagship build.)*
+2. ⭐ **Proactive shrinkage/theft insights** — surface anomalies, high-risk lines, incident cost, not buried in a report. *(The lead wedge — £6k/store/yr pain.)*
+3. ⭐ **"Waste £ saved" counter** from expiry markdowns — quantify money returned. *(APPROVED.)*
+4. Keep VAT/payroll **provably correct & current** with UK tax-year updates — credibility/depth, not headline.
+5. ~~Payroll "cost of a wage rise" simulator~~ — **DROPPED.** Owner: UK c-stores run on low wages, not a concern.
 
 ## Pricing angle (hypothesis, to validate)
 - Flat monthly SaaS, **no card-processing lock-in** (bring your own acquirer) — counters Epos Now's contract and Square's rate-creep.
