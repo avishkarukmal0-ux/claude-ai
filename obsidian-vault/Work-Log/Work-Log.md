@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-07-13-Fix-Payroll-Route-Mount]] — removed a stub `/payroll` mount that crashed boot; added `CLAUDE.md` for auto-updating the vault
 - [[2026-07-13-Recovery-and-Setup]] — laptop lost, project recovered from GitHub; Obsidian vault created
 
 ## How to use
@@ -16,6 +17,6 @@ Running journal of **everything we do from here onwards** — newest first. Each
 ## Standing backlog / ideas
 > Move items into a dated entry when we pick them up.
 
-- [ ] Tidy `routes/index.js` — `/payroll` mount sits after `module.exports` (works but fragile). See [[API-Routes]].
+- [x] ~~Tidy `routes/index.js` payroll mount~~ — done in [[2026-07-13-Fix-Payroll-Route-Mount]] (was a boot-crash bug; removed dead stub)
 - [ ] End-to-end manual test of Accounting flow (VAT → Payroll → Expenses → P&L)
 - [ ] Confirm Railway + Vercel deploy configs current

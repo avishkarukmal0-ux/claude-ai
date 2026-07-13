@@ -53,10 +53,8 @@ All mounted under `/api` in `src/routes/index.js`. Public routes first, then `au
 | `/market` | `marketIntelRoutes.js` | market intel |
 | `/accounting` | `accountingRoutes.js` | [[Accounting]] |
 | `/margins` | `marginRoutes.js` | pricing |
-| `/payroll` | `payrollRoutes.js` | payroll CRUD |
 
-## ⚠️ Known quirk
-In `routes/index.js`, `module.exports = router` appears **before** the `/payroll` mount lines. It still works (same router object is mutated before first use), but it's fragile ordering — worth tidying when touched. Logged in [[Work-Log]].
+> **Payroll** is served under `/accounting/payroll` (in `accountingRoutes.js`), not a top-level `/payroll`. A stray `payrollRoutes.js` stub that crashed boot was removed — see [[2026-07-13-Fix-Payroll-Route-Mount]].
 
 ## Accounting sub-routes (active area)
 Under `/accounting` (`accountingRoutes.js`), all `requireRole('supervisor')`:
