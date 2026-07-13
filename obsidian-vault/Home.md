@@ -11,6 +11,7 @@
 ### Foundations
 - [[Architecture]] — how the whole system fits together
 - [[Tech-Stack]] — languages, frameworks, libraries
+- [[Running-Locally]] — local dev setup + how to log into Railway 🔑
 - [[Deployment]] — Railway, Vercel, Docker
 - [[Conventions]] — coding patterns, git workflow, house style
 
