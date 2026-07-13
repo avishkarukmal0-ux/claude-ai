@@ -4,6 +4,9 @@ Back to [[Home]] · Related: [[API-Routes]] · [[Routing-and-Pages]] · [[Data-M
 
 Feature areas of Vendora POS. Each links to the frontend page, backend routes, and services that make it up. Deep-dive notes exist for the active/complex ones.
 
+## Command centre
+- **[[Overview-Dashboard]]** ⭐ — the owner's "This Week" screen: theft £, waste £, sales & margin. `OverviewPage` · `/overview` · `overviewRoutes`
+
 ## Selling
 - **[[POS-and-Checkout]]** ⭐ — the till: cart, scan, pay, park, refund. `POSPage` · `/sales` · `promotionsEngine`
 - **Self-checkout & Queue-bust** — `SelfCheckoutPage`, `QueueBustPage` · `/pos/self-checkout`, `/pos/queue-bust`

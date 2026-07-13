@@ -7,6 +7,7 @@ Routes defined in `src/App.jsx`. Default redirect `/` → `/pos`.
 ## Authenticated app routes (inside `Layout`)
 | Path | Page | Min role |
 |---|---|---|
+| `/overview` | `OverviewPage` | **supervisor** ⭐ → [[Overview-Dashboard]] |
 | `/pos` | `POSPage` | staff |
 | `/products` | `ProductsPage` | staff |
 | `/customers` | `CustomersPage` | staff |

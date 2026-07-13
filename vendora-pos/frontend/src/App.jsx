@@ -41,6 +41,7 @@ import InvoiceReaderPage from './pages/InvoiceReaderPage';
 import MarketIntelPage from './pages/MarketIntelPage';
 import AccountingPage from './pages/AccountingPage';
 import MarginSettingsPage from './pages/MarginSettingsPage';
+import OverviewPage from './pages/OverviewPage';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, loading, hasRole } = useAuth();
@@ -63,6 +64,7 @@ export default function App() {
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                       <Route index element={<Navigate to="/pos" replace />} />
+                      <Route path="overview" element={<ProtectedRoute requiredRole="supervisor"><OverviewPage /></ProtectedRoute>} />
                       <Route path="pos" element={<POSPage />} />
                       <Route path="products" element={<ProductsPage />} />
                       <Route path="customers" element={<CustomersPage />} />

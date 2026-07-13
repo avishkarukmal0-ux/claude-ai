@@ -31,7 +31,8 @@
 
 ### Feature Domains
 - [[Domains-Index]] — all feature areas at a glance
-- [[Accounting]] — VAT, Payroll, Expenses, P&L ⭐ *active work area*
+- [[Overview-Dashboard]] — owner's "This Week" command centre ⭐ *new flagship*
+- [[Accounting]] — VAT, Payroll, Expenses, P&L
 - [[POS-and-Checkout]] — the core till
 
 ### 📓 Work Log

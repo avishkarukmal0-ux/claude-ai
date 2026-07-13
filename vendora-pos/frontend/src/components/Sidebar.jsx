@@ -6,6 +6,9 @@ import toast from 'react-hot-toast';
 import Logo from './common/Logo';
 
 const navSections = [
+  { label: 'Overview', minRole: 'supervisor', items: [
+    { to: '/overview',          icon: '📈', label: 'This Week' },
+  ]},
   { label: 'POS', minRole: 'cashier', items: [
     { to: '/pos',               icon: '🛒', label: 'POS Terminal' },
     { to: '/transactions',      icon: '📜', label: 'Transactions' },

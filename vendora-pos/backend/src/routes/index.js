@@ -101,6 +101,9 @@ router.use('/accounting',            accountingRoutes);
 const marginRoutes = require('./marginRoutes');
 router.use('/margins',               marginRoutes);
 
+const overviewRoutes = require('./overviewRoutes');
+router.use('/overview',              overviewRoutes);
+
 // NOTE: payroll endpoints are served under /accounting/payroll (see accountingRoutes.js).
 // There is intentionally no top-level /payroll mount.
 
