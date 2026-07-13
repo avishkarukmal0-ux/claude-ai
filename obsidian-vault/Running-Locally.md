@@ -15,7 +15,27 @@ The currently-deployed build still asks for a **Store ID**. Get it from your dat
 
 > Once the branch with the **store picker** ([[2026-07-13-Login-Store-Picker]]) is deployed to Railway, this whole step disappears — the login shows a **store dropdown** and auto-selects if there's one shop.
 
-## B. Run on your own machine
+## ⭐ Windows one-click launcher (recreates "StartVendora")
+
+For running your **real shop** locally on Windows (no demo data). `StartVendora.bat` lives at the repo root.
+
+1. **Clone the repo** to a folder, e.g. `C:\Users\lenovo\OneDrive\Desktop\StartVendora` (the repo root — the one containing `vendora-pos\` — should be that folder). Also `git checkout claude/vendora-pos-v3-KPnI0`.
+2. **Install Node.js LTS** from https://nodejs.org (once).
+3. **Double-click `StartVendora.bat`.** First run it will:
+   - create `vendora-pos\backend\.env` and open it in Notepad → paste your **`MONGODB_URI`** from **Railway → backend service → Variables** (this is what connects local to your *real* shop data — no seeding).
+   - create `vendora-pos\frontend\.env` (defaults fine),
+   - `npm install` both sides (first run only),
+   - start backend + frontend, and open **http://localhost:5173**.
+4. Log in: pick your store from the dropdown → `EMP001` / `1111`.
+
+Next time: just double-click `StartVendora.bat` — it skips setup and launches.
+
+**Tips**
+- Running from a **OneDrive**-synced folder can make OneDrive churn on `node_modules`. If it feels slow, pause OneDrive sync while working, or clone to `C:\Vendora` instead.
+- Because local points at the **same Atlas DB as Railway**, your edits affect live data. Do **not** run `npm run seed` here.
+- Getting `MONGODB_URI`: Railway dashboard → your project → the **backend** service → **Variables** tab → copy the `MONGODB_URI` value.
+
+## B. Run on your own machine (manual / cross-platform)
 
 ### Prereqs
 - Node.js 18+ and npm
