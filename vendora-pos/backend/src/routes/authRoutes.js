@@ -13,6 +13,22 @@ const { getRedis, isRedisAvailable } = require('../config/redis');
 const PIN_MAX_FAILURES = 5;
 const PIN_LOCK_SECS    = 10 * 60; // 10 minutes
 
+// GET /api/auth/stores — public list of active stores for the login picker.
+// Returns id + name only, so users can select their shop instead of pasting a
+// Mongo ObjectId. (Minor info disclosure by design; gate behind an env flag if
+// running a large multi-tenant deployment.)
+router.get('/stores', async (req, res, next) => {
+  try {
+    const stores = await Store.find({ isActive: { $ne: false } })
+      .select('_id name')
+      .sort({ name: 1 })
+      .lean();
+    res.json({ success: true, stores });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req, res, next) => {
   try {

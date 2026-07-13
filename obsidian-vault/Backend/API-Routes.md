@@ -7,7 +7,7 @@ All mounted under `/api` in `src/routes/index.js`. Public routes first, then `au
 ## Public (no JWT)
 | Mount | File | Purpose |
 |---|---|---|
-| `/auth` | `authRoutes.js` | login, refresh, register |
+| `/auth` | `authRoutes.js` | login, refresh, register; `GET /auth/stores` (public store picker) |
 | `/receipt` | `receiptRoutes.js` (publicRouter) | public receipt viewer |
 | `/subscriptions` | `subscriptionRoutes.js` (publicRouter) | Stripe webhook |
 

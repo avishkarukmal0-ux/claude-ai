@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import Logo from '../components/common/Logo';
+import * as authService from '../services/auth';
 
 const DEFAULT_STORE_ID = import.meta.env.VITE_STORE_ID || '';
 
 export default function LoginPage() {
   const [mode, setMode] = useState('pin'); // 'pin' | 'password'
   const [storeId, setStoreId] = useState(DEFAULT_STORE_ID);
+  const [stores, setStores] = useState([]);
+  const [manualStore, setManualStore] = useState(false); // fallback if list unavailable
   const [employeeId, setEmployeeId] = useState('');
   const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
@@ -16,6 +19,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Load the list of shops so the user can pick instead of pasting a Store ID.
+  useEffect(() => {
+    let cancelled = false;
+    authService.getStores()
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.stores || [];
+        setStores(list);
+        // Auto-select if there's only one shop.
+        if (!DEFAULT_STORE_ID && list.length === 1) setStoreId(list[0]._id);
+        if (list.length === 0) setManualStore(true);
+      })
+      .catch(() => { if (!cancelled) setManualStore(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handlePinPress = (digit) => {
     if (pin.length < 8) setPin((p) => p + digit);
@@ -49,15 +68,37 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-pos-panel rounded-2xl p-6 shadow-2xl">
-          {/* Store ID */}
+          {/* Store picker */}
           <div className="mb-4">
-            <label className="block text-pos-muted text-xs mb-1 font-medium uppercase tracking-wider">Store ID</label>
-            <input
-              className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-400 placeholder-slate-500 text-sm"
-              placeholder="Enter Store ID (from seed output)"
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-            />
+            <label className="block text-pos-muted text-xs mb-1 font-medium uppercase tracking-wider">Store</label>
+            {stores.length > 0 && !manualStore ? (
+              <select
+                className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-400 text-sm"
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+              >
+                <option value="">Select your store…</option>
+                {stores.map((s) => (
+                  <option key={s._id} value={s._id}>{s.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="w-full bg-pos-card text-pos-text border border-slate-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-400 placeholder-slate-500 text-sm"
+                placeholder="Enter Store ID"
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+              />
+            )}
+            {stores.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setManualStore((v) => !v)}
+                className="text-[11px] text-pos-muted hover:text-pos-text mt-1"
+              >
+                {manualStore ? '← Pick from list' : 'Enter Store ID manually'}
+              </button>
+            )}
           </div>
 
           {/* Mode toggle */}
