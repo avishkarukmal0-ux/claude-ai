@@ -23,6 +23,11 @@ const reportService = require('../services/reportService');
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
 const daysLeft = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
 
+// Waste horizon: surface stock 3 weeks out so there's time to sell/mark down
+// before it expires. 7 days = the urgent subset that needs action now.
+const WASTE_WINDOW_DAYS = 21;
+const WASTE_URGENT_DAYS = 7;
+
 router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
   try {
     const storeId = req.storeId;
@@ -55,8 +60,10 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
 
     // ── Waste (expiry) ──
     let wasteExpired = 0;   // value already lost (expired, still on shelf)
-    let atRiskSoon   = 0;   // value expiring within 7 days (recoverable via markdown)
+    let atRiskSoon   = 0;   // value expiring within 3 weeks (time to sell/mark down)
+    let atRiskUrgent = 0;   // subset expiring within 7 days (act now)
     let expiringSoonCount = 0;
+    let urgentCount = 0;
     let expiredCount = 0;
     for (const p of expiryProducts) {
       const price = p.pricing?.retailPrice || 0;
@@ -65,7 +72,10 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
         const d = daysLeft(b.expiryDate);
         const val = price * b.quantity;
         if (d < 0) { wasteExpired += val; expiredCount += 1; }
-        else if (d <= 7) { atRiskSoon += val; expiringSoonCount += 1; }
+        else if (d <= WASTE_WINDOW_DAYS) {
+          atRiskSoon += val; expiringSoonCount += 1;
+          if (d <= WASTE_URGENT_DAYS) { atRiskUrgent += val; urgentCount += 1; }
+        }
       }
     }
 
@@ -90,10 +100,14 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
         perTransaction: txnCount > 0 ? r2(theftLost / txnCount) : 0,
       },
       waste: {
+        windowDays: WASTE_WINDOW_DAYS,
+        urgentDays: WASTE_URGENT_DAYS,
         expired: r2(wasteExpired),
-        atRiskSoon: r2(atRiskSoon),
+        atRiskSoon: r2(atRiskSoon),      // within 3 weeks
+        atRiskUrgent: r2(atRiskUrgent),  // within 7 days (subset)
         expiredCount,
         expiringSoonCount,
+        urgentCount,
       },
       sales: {
         revenue,

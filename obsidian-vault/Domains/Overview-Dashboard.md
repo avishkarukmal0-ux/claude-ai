@@ -16,7 +16,7 @@ Back to [[Home]] · [[Domains-Index]] · Related: [[Positioning]] · [[Loss-Prev
 
 ## What it shows (all real data, last 7 days)
 - **Theft & shrinkage:** £ lost (sum `ShrinkageLog.totalValue`), WoW trend, incident count, open cases, and a "per-sale crime tax" (£ lost ÷ transactions).
-- **Waste at risk:** £ expiring ≤7 days (recoverable via markdown) + £ already expired, with counts. CTA → `/expiry`.
+- **Waste at risk:** £ expiring within **3 weeks** (`WASTE_WINDOW_DAYS = 21`) — the headline, so there's runway to sell/mark down — with an **urgent ≤7-day subset** (`WASTE_URGENT_DAYS`) called out, plus £ already expired. CTA → `/expiry`.
 - **Sales & margin:** revenue (WoW trend), gross profit, margin %, transaction count — via `reportService.getMarginAnalysis`.
 - **Needs attention:** chips for open incidents, pending scan patterns, expired/expiring lines — each links to the relevant page.
 

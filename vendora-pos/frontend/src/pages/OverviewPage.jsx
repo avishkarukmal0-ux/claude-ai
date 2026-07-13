@@ -56,7 +56,7 @@ export default function OverviewPage() {
     { n: alerts.openIncidents,  label: 'open incidents',      to: '/loss-prevention' },
     { n: alerts.pendingPatterns, label: 'scan alerts to review', to: '/loss-prevention' },
     { n: alerts.expired,         label: 'expired lines on shelf', to: '/expiry' },
-    { n: alerts.expiringSoon,    label: 'lines expiring ≤7 days', to: '/expiry' },
+    { n: alerts.expiringSoon,    label: 'lines expiring ≤3 weeks', to: '/expiry' },
   ].filter(a => a.n > 0);
 
   return (
@@ -102,27 +102,33 @@ export default function OverviewPage() {
           </button>
         </div>
 
-        {/* Waste / expiry */}
+        {/* Waste / expiry — 3-week horizon so there's time to act */}
         <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5">
           <div className="flex items-center gap-2 text-amber-700 mb-3">
             <Trash2 size={18} />
             <h2 className="font-semibold">Stock at risk of waste</h2>
           </div>
           <p className="text-4xl font-bold text-amber-700">{fmt(waste.atRiskSoon)}</p>
-          <p className="text-xs text-gray-500 mt-1">expiring within 7 days — mark down to recover it</p>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-            <div className="bg-white/70 rounded-lg p-2">
-              <p className="text-lg font-bold text-red-600">{fmt(waste.expired)}</p>
-              <p className="text-[11px] text-gray-500">already expired ({waste.expiredCount})</p>
+          <p className="text-xs text-gray-500 mt-1">
+            expiring within {Math.round((waste.windowDays || 21) / 7)} weeks — time to push sales or mark down
+          </p>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div className="bg-red-50 rounded-lg p-2">
+              <p className="text-lg font-bold text-red-600">{fmt(waste.atRiskUrgent)}</p>
+              <p className="text-[11px] text-gray-500">urgent ≤7 days ({waste.urgentCount ?? 0})</p>
             </div>
             <div className="bg-white/70 rounded-lg p-2">
               <p className="text-lg font-bold text-gray-900">{waste.expiringSoonCount}</p>
-              <p className="text-[11px] text-gray-500">lines expiring soon</p>
+              <p className="text-[11px] text-gray-500">lines in {Math.round((waste.windowDays || 21) / 7)}w</p>
+            </div>
+            <div className="bg-white/70 rounded-lg p-2">
+              <p className="text-lg font-bold text-red-600">{fmt(waste.expired)}</p>
+              <p className="text-[11px] text-gray-500">expired ({waste.expiredCount})</p>
             </div>
           </div>
           <button onClick={() => navigate('/expiry')}
             className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-amber-700 hover:underline">
-            Mark down now <ArrowRight size={14} />
+            Push &amp; mark down <ArrowRight size={14} />
           </button>
         </div>
       </div>
