@@ -25,6 +25,10 @@
 - [[Routing-and-Pages]] — every page and its route
 - [[State-and-Contexts]] — React contexts, hooks, services
 
+### Strategy 🎯
+- [[Positioning]] — how Vendora wins vs Square/Shopify/Epos Now & AI clones ⭐
+- [[Competitor-Teardown]] — UK POS landscape, July 2026
+
 ### Feature Domains
 - [[Domains-Index]] — all feature areas at a glance
 - [[Accounting]] — VAT, Payroll, Expenses, P&L ⭐ *active work area*
