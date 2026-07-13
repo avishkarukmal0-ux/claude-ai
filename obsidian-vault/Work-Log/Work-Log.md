@@ -1,0 +1,21 @@
+# 📓 Work Log
+
+Back to [[Home]]
+
+Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
+
+## Entries
+- [[2026-07-13-Recovery-and-Setup]] — laptop lost, project recovered from GitHub; Obsidian vault created
+
+## How to use
+- Start every working session by adding a new dated entry (copy [[_Template]]).
+- Log: what we set out to do, what changed (files), decisions, gotchas, commit hash, follow-ups.
+- Link entries to the [[Domains-Index]] note(s) they touch so the graph stays connected.
+- Cross-link gotchas into [[Conventions]] so they're not lost.
+
+## Standing backlog / ideas
+> Move items into a dated entry when we pick them up.
+
+- [ ] Tidy `routes/index.js` — `/payroll` mount sits after `module.exports` (works but fragile). See [[API-Routes]].
+- [ ] End-to-end manual test of Accounting flow (VAT → Payroll → Expenses → P&L)
+- [ ] Confirm Railway + Vercel deploy configs current
