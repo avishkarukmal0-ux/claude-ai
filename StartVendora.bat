@@ -22,14 +22,21 @@ if not exist "vendora-pos\backend\.env" (
   copy "vendora-pos\backend\.env.example" "vendora-pos\backend\.env" >nul
   echo.
   echo  IMPORTANT: I created  vendora-pos\backend\.env
-  echo  You MUST paste your database link into it so your real shop data shows.
-  echo    - In Railway: your project ^> backend service ^> Variables ^> copy MONGODB_URI
-  echo    - Paste it as the MONGODB_URI= line in the file that is about to open.
+  echo  You MUST paste your database link (MONGODB_URI) into it so your
+  echo  REAL shop data shows up.
   echo.
-  echo  Opening the file in Notepad now. Save and close it, then press a key here.
+  echo  I am opening TWO windows for you:
+  echo    1. GET-DATABASE-LINK.txt  - step-by-step guide to copy the link
+  echo       from MongoDB Atlas (cloud.mongodb.com).
+  echo    2. the .env file          - paste the link on the MONGODB_URI= line,
+  echo       then Save (Ctrl+S) and close it.
+  echo.
+  echo  Opening both now. Follow the guide, save the .env, then come back
+  echo  here and press a key.
   pause
+  start "" notepad "GET-DATABASE-LINK.txt"
   notepad "vendora-pos\backend\.env"
-  echo  Press a key once you have saved your MONGODB_URI...
+  echo  Press a key once you have pasted and saved your MONGODB_URI...
   pause
 )
 

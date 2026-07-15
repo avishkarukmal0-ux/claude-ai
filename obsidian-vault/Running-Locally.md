@@ -22,11 +22,22 @@ For running your **real shop** locally on Windows (no demo data). `StartVendora.
 1. **Clone the repo** to a folder, e.g. `C:\Users\lenovo\OneDrive\Desktop\StartVendora` (the repo root — the one containing `vendora-pos\` — should be that folder). Also `git checkout claude/vendora-pos-v3-KPnI0`.
 2. **Install Node.js LTS** from https://nodejs.org (once).
 3. **Double-click `StartVendora.bat`.** First run it will:
-   - create `vendora-pos\backend\.env` and open it in Notepad → paste your **`MONGODB_URI`** from **Railway → backend service → Variables** (this is what connects local to your *real* shop data — no seeding).
+   - create `vendora-pos\backend\.env` and open it in Notepad **alongside `GET-DATABASE-LINK.txt`** (a plain-English, step-by-step guide) → paste your **`MONGODB_URI`** from **MongoDB Atlas** (this is what connects local to your *real* shop data — no seeding).
    - create `vendora-pos\frontend\.env` (defaults fine),
    - `npm install` both sides (first run only),
    - start backend + frontend, and open **http://localhost:5173**.
 4. Log in: pick your store from the dropdown → `EMP001` / `1111`.
+
+### Getting `MONGODB_URI` from Atlas (the user's real source)
+The connection string is behind the user's own Atlas login — **only they can copy it** (needs their password + is unique to their cluster). The repo-root file **`GET-DATABASE-LINK.txt`** walks them through it. Short version:
+1. cloud.mongodb.com → project **cornershop-pos** → **Cluster0** (Resume if paused).
+2. **SECURITY → Network Access → + ADD IP ADDRESS → Allow access from anywhere (0.0.0.0/0)** — the new PC isn't whitelisted yet, so without this the connection is refused.
+3. **Connect → Drivers → Node.js →** copy the `mongodb+srv://…` string.
+4. Replace `<db_password>` with the real DB password (reset under **Database Access** if forgotten).
+5. Paste as the `MONGODB_URI=` line in `backend/.env`.
+6. If the app loads empty, append the database name (from **Browse Collections** — the DB holding `stores`/`products`) before the `?`: `…mongodb.net/DBNAME?retryWrites=…`.
+
+> ⚠️ Security: the user keeps their real DB password in their own local `.env` — they should **not** paste the un-masked password into chat.
 
 Next time: just double-click `StartVendora.bat` — it skips setup and launches.
 
