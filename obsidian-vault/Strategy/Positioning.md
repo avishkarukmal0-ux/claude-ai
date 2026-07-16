@@ -62,9 +62,26 @@ Rank future work by how much it deepens the *back-office / compliance moat* (har
 4. Keep VAT/payroll **provably correct & current** with UK tax-year updates — credibility/depth, not headline.
 5. ~~Payroll "cost of a wage rise" simulator~~ — **DROPPED.** Owner: UK c-stores run on low wages, not a concern.
 
-## Pricing angle (hypothesis, to validate)
-- Flat monthly SaaS, **no card-processing lock-in** (bring your own acquirer) — counters Epos Now's contract and Square's rate-creep.
-- Price against **"cheaper than an afternoon a week of the owner's time + one avoided compliance mistake,"** not against a free card reader.
+## Pricing & revenue model — TWO streams (evolved 2026-07-16)
+> Evolution from the original "bring your own acquirer" line: Vendora now *also* offers optional low-rate card processing via **Stripe Connect** and earns a per-transaction margin (`application_fee`). See [[Two-Setups-Till-and-App]].
+
+- **Stream 1 — SaaS subscription** (£29/59/99): predictable, covers fixed cost. Use as the **land grab** — keep it modest, undercut clones on it.
+- **Stream 2 — payment processing margin** (Stripe Connect): scales with the shop's takings. Use as the **profit engine** — buy at Stripe's in-person rate, resell to the shop at a thin spread that's *still cheaper than their current card provider*. Aligned incentives: Vendora earns more only when the shop sells more. ⚠️ Validate the live Stripe UK in-person rate before pricing the spread.
+- **Stay anti-lock-in:** processing is **optional, no contract, cancel anytime** — capture the margin without becoming Epos Now. "Cheaper card rates, leave whenever" beats a 12-month contract.
+- Still price the SaaS against **"cheaper than an afternoon a week of the owner's time + one avoided compliance mistake,"** not against a free card reader.
+
+## Differentiation in an AI-clone-saturated market (2026-07-16)
+The flood of vibe-coded AI POS clones *helps* us — they cluster in the shallow end (cart + payments + dashboard). Win by out-**depth**, not out-feature:
+1. **Reliability is the differentiator.** Owners forgive a missing feature, never a double-charge / lost offline sale / wrong VAT. Half the clones are flaky → "Vendora just works with my money" is a claim they can't cheaply make. **The till foundation fixes are credibility, not plumbing.**
+2. **Anxiety-reduction is hard to copy** — owner "fingertip" dashboard, nightly "shop closed fine" WhatsApp, worker→owner suggestions. Needs domain depth to know what an owner actually frets about.
+3. **Companion app + cash-&-carry scan** ties into the supplier/margin engine — another thing a clone must rebuild correctly.
+
+## What-else priorities (ranked by moat, not shine)
+1. **Painless migration/onboarding** — import from old EPOS/spreadsheet in minutes. Switching cost, not price, is the #1 barrier; killing it wins deals clones can't.
+2. **"Provably correct UK tax" as a living guarantee** — auto-update every tax year (NLW/NI/VAT). A reason to keep paying; moat widens yearly.
+3. **Network-effect benchmarking** — "you lose 2× more to waste than similar shops near you." Needs fleet data; no single-store clone can offer it.
+4. **Human touch** — be the symbol-group BDM replacement (onboarding help + responsive support) without the group contract.
+5. **Advertise offline-proof reliability** as a feature, not a fixed bug.
 
 ## Risks / watch-outs
 - Incumbents (esp. Epos Now) could add UK payroll — keep widening the compliance depth.
