@@ -8,7 +8,7 @@ Back to [[Home]] · [[Domains-Index]] · Related: [[Positioning]] · [[Loss-Prev
 
 ## Owner Home layout (top → bottom)
 1. **Shop status banner** — 🟢 "Everything's looking good" when nothing needs attention, else 🟠 "N things need a look" (taps to the Needs-attention list). The emotional payload — glance and breathe.
-2. **Today so far** — takings (big) + trend **vs the same slice of the day one week ago** (fair like-for-like), sales count, staff on shift.
+2. **Today so far** — takings (big) + trend **vs the same slice of the day one week ago** (fair like-for-like), sales count, staff on shift. Below it, an **End-of-day summary** CTA → `DaySummaryModal` (`GET /overview/daily-summary`): "Shop closed fine 👍" / "N things to check", takings + profit, a "worth a look" list, and **"Send to my phone"** (`navigator.share`, clipboard fallback) — see [[2026-07-16-Daily-Summary]].
 3. **Theft** & **Waste** hero cards (the leaks).
 4. **This week** — sales / gross profit / margin / transactions.
 5. **Quick actions** — Open till · Cash up · Refund (`/pos?refund=1`) · Today's sales · Reorder stock.

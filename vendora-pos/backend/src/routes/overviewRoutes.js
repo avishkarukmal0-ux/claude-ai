@@ -162,4 +162,81 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// END-OF-DAY "SHOP CLOSED FINE" SUMMARY
+// A short, plain-English recap of the day so an owner can glance (or share to
+// their own phone) and know the shop is fine — the peace-of-mind payload for
+// when they're not behind the till. Defaults to today; ?date=YYYY-MM-DD for a
+// past day.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/daily-summary', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const storeId  = req.storeId;
+    const storeOid = new mongoose.Types.ObjectId(storeId);
+    const now      = new Date();
+    const dayStart = dayjs(req.query.date || now).startOf('day').toDate();
+    const isToday  = dayjs(dayStart).isSame(dayjs(now), 'day');
+    const dayEnd   = isToday ? now : dayjs(dayStart).endOf('day').toDate();
+
+    const [salesAgg, margin, shrinkToday, products] = await Promise.all([
+      Sale.aggregate([
+        { $match: { store: storeOid, status: 'completed', completedAt: { $gte: dayStart, $lte: dayEnd } } },
+        { $group: { _id: null, takings: { $sum: '$total' }, count: { $sum: 1 } } },
+      ]),
+      reportService.getMarginAnalysis(storeId, dayStart, dayEnd),
+      ShrinkageLog.find({ store: storeId, occurredAt: { $gte: dayStart, $lte: dayEnd } }).select('totalValue').lean(),
+      Product.find({ store: storeId, isActive: true })
+        .select('stock.quantity stock.lowStockThreshold pricing.retailPrice expiryBatches').lean(),
+    ]);
+
+    const takings      = r2(salesAgg[0]?.takings || 0);
+    const transactions = salesAgg[0]?.count || 0;
+    const grossProfit  = r2(margin?.overall?.grossProfit || 0);
+    const marginPct    = r2(margin?.overall?.margin || 0);
+    const theftToday   = r2(shrinkToday.reduce((s, x) => s + (x.totalValue || 0), 0));
+
+    let lowStockCount = 0, expiredCount = 0, expiredValue = 0;
+    for (const p of products) {
+      const qty = p.stock?.quantity ?? 0;
+      const thr = p.stock?.lowStockThreshold ?? 5;
+      if (qty <= thr) lowStockCount += 1;
+      const price = p.pricing?.retailPrice || 0;
+      for (const b of (p.expiryBatches || [])) {
+        if (!b || b.quantity <= 0) continue;
+        if (daysLeft(b.expiryDate) < 0) { expiredCount += 1; expiredValue += price * b.quantity; }
+      }
+    }
+
+    const issues = [];
+    if (theftToday > 0)    issues.push(`£${theftToday.toFixed(2)} logged as theft/shrinkage`);
+    if (expiredCount > 0)  issues.push(`${expiredCount} expired ${expiredCount === 1 ? 'line' : 'lines'} on the shelf`);
+    if (lowStockCount > 0) issues.push(`${lowStockCount} ${lowStockCount === 1 ? 'item' : 'items'} low on stock`);
+
+    const allGood   = issues.length === 0;
+    const dateLabel = dayjs(dayStart).format('ddd D MMM');
+    const headline  = allGood ? 'Shop closed fine 👍' : `${issues.length} thing${issues.length === 1 ? '' : 's'} to check`;
+
+    // Plain-text recap the owner can one-tap share to their own WhatsApp/SMS.
+    const lines = [
+      `🏪 ${dateLabel} — ${allGood ? 'all good' : 'quick check'}`,
+      `Takings: £${takings.toFixed(2)} (${transactions} sale${transactions === 1 ? '' : 's'})`,
+    ];
+    if (grossProfit) lines.push(`Profit: £${grossProfit.toFixed(2)} (${marginPct.toFixed(0)}% margin)`);
+    if (issues.length) { lines.push('', 'Worth a look:'); issues.forEach(i => lines.push(`• ${i}`)); }
+    else lines.push('Nothing needs you. Rest easy.');
+
+    res.json({
+      success: true,
+      date: dayStart, dateLabel, isToday,
+      allGood, headline,
+      takings, transactions, grossProfit, marginPct,
+      theftToday, lowStockCount, expiredCount, expiredValue: r2(expiredValue),
+      issues,
+      shareText: lines.join('\n'),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

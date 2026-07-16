@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-07-16-Daily-Summary]] — end-of-day "shop closed fine" recap owners can **one-tap share to their phone** (`GET /overview/daily-summary`, Phase 3)
 - [[2026-07-16-Owner-Home]] — dashboard is now the owner's **landing screen**: shop-status banner, "Today so far" strip, quick actions ("everything at your fingertip", Phase 1)
 - [[2026-07-15-Wire-POS-Refund-Button]] — the `↩ Refund` button in the till now opens a working refund modal (was a dead stub)
 - [[2026-07-15-Atlas-Connection-Setup]] — launcher now opens a step-by-step Atlas guide (`GET-DATABASE-LINK.txt`) to grab `MONGODB_URI` for real local data

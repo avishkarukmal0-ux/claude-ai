@@ -4,6 +4,7 @@ import {
   RefreshCw, ShieldAlert, Trash2, TrendingUp, TrendingDown,
   ArrowRight, AlertTriangle, Receipt, Percent,
   CheckCircle2, ShoppingCart, Banknote, Undo2, PackagePlus, Users,
+  Moon, Share2, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as overview from '../services/overview';
@@ -37,9 +38,99 @@ function QuickAction({ icon: Icon, label, onClick }) {
   );
 }
 
+// End-of-day "shop closed fine" recap — glance, then one-tap share to your phone.
+function DaySummaryModal({ onClose }) {
+  const [s, setS] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    overview.getDailySummary()
+      .then(setS)
+      .catch(() => toast.error('Could not load the day summary'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const share = async () => {
+    if (!s?.shareText) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Shop summary', text: s.shareText });
+      } else {
+        await navigator.clipboard.writeText(s.shareText);
+        toast.success('Summary copied — paste it into WhatsApp or a text');
+      }
+    } catch {
+      /* user dismissed the share sheet — no-op */
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <Moon size={18} className="text-indigo-500" />
+            <h2 className="font-semibold text-gray-900">End of day</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X size={20} /></button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center items-center h-40"><RefreshCw className="animate-spin text-indigo-500" size={24} /></div>
+        ) : !s ? (
+          <div className="p-6 text-center text-gray-500">Couldn’t load the summary.</div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div className={`rounded-2xl p-5 text-center ${s.allGood ? 'bg-green-50' : 'bg-amber-50'}`}>
+              {s.allGood
+                ? <CheckCircle2 size={32} className="text-green-600 mx-auto mb-2" />
+                : <AlertTriangle size={32} className="text-amber-500 mx-auto mb-2" />}
+              <p className={`text-lg font-bold ${s.allGood ? 'text-green-800' : 'text-amber-800'}`}>{s.headline}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{s.dateLabel}{s.isToday ? ' · so far today' : ''}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border p-3">
+                <p className="text-xs text-gray-500">Takings</p>
+                <p className="text-2xl font-bold text-gray-900">{fmt(s.takings)}</p>
+                <p className="text-[11px] text-gray-500">{s.transactions.toLocaleString('en-GB')} {s.transactions === 1 ? 'sale' : 'sales'}</p>
+              </div>
+              <div className="rounded-xl border p-3">
+                <p className="text-xs text-gray-500">Profit</p>
+                <p className="text-2xl font-bold text-green-700">{fmt(s.grossProfit)}</p>
+                <p className="text-[11px] text-gray-500">{Number(s.marginPct || 0).toFixed(0)}% margin</p>
+              </div>
+            </div>
+
+            {s.issues?.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+                <p className="text-xs font-semibold text-amber-700 mb-1.5">Worth a look</p>
+                <ul className="space-y-1">
+                  {s.issues.map((i, idx) => (
+                    <li key={idx} className="text-sm text-gray-700 flex items-start gap-1.5">
+                      <span className="text-amber-500 mt-0.5">•</span>{i}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <button onClick={share}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3">
+              <Share2 size={18} /> Send to my phone
+            </button>
+            <p className="text-[11px] text-gray-400 text-center -mt-2">Shares the recap to WhatsApp, a text, or wherever you like.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function OverviewPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showSummary, setShowSummary] = useState(false);
   const navigate = useNavigate();
 
   const load = useCallback(async () => {
@@ -141,6 +232,10 @@ export default function OverviewPage() {
             {today.transactions.toLocaleString('en-GB')} {today.transactions === 1 ? 'sale' : 'sales'} today
             {today.prevTakings > 0 && <> · {fmt(today.prevTakings)} by this time last week</>}
           </p>
+          <button onClick={() => setShowSummary(true)}
+            className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium py-2.5 text-sm">
+            <Moon size={16} /> End-of-day summary — send “shop closed fine” to your phone
+          </button>
         </div>
       )}
 
@@ -257,6 +352,8 @@ export default function OverviewPage() {
           </div>
         </div>
       )}
+
+      {showSummary && <DaySummaryModal onClose={() => setShowSummary(false)} />}
     </div>
   );
 }
