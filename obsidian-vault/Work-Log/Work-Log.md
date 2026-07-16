@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-07-16-Pricing-and-Margin-Validation]] — validated **£29/59/99 tiers** (keep) + computed the **payment margin**: works only on Stripe **Interchange++** (break-even basket ~£4 vs ~£100 on standard); +£77/store/mo at base case
 - [[2026-07-16-Two-Setups-Scope-Lock]] — locked what goes in the **Till (web) vs App (mobile)**; full code audit; built [[Feature-Inventory]] + [[Two-Setups-Till-and-App]]
 - [[2026-07-16-Per-Product-Margins]] — margins now resolve **per-product → category → store default**; new Per-Product Margins table (set % + "Set & reprice")
 - [[2026-07-16-Nightly-WhatsApp-Summary]] — the recap now **auto-sends on WhatsApp at closing time** (Notification outbox + every-minute cron + Twilio, env-gated; Phase 3b)

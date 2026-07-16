@@ -62,13 +62,33 @@ Rank future work by how much it deepens the *back-office / compliance moat* (har
 4. Keep VAT/payroll **provably correct & current** with UK tax-year updates — credibility/depth, not headline.
 5. ~~Payroll "cost of a wage rise" simulator~~ — **DROPPED.** Owner: UK c-stores run on low wages, not a concern.
 
-## Pricing & revenue model — TWO streams (evolved 2026-07-16)
-> Evolution from the original "bring your own acquirer" line: Vendora now *also* offers optional low-rate card processing via **Stripe Connect** and earns a per-transaction margin (`application_fee`). See [[Two-Setups-Till-and-App]].
+## Pricing & revenue model — TWO streams (validated 2026-07-16)
+> Evolution from the original "bring your own acquirer" line: Vendora now *also* offers optional low-rate card processing via **Stripe Connect** and earns a per-transaction margin (`application_fee`). See [[Two-Setups-Till-and-App]] and the validation note [[2026-07-16-Pricing-and-Margin-Validation]].
 
-- **Stream 1 — SaaS subscription** (£29/59/99): predictable, covers fixed cost. Use as the **land grab** — keep it modest, undercut clones on it.
-- **Stream 2 — payment processing margin** (Stripe Connect): scales with the shop's takings. Use as the **profit engine** — buy at Stripe's in-person rate, resell to the shop at a thin spread that's *still cheaper than their current card provider*. Aligned incentives: Vendora earns more only when the shop sells more. ⚠️ Validate the live Stripe UK in-person rate before pricing the spread.
-- **Stay anti-lock-in:** processing is **optional, no contract, cancel anytime** — capture the margin without becoming Epos Now. "Cheaper card rates, leave whenever" beats a 12-month contract.
-- Still price the SaaS against **"cheaper than an afternoon a week of the owner's time + one avoided compliance mistake,"** not against a free card reader.
+### Stream 1 — SaaS subscription (£29/59/99) — VALIDATED as realistic
+Sits in the **mid-band** of the UK market and holds up:
+- Paid EPOS peers: **Epos Now ~£25–39**, **Shopify POS Pro ~£69/location**, **Lightspeed ~£75–189**. Vendora's £29/59/99 lands cleanly among them.
+- **The real threat is the £0-software players** — Square / SumUp / Zettle charge **nothing** for software and earn entirely on processing. Against them, £29/mo must be *visibly* justified by the back-office depth (payroll, VAT, theft/waste), not by the till.
+- **Verdict:** keep the tiers. Use SaaS as the **land grab** — modest, undercut paid clones, out-*depth* the free ones. Price it against *"cheaper than an afternoon a week of the owner's time + one avoided compliance mistake,"* never against a free card reader.
+
+### Stream 2 — payment processing margin (Stripe Connect) — VALIDATED, but conditional
+Scales with the shop's takings → the **profit engine**. But the margin math is brutally sensitive and rests on **one dependency**. See the full worked calculator: **[margin calc artifact](https://claude.ai/code/artifact/b763651f-9212-404e-b9a7-a5428cb5c981)**.
+
+**Base case:** £6.50 avg basket, £20,000/mo card turnover ≈ **3,077 transactions/mo**. Sell to shop at a flat **1.5%**.
+
+| Stripe cost mode | Cost to Vendora | Revenue @1.5% | **Margin/store/mo** |
+|---|---|---|---|
+| **Standard** (1.4% + 10p) | £587.70 | £300 | **−£288 (LOSS)** ❌ |
+| **Interchange++** (~0.5% + 4p) | £223 | £300 | **+£77 (+0.39%)** ✅ |
+
+- **The killer number is the fixed per-transaction fee.** Break-even basket = **fixed fee ÷ your % spread**. On Standard that's **~£100** — no corner shop's basket clears it, so every small sale loses money. On IC++ it's **~£4** — which real c-store baskets clear.
+- ⚠️ **The entire payment business case depends on getting Stripe Interchange++ pricing.** On Stripe's public/standard rate the model is *dead*. This is the single thing to validate with Stripe before building.
+- **Spread room is segment-specific:** vs Square (1.75%) / SumUp / Zettle there is **little-to-no room** on small baskets — they're already cheap and take the processing risk. The genuine room is vs **legacy / locked-in acquirers** (Worldpay-style, bundled terminal rental, 18-mo contracts) — the actually-gouged segment. Target *them*, not shops already on Square.
+- **Fleet scaling** (IC++, base case): 100 stores ≈ **£7.7k/mo** (overtakes SaaS at £5.9k); 500 stores ≈ **£462k/yr**. The margin only becomes the profit engine *at fleet scale*.
+
+### Both streams — anti-lock-in stays the wedge
+- Processing is **optional, no contract, cancel anytime** — capture the margin without becoming Epos Now. "Cheaper card rates, leave whenever" beats a 12-month contract.
+- **Regulatory reality (validated):** taking an `application_fee` via Stripe Connect **destination charges** — where funds never route through a Vendora-controlled account — most likely keeps Vendora **out of FCA authorisation scope** (Commercial Agent Exclusion, PERG 15). If Vendora ever *holds* funds before paying the shop, that changes. Keep funds flowing shop-direct.
 
 ## Differentiation in an AI-clone-saturated market (2026-07-16)
 The flood of vibe-coded AI POS clones *helps* us — they cluster in the shallow end (cart + payments + dashboard). Win by out-**depth**, not out-feature:
