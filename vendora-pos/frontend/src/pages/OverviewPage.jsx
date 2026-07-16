@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ShieldAlert, Trash2, TrendingUp, TrendingDown,
   ArrowRight, AlertTriangle, Receipt, Percent,
+  CheckCircle2, ShoppingCart, Banknote, Undo2, PackagePlus, Users,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as overview from '../services/overview';
@@ -20,6 +21,19 @@ function Trend({ pct, goodWhenUp = true }) {
     <span className={`inline-flex items-center gap-1 text-xs font-semibold ${good ? 'text-green-600' : 'text-red-600'}`}>
       <Icon size={13} /> {Math.abs(pct).toFixed(1)}% vs last week
     </span>
+  );
+}
+
+// Big, thumb-friendly action button for the "everything at your fingertip" row.
+function QuickAction({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-2 rounded-2xl border bg-white p-4 hover:bg-gray-50 active:scale-95 transition min-h-[92px]"
+    >
+      <Icon size={24} className="text-gray-700" />
+      <span className="text-sm font-medium text-gray-800 text-center leading-tight">{label}</span>
+    </button>
   );
 }
 
@@ -51,7 +65,7 @@ export default function OverviewPage() {
   }
   if (!data) return null;
 
-  const { theft, waste, sales, alerts } = data;
+  const { theft, waste, sales, alerts, today } = data;
   const alertItems = [
     { n: alerts.openIncidents,  label: 'open incidents',      to: '/loss-prevention' },
     { n: alerts.pendingPatterns, label: 'scan alerts to review', to: '/loss-prevention' },
@@ -59,18 +73,76 @@ export default function OverviewPage() {
     { n: alerts.expiringSoon,    label: 'lines expiring ≤3 weeks', to: '/expiry' },
   ].filter(a => a.n > 0);
 
+  // The emotional payload: one glance = "it's fine" or "N things need you".
+  const allGood = alertItems.length === 0;
+
+  const quickActions = [
+    { icon: ShoppingCart, label: 'Open till',      to: '/pos' },
+    { icon: Banknote,     label: 'Cash up',        to: '/cash-management' },
+    { icon: Undo2,        label: 'Refund',         to: '/pos?refund=1' },
+    { icon: Receipt,      label: "Today's sales",  to: '/transactions' },
+    { icon: PackagePlus,  label: 'Reorder stock',  to: '/smart-reorder' },
+  ];
+
   return (
     <div className="max-w-5xl mx-auto space-y-5 p-1">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">This Week</h1>
-          <p className="text-sm text-gray-500">Last 7 days · where your money is going</p>
+          <h1 className="text-2xl font-bold text-gray-900">Your shop</h1>
+          <p className="text-sm text-gray-500">Everything that matters, at a glance</p>
         </div>
         <button onClick={load} className="text-gray-400 hover:text-gray-600 p-2" title="Refresh">
           <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
+
+      {/* Shop status — the "glance and breathe" banner */}
+      {allGood ? (
+        <div className="rounded-2xl border border-green-200 bg-gradient-to-br from-green-50 to-white p-5 flex items-center gap-3">
+          <CheckCircle2 size={28} className="text-green-600 shrink-0" />
+          <div>
+            <p className="font-semibold text-green-800">Everything's looking good</p>
+            <p className="text-sm text-green-700/80">Nothing needs your attention right now — you're on top of it.</p>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => document.getElementById('needs-attention')?.scrollIntoView({ behavior: 'smooth' })}
+          className="w-full text-left rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 flex items-center gap-3 hover:from-amber-100"
+        >
+          <AlertTriangle size={28} className="text-amber-500 shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800">
+              {alertItems.length} {alertItems.length === 1 ? 'thing needs' : 'things need'} a look
+            </p>
+            <p className="text-sm text-amber-700/80">Tap to see what — none of it is on fire, just worth a moment.</p>
+          </div>
+          <ArrowRight size={18} className="text-amber-500" />
+        </button>
+      )}
+
+      {/* Today so far — "am I making money today?" */}
+      {today && (
+        <div className="rounded-2xl border bg-white p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-gray-800">Today so far</h2>
+            {today.staffOnShift > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                <Users size={13} /> {today.staffOnShift} on shift
+              </span>
+            )}
+          </div>
+          <div className="flex items-end gap-3 flex-wrap">
+            <p className="text-4xl font-bold text-gray-900">{fmt(today.takings)}</p>
+            <div className="mb-1"><Trend pct={today.changePct} goodWhenUp /></div>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {today.transactions.toLocaleString('en-GB')} {today.transactions === 1 ? 'sale' : 'sales'} today
+            {today.prevTakings > 0 && <> · {fmt(today.prevTakings)} by this time last week</>}
+          </p>
+        </div>
+      )}
 
       {/* Hero: the two numbers that hurt — theft & waste */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -133,30 +205,43 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* Sales & margin */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs text-gray-500">Sales</p>
-          <p className="text-2xl font-bold text-gray-900">{fmt0(sales.revenue)}</p>
-          <div className="mt-1"><Trend pct={sales.changePct} goodWhenUp /></div>
+      {/* This week — sales & margin */}
+      <div>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2 px-1">This week</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs text-gray-500">Sales</p>
+            <p className="text-2xl font-bold text-gray-900">{fmt0(sales.revenue)}</p>
+            <div className="mt-1"><Trend pct={sales.changePct} goodWhenUp /></div>
+          </div>
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs text-gray-500">Gross profit</p>
+            <p className="text-2xl font-bold text-green-700">{fmt0(sales.grossProfit)}</p>
+          </div>
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs text-gray-500 flex items-center gap-1"><Percent size={12} /> Margin</p>
+            <p className="text-2xl font-bold text-gray-900">{sales.marginPct.toFixed(1)}%</p>
+          </div>
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs text-gray-500 flex items-center gap-1"><Receipt size={12} /> Transactions</p>
+            <p className="text-2xl font-bold text-gray-900">{sales.transactions.toLocaleString('en-GB')}</p>
+          </div>
         </div>
-        <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs text-gray-500">Gross profit</p>
-          <p className="text-2xl font-bold text-green-700">{fmt0(sales.grossProfit)}</p>
-        </div>
-        <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs text-gray-500 flex items-center gap-1"><Percent size={12} /> Margin</p>
-          <p className="text-2xl font-bold text-gray-900">{sales.marginPct.toFixed(1)}%</p>
-        </div>
-        <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs text-gray-500 flex items-center gap-1"><Receipt size={12} /> Transactions</p>
-          <p className="text-2xl font-bold text-gray-900">{sales.transactions.toLocaleString('en-GB')}</p>
+      </div>
+
+      {/* Quick actions — everything at your fingertip */}
+      <div>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2 px-1">Quick actions</p>
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+          {quickActions.map((a) => (
+            <QuickAction key={a.label} icon={a.icon} label={a.label} onClick={() => navigate(a.to)} />
+          ))}
         </div>
       </div>
 
       {/* Attention needed */}
       {alertItems.length > 0 && (
-        <div className="rounded-xl border bg-white p-4">
+        <div id="needs-attention" className="rounded-xl border bg-white p-4">
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle size={16} className="text-amber-500" />
             <h3 className="font-semibold text-gray-800">Needs attention</h3>

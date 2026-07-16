@@ -51,6 +51,14 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
+// Where you land after login. Owners/managers/supervisors get the "Owner Home"
+// (Overview) so the state of the shop is the first thing they see; cashiers go
+// straight to the till.
+function HomeRedirect() {
+  const { hasRole } = useAuth();
+  return <Navigate to={hasRole('supervisor') ? '/overview' : '/pos'} replace />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -63,7 +71,7 @@ export default function App() {
                   <Routes>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                      <Route index element={<Navigate to="/pos" replace />} />
+                      <Route index element={<HomeRedirect />} />
                       <Route path="overview" element={<ProtectedRoute requiredRole="supervisor"><OverviewPage /></ProtectedRoute>} />
                       <Route path="pos" element={<POSPage />} />
                       <Route path="products" element={<ProductsPage />} />

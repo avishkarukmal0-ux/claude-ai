@@ -11,6 +11,7 @@
 const express = require('express');
 const router  = express.Router();
 const dayjs   = require('dayjs');
+const mongoose = require('mongoose');
 const { requireRole } = require('../middleware/permissions');
 
 const ShrinkageLog = require('../models/ShrinkageLog');
@@ -18,6 +19,7 @@ const Incident     = require('../models/Incident');
 const ScanPattern  = require('../models/ScanPattern');
 const Product      = require('../models/Product');
 const Sale         = require('../models/Sale');
+const Staff        = require('../models/Staff');
 const reportService = require('../services/reportService');
 
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
@@ -31,10 +33,18 @@ const WASTE_URGENT_DAYS = 7;
 router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
   try {
     const storeId = req.storeId;
+    const storeOid = new mongoose.Types.ObjectId(storeId);
     const end       = new Date();
     const start     = dayjs(end).subtract(7, 'day').toDate();
     const prevStart = dayjs(end).subtract(14, 'day').toDate();
     const prevEnd   = start;
+
+    // "Today so far" vs the same slice of the day one week ago — a fair
+    // like-for-like ("at this time last week you'd taken £X") so a slow
+    // morning doesn't look like a disaster.
+    const todayStart         = dayjs(end).startOf('day').toDate();
+    const lastWeekDayStart   = dayjs(todayStart).subtract(7, 'day').toDate();
+    const lastWeekSameMoment = dayjs(end).subtract(7, 'day').toDate();
 
     const [
       shrinkThis, shrinkPrev,
@@ -42,6 +52,7 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
       expiryProducts,
       margin, marginPrev,
       txnCount,
+      todayAgg, lastWeekAgg, staffOnShift,
     ] = await Promise.all([
       ShrinkageLog.find({ store: storeId, occurredAt: { $gte: start } }).select('totalValue').lean(),
       ShrinkageLog.find({ store: storeId, occurredAt: { $gte: prevStart, $lt: prevEnd } }).select('totalValue').lean(),
@@ -52,6 +63,15 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
       reportService.getMarginAnalysis(storeId, start, end),
       reportService.getMarginAnalysis(storeId, prevStart, prevEnd),
       Sale.countDocuments({ store: storeId, status: 'completed', completedAt: { $gte: start, $lte: end } }),
+      Sale.aggregate([
+        { $match: { store: storeOid, status: 'completed', completedAt: { $gte: todayStart, $lte: end } } },
+        { $group: { _id: null, takings: { $sum: '$total' }, count: { $sum: 1 } } },
+      ]),
+      Sale.aggregate([
+        { $match: { store: storeOid, status: 'completed', completedAt: { $gte: lastWeekDayStart, $lte: lastWeekSameMoment } } },
+        { $group: { _id: null, takings: { $sum: '$total' } } },
+      ]),
+      Staff.countDocuments({ store: storeId, status: 'active', 'timeClock.isOnClock': true }),
     ]);
 
     // ── Theft / shrinkage ──
@@ -87,9 +107,22 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
 
     const pctChange = (cur, prev) => (prev > 0 ? r2(((cur - prev) / prev) * 100) : null);
 
+    // ── Today so far ──
+    const todayTakings    = r2(todayAgg[0]?.takings || 0);
+    const todayTxns       = todayAgg[0]?.count || 0;
+    const lastWeekTakings = r2(lastWeekAgg[0]?.takings || 0);
+
     res.json({
       success: true,
       period: { start, end, label: 'Last 7 days' },
+      today: {
+        takings: todayTakings,
+        transactions: todayTxns,
+        prevTakings: lastWeekTakings,          // same slice of the day, 1 week ago
+        changePct: pctChange(todayTakings, lastWeekTakings),
+        staffOnShift,
+        asOf: end,
+      },
       theft: {
         lost: theftLost,
         prev: theftLostPrev,

@@ -1,8 +1,20 @@
-# Overview Dashboard ("This Week") ⭐
+# Overview Dashboard → Owner Home ⭐
 
 Back to [[Home]] · [[Domains-Index]] · Related: [[Positioning]] · [[Loss-Prevention]] *(n/a yet)* · [[Accounting]]
 
 > The flagship screen that makes the [[Positioning]] visible in 5 seconds: leads with **£ lost to theft/shrinkage** and **£ of stock at risk to waste**, then sales & margin. First build reinforcing the "back-office OS for the corner shop" thesis.
+>
+> **As of 2026-07-16 this is the owner's landing screen** (see [[2026-07-16-Owner-Home]]) — reframed as "**Owner Home**": everything a stressed owner needs at a glance, to answer *making money today? money leaking? about to run out? is the shop OK?* and feel "it's fine".
+
+## Owner Home layout (top → bottom)
+1. **Shop status banner** — 🟢 "Everything's looking good" when nothing needs attention, else 🟠 "N things need a look" (taps to the Needs-attention list). The emotional payload — glance and breathe.
+2. **Today so far** — takings (big) + trend **vs the same slice of the day one week ago** (fair like-for-like), sales count, staff on shift.
+3. **Theft** & **Waste** hero cards (the leaks).
+4. **This week** — sales / gross profit / margin / transactions.
+5. **Quick actions** — Open till · Cash up · Refund (`/pos?refund=1`) · Today's sales · Reorder stock.
+6. **Needs attention** — chips linking to the relevant page.
+
+**Landing rule:** `App.jsx` → `HomeRedirect` sends `hasRole('supervisor')` (owner/manager/supervisor) to `/overview`, cashiers to `/pos`.
 
 ## Where it lives
 | Layer | File |

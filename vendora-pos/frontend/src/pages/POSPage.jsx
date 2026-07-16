@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -944,6 +945,17 @@ export default function POSPage() {
 
   // Refund
   const [showRefund, setShowRefund] = useState(false);
+
+  // Deep-link: Owner Home "Refund" action arrives as /pos?refund=1 → open modal.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('refund') === '1') {
+      setShowRefund(true);
+      searchParams.delete('refund');
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Feature #8 — Void with PIN
   const [voidTarget, setVoidTarget] = useState(null); // { index: number, item: object }
