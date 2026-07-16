@@ -43,10 +43,10 @@
 
 ## 🎯 Current Focus
 
-See [[Work-Log]] for the running journal. Most recent work has been in [[Accounting]] (payroll hours entry, edit/delete for payroll/VAT/expenses).
+See [[Work-Log]] for the running journal. Recent work (2026-07-16) has been the **owner "fingertip" push**: the [[Overview-Dashboard]] is now the owner's landing screen (shop-status banner, "Today so far", quick actions), an end-of-day "shop closed fine" summary that **auto-sends on WhatsApp** at closing time ([[2026-07-16-Nightly-WhatsApp-Summary]]), and **independent per-product margins** ([[2026-07-16-Per-Product-Margins]]).
 
 ## 🚦 Quick Status
 - Branch: `claude/vendora-pos-v3-KPnI0`
 - Frontend build: ✅ passing
 - Backend routes: ✅ loading
-- See [[2026-07-13-Recovery-and-Setup]] for the last verified state
+- **Open threads (not yet done):** connect live **MongoDB Atlas** URI for local real-data run; host backend **always-on** so the nightly WhatsApp job fires unattended; add **Twilio** creds to switch WhatsApp sending on (until then messages record as `skipped`).
