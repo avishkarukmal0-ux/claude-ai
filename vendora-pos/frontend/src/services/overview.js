@@ -10,3 +10,4 @@ export const getDailySummary = () => api.get('/overview/daily-summary');
 export const getSummarySettings = () => api.get('/overview/summary-settings');
 export const saveSummarySettings = (data) => api.put('/overview/summary-settings', data);
 export const testSummary = () => api.post('/overview/summary-settings/test');
+export const getNotifications = (limit = 10) => api.get(`/overview/notifications?limit=${limit}`);

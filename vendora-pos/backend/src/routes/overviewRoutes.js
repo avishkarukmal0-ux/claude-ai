@@ -21,6 +21,7 @@ const Product      = require('../models/Product');
 const Sale         = require('../models/Sale');
 const Staff        = require('../models/Staff');
 const Store        = require('../models/Store');
+const Notification = require('../models/Notification');
 const reportService = require('../services/reportService');
 const ownerSummaryService = require('../services/ownerSummaryService');
 const notificationService = require('../services/notificationService');
@@ -217,6 +218,34 @@ router.put('/summary-settings', requireRole('manager'), async (req, res, next) =
     }
     const store = await Store.findByIdAndUpdate(req.storeId, { $set: update }, { new: true }).select('ownerSummary').lean();
     res.json({ success: true, settings: store?.ownerSummary || {} });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Recent nightly-summary sends (delivery history from the outbox) ──
+router.get('/notifications', requireRole('manager'), async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+    const rows = await Notification.find({
+      store: req.storeId,
+      type: { $in: ['daily_summary', 'daily_summary_test'] },
+    }).sort({ createdAt: -1 }).limit(limit)
+      .select('type channel status recipient error sentAt createdAt').lean();
+
+    const mask = (n) => (n ? `…${String(n).slice(-4)}` : '');
+    res.json({
+      success: true,
+      notifications: rows.map((r) => ({
+        id: String(r._id),
+        type: r.type,
+        channel: r.channel,
+        status: r.status,
+        recipient: mask(r.recipient),
+        error: r.error || null,
+        at: r.sentAt || r.createdAt,
+      })),
+    });
   } catch (err) {
     next(err);
   }

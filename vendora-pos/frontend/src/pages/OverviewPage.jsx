@@ -39,18 +39,30 @@ function QuickAction({ icon: Icon, label, onClick }) {
 }
 
 // Auto-delivery setup — flip on the nightly WhatsApp summary, set number & time.
+const STATUS_STYLE = {
+  sent:    'bg-green-100 text-green-700',
+  skipped: 'bg-gray-100 text-gray-500',
+  failed:  'bg-red-100 text-red-700',
+  pending: 'bg-amber-100 text-amber-700',
+};
+
 function AutoDeliverySetup() {
   const [cfg, setCfg] = useState(null);
   const [waReady, setWaReady] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [history, setHistory] = useState([]);
+
+  const loadHistory = useCallback(() => {
+    overview.getNotifications(8).then((r) => setHistory(r.notifications || [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     overview.getSummarySettings()
-      .then((r) => { setCfg(r.settings); setWaReady(r.whatsappConfigured); })
+      .then((r) => { setCfg(r.settings); setWaReady(r.whatsappConfigured); loadHistory(); })
       .catch(() => setCfg(null)); // e.g. supervisor without manager rights — hide the panel
-  }, []);
+  }, [loadHistory]);
 
   if (!cfg) return null;
 
@@ -73,9 +85,16 @@ function AutoDeliverySetup() {
       const r = await overview.testSummary();
       if (r.status === 'sent') toast.success('Test sent to your WhatsApp');
       else toast('Saved, but WhatsApp isn’t switched on server-side yet', { icon: 'ℹ️' });
+      loadHistory();
     } catch (e) {
       toast.error(e?.response?.data?.error || 'Could not send test');
     } finally { setTesting(false); }
+  };
+
+  const fmtWhen = (at) => {
+    try {
+      return new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
   };
 
   return (
@@ -129,6 +148,25 @@ function AutoDeliverySetup() {
               {testing ? 'Sending…' : 'Send test'}
             </button>
           </div>
+
+          {history.length > 0 && (
+            <div className="pt-2 border-t">
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">Recent sends</p>
+              <ul className="space-y-1">
+                {history.map((h) => (
+                  <li key={h.id} className="flex items-center gap-2 text-xs">
+                    <span className={`px-1.5 py-0.5 rounded-full font-medium ${STATUS_STYLE[h.status] || 'bg-gray-100 text-gray-500'}`}>
+                      {h.status}
+                    </span>
+                    <span className="text-gray-600">{fmtWhen(h.at)}</span>
+                    {h.recipient && <span className="text-gray-400">{h.recipient}</span>}
+                    {h.type === 'daily_summary_test' && <span className="text-gray-400">· test</span>}
+                    {h.error && <span className="text-red-500 truncate" title={h.error}>· {h.error}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
