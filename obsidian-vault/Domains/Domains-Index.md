@@ -4,6 +4,8 @@ Back to [[Home]] · Related: [[API-Routes]] · [[Routing-and-Pages]] · [[Data-M
 
 Feature areas of Vendora POS. Each links to the frontend page, backend routes, and services that make it up. Deep-dive notes exist for the active/complex ones.
 
+> For the **exhaustive line-by-line list** of every feature + option (with Till/App/Both tags), see [[Feature-Inventory]]. This page is the grouped overview.
+
 ## Command centre
 - **[[Overview-Dashboard]]** ⭐ — the owner's "This Week" screen: theft £, waste £, sales & margin. `OverviewPage` · `/overview` · `overviewRoutes`
 

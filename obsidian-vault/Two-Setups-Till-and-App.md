@@ -1,6 +1,6 @@
 # 🧭 Two Setups — The Till (web) and The App (mobile)
 
-Back to [[Home]] · Related: [[Domains-Index]] · [[POS-and-Checkout]] · [[Overview-Dashboard]] · [[Accounting]]
+Back to [[Home]] · Related: [[Feature-Inventory]] · [[Domains-Index]] · [[POS-and-Checkout]] · [[Overview-Dashboard]] · [[Accounting]]
 
 > **Reference plan, locked 2026-07-16.** Vendora ships as **two setups** to each shop: the **Till** (existing web app, at the counter) and a **companion App** (mobile, carried). This note is the source of truth for *what goes where* and *why*. Grounded in a full code audit (see [[2026-07-16-Two-Setups-Scope-Lock]]).
 

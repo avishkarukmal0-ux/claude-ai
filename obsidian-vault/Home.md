@@ -32,6 +32,7 @@
 - [[Competitor-Teardown]] — UK POS landscape, July 2026
 
 ### Feature Domains
+- [[Feature-Inventory]] — **everything built, 100% coverage** (routes · models · services · pages · plan gates) ⭐ *the master list*
 - [[Domains-Index]] — all feature areas at a glance
 - [[Overview-Dashboard]] — owner's "This Week" command centre ⭐ *new flagship*
 - [[Accounting]] — VAT, Payroll, Expenses, P&L
