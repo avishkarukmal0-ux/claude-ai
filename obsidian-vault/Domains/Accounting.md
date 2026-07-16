@@ -15,6 +15,15 @@ Back to [[Home]] · [[Domains-Index]] · Related: [[API-Routes]] · [[Services]]
 | Models | `PayrollRun`, `VatReturn`, `Expense`, `AccountingSettings`, `MarginSettings` |
 | Access | all `requireRole('supervisor')` |
 
+## Margins (pricing)
+`marginService` + `MarginSettings` (per store). Target margins drive the suggested retail prices (in Invoice Reader) and the green/amber/red status.
+
+**Resolution order (as of 2026-07-16):** **per-product override → category rule → store default.**
+- Store default: `MarginSettings.defaultMargin`.
+- Per category: `MarginSettings.categories[]` (`targetMargin`/`minMargin`/`maxMargin`/`vatRate`), UK c-store defaults seeded on first access.
+- **Per product: `Product.pricing.targetMargin`** (null = inherit). Resolved by `marginService.getRuleForProduct(settings, product)` — overrides just the target (min/max/VAT stay from the category so alerts stay sensible).
+- UI: **Per-Product Margins** table in `MarginSettingsPage.jsx` — search a product, set its % (blank = inherit), optionally **Set & reprice** to the suggested retail. API: `GET /margins/products`, `PUT /margins/products/:id`. See [[2026-07-16-Per-Product-Margins]].
+
 ## Payroll
 The most complex sub-area.
 

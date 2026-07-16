@@ -65,6 +65,27 @@ function getRule(settings, category) {
   return match;
 }
 
+/**
+ * Resolve the effective margin rule for a specific product:
+ * product override → category rule → store default.
+ * A numeric `product.pricing.targetMargin` overrides just the target (min/max/
+ * vat still come from the category so alerts stay sensible); min is nudged down
+ * if the override would otherwise sit below it.
+ */
+function getRuleForProduct(settings, product) {
+  const base = getRule(settings, product?.category || '');
+  const override = product?.pricing?.targetMargin;
+  if (override === null || override === undefined || override === '') return { ...base, source: base.name ? 'category' : 'default' };
+  const targetMargin = Number(override);
+  if (Number.isNaN(targetMargin)) return { ...base, source: base.name ? 'category' : 'default' };
+  return {
+    ...base,
+    targetMargin,
+    minMargin: Math.min(base.minMargin ?? 0, targetMargin),
+    source: 'product',
+  };
+}
+
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
 
 /**
@@ -118,4 +139,4 @@ function marginStatus(currentRetailIncVat, cost, rule) {
   return 'green';
 }
 
-module.exports = { UK_DEFAULTS, getOrCreate, getRule, calcBreakdown, marginStatus };
+module.exports = { UK_DEFAULTS, getOrCreate, getRule, getRuleForProduct, calcBreakdown, marginStatus };

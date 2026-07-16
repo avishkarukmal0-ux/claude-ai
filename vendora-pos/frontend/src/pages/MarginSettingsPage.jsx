@@ -95,6 +95,147 @@ function MarginCalculator({ categories, defaultMargin }) {
   );
 }
 
+// ── Per-Product Margins ───────────────────────────────────────────────────────
+// Search products and pin an individual product's target margin, independent of
+// its category. Blank = inherit category/default.
+const STATUS_DOT = { green: 'bg-green-500', amber: 'bg-amber-500', red: 'bg-red-500' };
+
+function ProductMarginList() {
+  const [search, setSearch] = useState('');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [edits, setEdits] = useState({}); // id -> string value being typed
+  const [savingId, setSavingId] = useState(null);
+
+  const load = useCallback(async (term) => {
+    setLoading(true);
+    try {
+      const res = await marginSvc.getProductMargins(term ? { search: term, limit: 50 } : { limit: 50 });
+      setRows(res.products || []);
+      setEdits({});
+    } catch {
+      toast.error('Failed to load products');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(''); }, [load]);
+
+  const save = async (row, reprice) => {
+    const raw = edits[row.id] !== undefined ? edits[row.id] : (row.override ?? '');
+    setSavingId(row.id);
+    try {
+      await marginSvc.setProductMargin(row.id, {
+        targetMargin: raw === '' ? null : Number(raw),
+        applySuggestedPrice: !!reprice,
+      });
+      toast.success(reprice ? 'Margin set & repriced' : 'Margin set');
+      load(search);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Could not save');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border mb-5 overflow-hidden">
+      <div className="p-4 border-b">
+        <h3 className="font-semibold text-gray-800">Per-Product Margins</h3>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Pin a specific product’s margin, independent of its category. Leave blank to follow the category/default.
+        </p>
+        <form onSubmit={(e) => { e.preventDefault(); load(search); }} className="mt-3 flex gap-2">
+          <input
+            className="border rounded-lg px-3 py-2 text-sm flex-1 max-w-xs focus:ring-1 focus:ring-blue-400 focus:outline-none"
+            placeholder="Search by name, barcode or category…"
+            value={search} onChange={(e) => setSearch(e.target.value)}
+          />
+          <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            Search
+          </button>
+        </form>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center p-8"><RefreshCw className="animate-spin text-blue-600" size={22} /></div>
+      ) : rows.length === 0 ? (
+        <p className="p-6 text-sm text-gray-400 text-center">No products found.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="px-4 py-3 text-left">Product</th>
+                <th className="px-4 py-3 text-right">Cost</th>
+                <th className="px-4 py-3 text-right">Price</th>
+                <th className="px-4 py-3 text-center">Now</th>
+                <th className="px-4 py-3 text-center">Target</th>
+                <th className="px-4 py-3 text-center">This product %</th>
+                <th className="px-4 py-3 text-center">Suggested</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((row) => {
+                const val = edits[row.id] !== undefined ? edits[row.id] : (row.override ?? '');
+                return (
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <div className="font-medium text-gray-800">{row.name}</div>
+                      <div className="text-xs text-gray-400">{row.category || '—'}</div>
+                    </td>
+                    <td className="px-4 py-2 text-right text-gray-600">{fmt(row.cost)}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">{fmt(row.retail)}</td>
+                    <td className="px-4 py-2 text-center">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${STATUS_DOT[row.status] || 'bg-gray-300'}`} />
+                        {row.actualMargin}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className="text-gray-700">{row.effectiveTarget}%</span>
+                      <div className="text-[10px] text-gray-400">{row.source}</div>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <input
+                        type="number" min="0" max="100" step="1" placeholder="—"
+                        className="border rounded px-2 py-1 text-sm w-16 text-center focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                        value={val}
+                        onChange={(e) => setEdits((m) => ({ ...m, [row.id]: e.target.value }))}
+                      />
+                    </td>
+                    <td className="px-4 py-2 text-center text-gray-500">{fmt(row.suggestedRetail)}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1 justify-end">
+                        <button
+                          onClick={() => save(row, false)} disabled={savingId === row.id}
+                          className="px-2.5 py-1 border rounded text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                          title="Save this product's target margin"
+                        >
+                          Set
+                        </button>
+                        <button
+                          onClick={() => save(row, true)} disabled={savingId === row.id}
+                          className="px-2.5 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:opacity-50"
+                          title="Save and update the price to the suggested retail"
+                        >
+                          Set &amp; reprice
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function MarginSettingsPage() {
   const [settings, setSettings] = useState(null);
@@ -291,6 +432,9 @@ export default function MarginSettingsPage() {
           </table>
         </div>
       </div>
+
+      {/* Per-Product Margins */}
+      <ProductMarginList />
 
       {/* Global Toggles */}
       <div className="bg-white rounded-xl border p-5 mb-5">

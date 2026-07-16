@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-07-16-Per-Product-Margins]] — margins now resolve **per-product → category → store default**; new Per-Product Margins table (set % + "Set & reprice")
 - [[2026-07-16-Nightly-WhatsApp-Summary]] — the recap now **auto-sends on WhatsApp at closing time** (Notification outbox + every-minute cron + Twilio, env-gated; Phase 3b)
 - [[2026-07-16-Daily-Summary]] — end-of-day "shop closed fine" recap owners can **one-tap share to their phone** (`GET /overview/daily-summary`, Phase 3)
 - [[2026-07-16-Owner-Home]] — dashboard is now the owner's **landing screen**: shop-status banner, "Today so far" strip, quick actions ("everything at your fingertip", Phase 1)

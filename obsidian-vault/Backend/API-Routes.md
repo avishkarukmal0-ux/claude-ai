@@ -52,7 +52,7 @@ All mounted under `/api` in `src/routes/index.js`. Public routes first, then `au
 | `/invoice-reader` | `invoiceReaderRoutes.js` | OCR invoices |
 | `/market` | `marketIntelRoutes.js` | market intel |
 | `/accounting` | `accountingRoutes.js` | [[Accounting]] |
-| `/margins` | `marginRoutes.js` | pricing |
+| `/margins` | `marginRoutes.js` | pricing — store default + per-category, plus **per-product overrides**: `GET /margins/products`, `PUT /margins/products/:id` (set/clear + optional reprice). `GET /margins/calculate` accepts a `targetMargin` override. See [[Accounting]] |
 | `/overview` | `overviewRoutes.js` | [[Overview-Dashboard]] — `GET /overview/this-week` (incl. `today` block), `GET /overview/daily-summary` (end-of-day recap + shareable `shareText`), `GET/PUT /overview/summary-settings` + `POST /overview/summary-settings/test`, `GET /overview/notifications` (manager — nightly WhatsApp auto-delivery + delivery history) |
 
 > **Payroll** is served under `/accounting/payroll` (in `accountingRoutes.js`), not a top-level `/payroll`. A stray `payrollRoutes.js` stub that crashed boot was removed — see [[2026-07-13-Fix-Payroll-Route-Mount]].

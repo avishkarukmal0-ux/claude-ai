@@ -51,6 +51,11 @@ Back to [[Home]] · Related: [[Backend-Overview]] · [[API-Routes]] · [[Domains
 - `Subscription` — Stripe subscription state
 - `MarketTrend` — Google Trends data
 - `ReportSchedule` — scheduled report config
+- `Notification` — delivery outbox for owner messages (nightly summary); idempotent via unique `dedupeKey`. See [[2026-07-16-Nightly-WhatsApp-Summary]]
+
+## Recent field additions
+- `Store.ownerSummary { enabled, channel, whatsappTo, sendAt }` — nightly summary opt-in ([[2026-07-16-Nightly-WhatsApp-Summary]])
+- `Product.pricing.targetMargin` — per-product margin override (null = inherit category/default) ([[2026-07-16-Per-Product-Margins]])
 
 ## Tips
 - To trace a feature end-to-end: pick a model here → find its `*Routes.js` in [[API-Routes]] → its `*Service.js` in [[Services]] → its page in [[Routing-and-Pages]].
