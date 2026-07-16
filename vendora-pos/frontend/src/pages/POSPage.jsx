@@ -742,6 +742,185 @@ function ShortcutsLegend() {
   );
 }
 
+// ── Refund Modal (↩ Refund) ──────────────────────────────────────────────────
+function RefundModal({ onClose }) {
+  const [step, setStep] = useState('lookup'); // lookup | select | done
+  const [receiptNo, setReceiptNo] = useState('');
+  const [sale, setSale] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [lines, setLines] = useState([]); // { key, name, barcode, productId, unitPrice, maxQty, include, qty }
+  const [method, setMethod] = useState('original_payment');
+  const [reason, setReason] = useState('');
+  const [result, setResult] = useState(null); // { refundReceiptNumber, refundAmount }
+  const inputRef = useRef();
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const lookup = async () => {
+    const num = receiptNo.trim();
+    if (!num) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await salesSvc.getByReceipt(num);
+      const s = data.sale;
+      if (!s) { setError('No sale found with that receipt number.'); setLoading(false); return; }
+      if (s.status === 'voided') { setError('That sale was voided — it cannot be refunded.'); setLoading(false); return; }
+      if (s.status === 'refunded') { setError('That sale has already been fully refunded.'); setLoading(false); return; }
+      setSale(s);
+      setLines((s.items || []).map((it, i) => ({
+        key: it.barcode || `idx-${i}`,
+        name: it.name || 'Item',
+        barcode: it.barcode || null,
+        productId: it.product ? String(it.product) : null,
+        unitPrice: Number(it.unitPrice) || 0,
+        maxQty: Number(it.quantity) || 1,
+        include: true,
+        qty: Number(it.quantity) || 1,
+      })));
+      setStep('select');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Could not look up that receipt.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = (key) => setLines(ls => ls.map(l => l.key === key ? { ...l, include: !l.include } : l));
+  const setQty = (key, q) => setLines(ls => ls.map(l => l.key === key ? { ...l, qty: Math.max(1, Math.min(l.maxQty, q)) } : l));
+
+  const selected = lines.filter(l => l.include);
+  const refundTotal = round2(selected.reduce((sum, l) => sum + l.unitPrice * l.qty, 0));
+
+  const submit = async () => {
+    if (selected.length === 0) { toast.error('Select at least one item to refund'); return; }
+    if (!reason.trim()) { toast.error('Please enter a reason for the refund'); return; }
+    setLoading(true);
+    try {
+      const data = await salesSvc.refundSale(sale._id, {
+        items: selected.map(l => ({ barcode: l.barcode, productId: l.productId, quantity: l.qty })),
+        refundMethod: method,
+        reason: reason.trim(),
+      });
+      setResult({ refundReceiptNumber: data.refundReceiptNumber, refundAmount: data.refundAmount });
+      setStep('done');
+      toast.success(`Refunded ${fmt(data.refundAmount)}`);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Refund failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-xl font-black text-gray-900">↩ Refund</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+        </div>
+
+        {/* Step 1 — find the sale */}
+        {step === 'lookup' && (
+          <div className="p-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Receipt number</label>
+            <input
+              ref={inputRef}
+              value={receiptNo}
+              onChange={e => setReceiptNo(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') lookup(); }}
+              placeholder="e.g. 20260715-0042"
+              className="w-full border rounded-lg px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-300"
+            />
+            {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
+            <button
+              onClick={lookup}
+              disabled={loading || !receiptNo.trim()}
+              className="mt-4 w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-all disabled:opacity-50"
+            >{loading ? 'Searching…' : 'Find sale'}</button>
+            <p className="text-xs text-gray-400 mt-3">Tip: the receipt number is printed on the customer's receipt, or find it in Transactions.</p>
+          </div>
+        )}
+
+        {/* Step 2 — choose what to refund */}
+        {step === 'select' && sale && (
+          <>
+            <div className="px-6 py-3 bg-gray-50 border-b text-sm text-gray-600 flex justify-between">
+              <span>Receipt <b className="text-gray-900">{sale.receiptNumber}</b></span>
+              <span>Sale total <b className="text-gray-900">{fmt(sale.total)}</b></span>
+            </div>
+            <div className="p-6 overflow-y-auto" style={{ flex: 1 }}>
+              <p className="text-sm font-semibold text-gray-700 mb-3">Items to refund</p>
+              <div className="space-y-2">
+                {lines.map(l => (
+                  <div key={l.key} className={`flex items-center gap-3 border rounded-lg px-3 py-2 ${l.include ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
+                    <input type="checkbox" checked={l.include} onChange={() => toggle(l.key)} className="w-4 h-4 accent-green-600" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{l.name}</p>
+                      <p className="text-xs text-gray-500">{fmt(l.unitPrice)} each</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button disabled={!l.include} onClick={() => setQty(l.key, l.qty - 1)} className="w-7 h-7 rounded bg-gray-100 text-gray-700 font-bold disabled:opacity-40">−</button>
+                      <span className="w-8 text-center text-sm font-semibold">{l.qty}</span>
+                      <button disabled={!l.include} onClick={() => setQty(l.key, l.qty + 1)} className="w-7 h-7 rounded bg-gray-100 text-gray-700 font-bold disabled:opacity-40">+</button>
+                    </div>
+                    <span className="w-16 text-right text-sm font-bold text-gray-900">{fmt(l.unitPrice * l.qty)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Refund method</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { v: 'original_payment', t: 'Original' },
+                    { v: 'cash', t: 'Cash' },
+                    { v: 'card', t: 'Card' },
+                  ].map(m => (
+                    <button key={m.v} onClick={() => setMethod(m.v)}
+                      className={`py-2 rounded-lg text-sm font-semibold border ${method === m.v ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                    >{m.t}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Reason</label>
+                <input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Faulty item, customer changed mind"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-300" />
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t bg-white">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-sm text-gray-600">Refund total</span>
+                <span className="text-xl font-black text-green-700">{fmt(refundTotal)}</span>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setStep('lookup'); setSale(null); setError(''); }} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200">Back</button>
+                <button onClick={submit} disabled={loading} className="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 disabled:opacity-50">
+                  {loading ? 'Processing…' : `Refund ${fmt(refundTotal)}`}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Step 3 — done */}
+        {step === 'done' && result && (
+          <div className="p-8 text-center">
+            <div className="text-5xl mb-3">✅</div>
+            <h3 className="text-lg font-black text-gray-900 mb-1">Refund complete</h3>
+            <p className="text-gray-600 mb-1">{fmt(result.refundAmount)} refunded</p>
+            <p className="text-sm text-gray-500 mb-6">Refund receipt: <b>{result.refundReceiptNumber}</b></p>
+            <button onClick={onClose} className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700">Done</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const LOCK_AFTER = 3 * 60 * 1000; // 3 minutes
 
 // ── Main POS Page ────────────────────────────────────────────────────────────
@@ -762,6 +941,9 @@ export default function POSPage() {
 
   // Feature #5 — Price Check
   const [showPriceCheck, setShowPriceCheck] = useState(false);
+
+  // Refund
+  const [showRefund, setShowRefund] = useState(false);
 
   // Feature #8 — Void with PIN
   const [voidTarget, setVoidTarget] = useState(null); // { index: number, item: object }
@@ -1167,6 +1349,11 @@ export default function POSPage() {
         <PriceCheckModal onClose={() => setShowPriceCheck(false)} />
       )}
 
+      {/* Refund modal */}
+      {showRefund && (
+        <RefundModal onClose={() => setShowRefund(false)} />
+      )}
+
       {/* Feature #8 — Void confirm modal */}
       {voidTarget !== null && (
         <VoidConfirmModal
@@ -1561,7 +1748,7 @@ export default function POSPage() {
             {[
               { label: '🗑 Clear', action: () => clearCart() },
               { label: '⏸ Park', action: () => toast('Transaction parked', { icon: '⏸' }) },
-              { label: '↩ Refund', action: () => {} },
+              { label: '↩ Refund', action: () => setShowRefund(true) },
             ].map(({ label, action }) => (
               <button
                 key={label}

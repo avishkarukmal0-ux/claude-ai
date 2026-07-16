@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-07-15-Wire-POS-Refund-Button]] — the `↩ Refund` button in the till now opens a working refund modal (was a dead stub)
 - [[2026-07-15-Atlas-Connection-Setup]] — launcher now opens a step-by-step Atlas guide (`GET-DATABASE-LINK.txt`) to grab `MONGODB_URI` for real local data
 - [[2026-07-13-Login-Store-Picker]] — login now has a store dropdown (GET /auth/stores) instead of pasting a Mongo ID
 - [[2026-07-13-Build-Overview-Dashboard]] — built the flagship "This Week" owner dashboard (theft £ + waste £ + margin), real data

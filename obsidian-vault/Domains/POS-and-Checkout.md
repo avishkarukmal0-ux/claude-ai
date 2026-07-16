@@ -19,7 +19,7 @@ The core till — the default screen (`/` redirects to `/pos`).
 - Scan / search / quick-key to add items to `CartContext`
 - Apply promotions via `promotionsEngine`
 - Park & recall transactions
-- Refunds (`refundService`)
+- **Refunds** — the `↩ Refund` button in the cart action row opens `RefundModal` (in `POSPage.jsx`): look up sale by receipt number (`GET /sales/receipt/:number`) → tick items + set quantities → pick method (original/cash/card) + reason → `POST /sales/:id/refund` (`salesSvc.refundSale`). Backend `refundService.processRefund` restores stock, updates the cash drawer, writes a `REF-…` refund receipt, and marks the sale `refunded`/`partially_refunded`. Gated by `requirePermission('canRefund')`.
 - Tap-to-pay + card payment
 - **Offline mode**: if backend unreachable, sale queues in `OfflineQueue`, syncs later via `offlineService` (see `OfflineQueuePage`)
 - Real-time: emits/receives via `useSocket` (customer display mirrors cart)
