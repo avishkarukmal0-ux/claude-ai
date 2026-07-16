@@ -27,6 +27,7 @@
 - [[State-and-Contexts]] — React contexts, hooks, services
 
 ### Strategy 🎯
+- [[Two-Setups-Till-and-App]] — **the plan**: what goes in the Till (web) vs the App (mobile) ⭐ *scope locked 2026-07-16*
 - [[Positioning]] — how Vendora wins vs Square/Shopify/Epos Now & AI clones ⭐
 - [[Competitor-Teardown]] — UK POS landscape, July 2026
 
