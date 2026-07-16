@@ -4,7 +4,7 @@ import {
   RefreshCw, ShieldAlert, Trash2, TrendingUp, TrendingDown,
   ArrowRight, AlertTriangle, Receipt, Percent,
   CheckCircle2, ShoppingCart, Banknote, Undo2, PackagePlus, Users,
-  Moon, Share2, X,
+  Moon, Share2, X, Clock, MessageCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as overview from '../services/overview';
@@ -35,6 +35,103 @@ function QuickAction({ icon: Icon, label, onClick }) {
       <Icon size={24} className="text-gray-700" />
       <span className="text-sm font-medium text-gray-800 text-center leading-tight">{label}</span>
     </button>
+  );
+}
+
+// Auto-delivery setup — flip on the nightly WhatsApp summary, set number & time.
+function AutoDeliverySetup() {
+  const [cfg, setCfg] = useState(null);
+  const [waReady, setWaReady] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    overview.getSummarySettings()
+      .then((r) => { setCfg(r.settings); setWaReady(r.whatsappConfigured); })
+      .catch(() => setCfg(null)); // e.g. supervisor without manager rights — hide the panel
+  }, []);
+
+  if (!cfg) return null;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await overview.saveSummarySettings({
+        enabled: cfg.enabled, channel: 'whatsapp',
+        whatsappTo: cfg.whatsappTo, sendAt: cfg.sendAt,
+      });
+      toast.success('Saved');
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Could not save');
+    } finally { setSaving(false); }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    try {
+      const r = await overview.testSummary();
+      if (r.status === 'sent') toast.success('Test sent to your WhatsApp');
+      else toast('Saved, but WhatsApp isn’t switched on server-side yet', { icon: 'ℹ️' });
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Could not send test');
+    } finally { setTesting(false); }
+  };
+
+  return (
+    <div className="rounded-xl border">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 p-3 text-left">
+        <MessageCircle size={16} className="text-green-600" />
+        <span className="text-sm font-medium text-gray-800 flex-1">Get this automatically every night</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${cfg.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          {cfg.enabled ? 'On' : 'Off'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="p-3 pt-0 space-y-3">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={cfg.enabled}
+              onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+            Send me the summary on WhatsApp at closing time
+          </label>
+
+          <div>
+            <label className="text-xs text-gray-500">Your WhatsApp number (with country code)</label>
+            <input type="tel" placeholder="+447700900123" value={cfg.whatsappTo}
+              onChange={(e) => setCfg({ ...cfg, whatsappTo: e.target.value })}
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 flex items-center gap-1"><Clock size={12} /> Closing time</label>
+            <input type="time" value={cfg.sendAt}
+              onChange={(e) => setCfg({ ...cfg, sendAt: e.target.value })}
+              className="mt-1 rounded-lg border px-3 py-2 text-sm" />
+            <span className="text-[11px] text-gray-400 ml-2">{cfg.timezone}</span>
+          </div>
+
+          {!waReady && (
+            <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg p-2">
+              WhatsApp sending isn’t switched on for the server yet (Twilio keys). You can still save your preferences —
+              messages will start once the keys are added.
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving}
+              className="flex-1 rounded-lg bg-gray-900 text-white text-sm font-medium py-2 disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={sendTest} disabled={testing || !cfg.whatsappTo}
+              className="flex-1 rounded-lg border border-green-300 text-green-700 text-sm font-medium py-2 disabled:opacity-50">
+              {testing ? 'Sending…' : 'Send test'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -120,6 +217,8 @@ function DaySummaryModal({ onClose }) {
               <Share2 size={18} /> Send to my phone
             </button>
             <p className="text-[11px] text-gray-400 text-center -mt-2">Shares the recap to WhatsApp, a text, or wherever you like.</p>
+
+            <AutoDeliverySetup />
           </div>
         )}
       </div>

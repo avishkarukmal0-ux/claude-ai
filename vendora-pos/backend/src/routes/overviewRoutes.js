@@ -20,7 +20,10 @@ const ScanPattern  = require('../models/ScanPattern');
 const Product      = require('../models/Product');
 const Sale         = require('../models/Sale');
 const Staff        = require('../models/Staff');
+const Store        = require('../models/Store');
 const reportService = require('../services/reportService');
+const ownerSummaryService = require('../services/ownerSummaryService');
+const notificationService = require('../services/notificationService');
 
 const r2 = (n) => Math.round((n || 0) * 100) / 100;
 const daysLeft = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
@@ -171,69 +174,75 @@ router.get('/this-week', requireRole('supervisor'), async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/daily-summary', requireRole('supervisor'), async (req, res, next) => {
   try {
-    const storeId  = req.storeId;
-    const storeOid = new mongoose.Types.ObjectId(storeId);
-    const now      = new Date();
-    const dayStart = dayjs(req.query.date || now).startOf('day').toDate();
-    const isToday  = dayjs(dayStart).isSame(dayjs(now), 'day');
-    const dayEnd   = isToday ? now : dayjs(dayStart).endOf('day').toDate();
+    const summary = await ownerSummaryService.buildOwnerSummary(req.storeId, req.query.date);
+    res.json({ success: true, ...summary });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    const [salesAgg, margin, shrinkToday, products] = await Promise.all([
-      Sale.aggregate([
-        { $match: { store: storeOid, status: 'completed', completedAt: { $gte: dayStart, $lte: dayEnd } } },
-        { $group: { _id: null, takings: { $sum: '$total' }, count: { $sum: 1 } } },
-      ]),
-      reportService.getMarginAnalysis(storeId, dayStart, dayEnd),
-      ShrinkageLog.find({ store: storeId, occurredAt: { $gte: dayStart, $lte: dayEnd } }).select('totalValue').lean(),
-      Product.find({ store: storeId, isActive: true })
-        .select('stock.quantity stock.lowStockThreshold pricing.retailPrice expiryBatches').lean(),
-    ]);
-
-    const takings      = r2(salesAgg[0]?.takings || 0);
-    const transactions = salesAgg[0]?.count || 0;
-    const grossProfit  = r2(margin?.overall?.grossProfit || 0);
-    const marginPct    = r2(margin?.overall?.margin || 0);
-    const theftToday   = r2(shrinkToday.reduce((s, x) => s + (x.totalValue || 0), 0));
-
-    let lowStockCount = 0, expiredCount = 0, expiredValue = 0;
-    for (const p of products) {
-      const qty = p.stock?.quantity ?? 0;
-      const thr = p.stock?.lowStockThreshold ?? 5;
-      if (qty <= thr) lowStockCount += 1;
-      const price = p.pricing?.retailPrice || 0;
-      for (const b of (p.expiryBatches || [])) {
-        if (!b || b.quantity <= 0) continue;
-        if (daysLeft(b.expiryDate) < 0) { expiredCount += 1; expiredValue += price * b.quantity; }
-      }
-    }
-
-    const issues = [];
-    if (theftToday > 0)    issues.push(`£${theftToday.toFixed(2)} logged as theft/shrinkage`);
-    if (expiredCount > 0)  issues.push(`${expiredCount} expired ${expiredCount === 1 ? 'line' : 'lines'} on the shelf`);
-    if (lowStockCount > 0) issues.push(`${lowStockCount} ${lowStockCount === 1 ? 'item' : 'items'} low on stock`);
-
-    const allGood   = issues.length === 0;
-    const dateLabel = dayjs(dayStart).format('ddd D MMM');
-    const headline  = allGood ? 'Shop closed fine 👍' : `${issues.length} thing${issues.length === 1 ? '' : 's'} to check`;
-
-    // Plain-text recap the owner can one-tap share to their own WhatsApp/SMS.
-    const lines = [
-      `🏪 ${dateLabel} — ${allGood ? 'all good' : 'quick check'}`,
-      `Takings: £${takings.toFixed(2)} (${transactions} sale${transactions === 1 ? '' : 's'})`,
-    ];
-    if (grossProfit) lines.push(`Profit: £${grossProfit.toFixed(2)} (${marginPct.toFixed(0)}% margin)`);
-    if (issues.length) { lines.push('', 'Worth a look:'); issues.forEach(i => lines.push(`• ${i}`)); }
-    else lines.push('Nothing needs you. Rest easy.');
-
+// ── Nightly summary delivery settings (owner opt-in: channel, number, time) ──
+router.get('/summary-settings', requireRole('manager'), async (req, res, next) => {
+  try {
+    const store = await Store.findById(req.storeId).select('ownerSummary timezone').lean();
+    const s = store?.ownerSummary || {};
     res.json({
       success: true,
-      date: dayStart, dateLabel, isToday,
-      allGood, headline,
-      takings, transactions, grossProfit, marginPct,
-      theftToday, lowStockCount, expiredCount, expiredValue: r2(expiredValue),
-      issues,
-      shareText: lines.join('\n'),
+      settings: {
+        enabled: !!s.enabled,
+        channel: s.channel || 'whatsapp',
+        whatsappTo: s.whatsappTo || '',
+        sendAt: s.sendAt || '21:00',
+        timezone: store?.timezone || 'Europe/London',
+      },
+      whatsappConfigured: notificationService.whatsappConfigured(),
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/summary-settings', requireRole('manager'), async (req, res, next) => {
+  try {
+    const { enabled, channel, whatsappTo, sendAt } = req.body || {};
+    const update = {};
+    if (enabled !== undefined)    update['ownerSummary.enabled'] = !!enabled;
+    if (channel !== undefined)    update['ownerSummary.channel'] = channel;
+    if (whatsappTo !== undefined) update['ownerSummary.whatsappTo'] = String(whatsappTo).trim();
+    if (sendAt !== undefined) {
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(sendAt)) {
+        return res.status(400).json({ success: false, error: 'sendAt must be HH:mm (24h)' });
+      }
+      update['ownerSummary.sendAt'] = sendAt;
+    }
+    const store = await Store.findByIdAndUpdate(req.storeId, { $set: update }, { new: true }).select('ownerSummary').lean();
+    res.json({ success: true, settings: store?.ownerSummary || {} });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Send the summary right now (a "test my setup" button) ──
+router.post('/summary-settings/test', requireRole('manager'), async (req, res, next) => {
+  try {
+    const store = await Store.findById(req.storeId).select('ownerSummary').lean();
+    const cfg = store?.ownerSummary || {};
+    if (!cfg.whatsappTo) {
+      return res.status(400).json({ success: false, error: 'Add a WhatsApp number first' });
+    }
+    const summary = await ownerSummaryService.buildOwnerSummary(req.storeId);
+    const result = await notificationService.deliver({
+      store: req.storeId,
+      type: 'daily_summary_test',
+      channel: 'whatsapp',
+      recipient: cfg.whatsappTo,
+      text: `🧪 Test — this is how your nightly summary will look:\n\n${summary.shareText}`,
+      // include time so repeated tests aren't blocked by the daily dedupe
+      dedupeKey: `daily_summary_test:whatsapp:${req.storeId}:${Date.now()}`,
+    });
+    if (result.sent)    return res.json({ success: true, status: 'sent' });
+    if (result.skipped) return res.json({ success: true, status: 'skipped', reason: 'WhatsApp not configured on the server yet' });
+    return res.status(502).json({ success: false, error: result.error || 'Send failed' });
   } catch (err) {
     next(err);
   }

@@ -56,6 +56,14 @@ const StoreSchema = new Schema({
       closed: { type: Boolean, default: false },
     },
   ],
+  // Nightly "shop closed fine" owner summary — delivered by the dailySummary
+  // cron job at `sendAt` (HH:mm in the store's timezone).
+  ownerSummary: {
+    enabled:    { type: Boolean, default: false },
+    channel:    { type: String, enum: ['whatsapp', 'sms', 'email'], default: 'whatsapp' },
+    whatsappTo: String,                          // E.164, e.g. +447700900123
+    sendAt:     { type: String, default: '21:00' },
+  },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 

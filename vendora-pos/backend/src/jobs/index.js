@@ -7,6 +7,7 @@ const { expiryCheck }      = require('./expiryCheck');
 const { expireParked }     = require('./expireParked');
 const { priceSync }        = require('./priceSync');
 const { trendUpdateJob }   = require('./trendUpdateJob');
+const { dailySummary }     = require('./dailySummary');
 const logger = require('../utils/logger');
 
 // Wrap any cron callback so unhandled rejections or synchronous throws are caught locally
@@ -41,6 +42,10 @@ module.exports = (io) => {
 
   // 3:30am daily — refresh market trends + AI insights
   cron.schedule('30 3 * * *', safe('trendUpdateJob', () => trendUpdateJob(io)), { timezone: 'Europe/London' });
+
+  // Every minute — fire each store's nightly owner summary at its close time
+  // (per-store timezone handled inside the job; dedupe makes it once/day)
+  cron.schedule('* * * * *', safe('dailySummary', dailySummary));
 
   logger.info('Cron jobs scheduled');
 };

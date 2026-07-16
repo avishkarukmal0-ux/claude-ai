@@ -53,7 +53,7 @@ All mounted under `/api` in `src/routes/index.js`. Public routes first, then `au
 | `/market` | `marketIntelRoutes.js` | market intel |
 | `/accounting` | `accountingRoutes.js` | [[Accounting]] |
 | `/margins` | `marginRoutes.js` | pricing |
-| `/overview` | `overviewRoutes.js` | [[Overview-Dashboard]] — `GET /overview/this-week` (incl. `today` block), `GET /overview/daily-summary` (end-of-day recap + shareable `shareText`) |
+| `/overview` | `overviewRoutes.js` | [[Overview-Dashboard]] — `GET /overview/this-week` (incl. `today` block), `GET /overview/daily-summary` (end-of-day recap + shareable `shareText`), `GET/PUT /overview/summary-settings` + `POST /overview/summary-settings/test` (manager — nightly WhatsApp auto-delivery) |
 
 > **Payroll** is served under `/accounting/payroll` (in `accountingRoutes.js`), not a top-level `/payroll`. A stray `payrollRoutes.js` stub that crashed boot was removed — see [[2026-07-13-Fix-Payroll-Route-Mount]].
 
