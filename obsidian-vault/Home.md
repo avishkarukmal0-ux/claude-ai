@@ -28,6 +28,7 @@
 
 ### Strategy 🎯
 - [[Go-To-Market]] — ⭐ **the master plan**: land with the App, expand to the Till (land-and-expand) *locked 2026-07-18*
+- [[Customer-Discovery]] — 🔎 **field kit**: how to talk to 5–10 shops and find the pain to build around
 - [[Two-Setups-Till-and-App]] — what goes in the Till (web) vs the App (mobile) *scope locked 2026-07-16; build order now reversed → see [[Go-To-Market]]*
 - [[Positioning]] — how Vendora wins vs Square/Shopify/Epos Now & AI clones ⭐
 - [[Competitor-Teardown]] — UK POS landscape, July 2026
