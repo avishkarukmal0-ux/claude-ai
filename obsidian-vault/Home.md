@@ -27,6 +27,7 @@
 - [[State-and-Contexts]] — React contexts, hooks, services
 
 ### Strategy 🎯
+- [[The-Whole-Story]] — 🧭 **the full arc on one page**: turning point · niches · what we build ⭐
 - [[App-Kickoff]] — 🚀 **START HERE in a fresh tab**: the one-page hand-off to begin building the Phase-1 app ⭐
 - [[Winning-Strategy]] — 🏆 **how we win**: burden-first not feature-first; accuracy + trust beat AI clones ⭐
 - [[Go-To-Market]] — ⭐ **the master plan**: land with the App, expand to the Till (land-and-expand) *locked 2026-07-18*
