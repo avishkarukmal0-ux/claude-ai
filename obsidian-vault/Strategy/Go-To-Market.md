@@ -28,6 +28,14 @@ The hardest problem in this market is **inertia**: prying a shop off a till they
 ### 1. Broad to learn, focused to keep the edge
 Casting wide to *learn* the common pain is fine. But a fully generic "inventory app for everyone" competes with Sortly / Zoho / QuickBooks with **no edge and no money**. Our only moat is **UK retail depth** (payroll, VAT, age/HFSS, shrinkage — see [[Positioning]]). → Build it simple enough that any small shop *can* use it, but **sell + learn where the moat lives**: indie convenience, off-licence, vape.
 
+#### Adjacent beachhead segments (widen the app's reach, ~0 new build)
+Off-licence + mini-mart are already covered by the built features. Three adjacencies that **reuse what's built, keep the cash-&-carry goods-in hook, and keep the moat** (age-verification and/or expiry) — widen the discovery net across these:
+1. **Newsagents / CTN** (Confectionery–Tobacco–Newsagent) — closest cousin; reuses age-verification (tobacco), barcode, goods-in, margins, PMP, loyalty. Wrinkle: newspaper/magazine sale-or-return (optional).
+2. **Independent international / ethnic grocers** (Polish, S-Asian, Halal, Afro-Caribbean, Turkish) — big, underserved; reuses expiry/waste (perishables), suppliers/margins, goods-in, scale (loose goods), alcohol age-verification. Nice-later: multi-language product names.
+3. **Vape & CBD shops** — age-verification is central; reuses barcode, wholesaler restock, margins. Watch: some already on Square → target the not-yet-digitised. Minor new: nicotine-strength attribute.
+
+**Second-tier (reuse inventory/margins/goods-in but lose the age/expiry moat):** health-food/whole-food, discount/variety ("pound"), pet shops.
+
 ### 2. The data trap — and why it's actually the bait
 The best back-office magic — **theft £, real margins, sales trends, VAT from takings** — needs **sales data**, which lives in **the till we're not replacing yet**.
 - Phase-1 app **can** do standalone: inventory, goods-in scan, expiry/waste, supplier prices, reorder, manual payroll.
