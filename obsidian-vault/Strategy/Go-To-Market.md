@@ -34,6 +34,19 @@ The point of touching many shop types is **information**, not just feature reuse
 
 **Still keep the edge:** a fully generic "inventory app for everyone" competes with Sortly / Zoho / QuickBooks with no moat. Our moat is **UK retail depth** (payroll, VAT, age/HFSS, shrinkage — [[Positioning]]). The core + module architecture *protects* the edge: the core carries the UK-compliance depth; modules extend reach without diluting it.
 
+#### Implementation: ONE app, per-shop-type interface (decided 2026-07-18)
+Build it all in **one app/codebase** where **each shop type gets its own interface + options** — NOT separate apps. We're already halfway there: `Subscription.js` `PLAN_FEATURES` already flips features per store by **plan**. Add one more dial — a **`shopType`** on the store — and the shown feature set becomes:
+> **what they see = Common Core + (features their PLAN allows) + (modules their SHOP TYPE needs)**
+
+Same feature-flag mechanism, second axis (plan × shopType). E.g. off-licence → age-verification + duty reporting; butcher → scale + traceability, no age; vape → nicotine strength + age; grocer → expiry/waste + loose-goods scale. Everyone gets the core (goods-in scan, inventory, margins, suppliers, dashboard).
+
+**Three rules so it stays clean:**
+1. **One shared core — never fork the app per vertical.** Verticals = config + modules on top of one core; no copy-paste clones.
+2. **Config-driven, not `if (shopType===…)` spaghetti.** A single registry maps shopType → modules; adding a vertical = one entry.
+3. **Smart default + toggle.** Default the module set from shop type at signup, but let owners switch modules on/off (real shops are hybrids).
+
+**Note:** the architecture lets us *add* verticals cheaply later — it does NOT mean build them all now. Build core + first vertical; bolt on the rest as discovery/demand justifies.
+
 #### Adjacent beachhead segments (widen the app's reach, ~0 new build)
 Off-licence + mini-mart are already covered by the built features. Three adjacencies that **reuse what's built, keep the cash-&-carry goods-in hook, and keep the moat** (age-verification and/or expiry) — widen the discovery net across these:
 1. **Newsagents / CTN** (Confectionery–Tobacco–Newsagent) — closest cousin; reuses age-verification (tobacco), barcode, goods-in, margins, PMP, loyalty. Wrinkle: newspaper/magazine sale-or-return (optional).
