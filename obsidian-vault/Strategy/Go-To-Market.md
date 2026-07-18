@@ -25,8 +25,14 @@ The hardest problem in this market is **inertia**: prying a shop off a till they
 | **2 — Expand (the Till)** | 12 mo+ | Launch the POS to the shops already hooked. Warm upsell. Carrots: sales-driven insights + cheaper card fees. Till-foundation fixes happen *here*. | Convert the trust into the till + payment margin. |
 
 ## The three things we MUST get right
-### 1. Broad to learn, focused to keep the edge
-Casting wide to *learn* the common pain is fine. But a fully generic "inventory app for everyone" competes with Sortly / Zoho / QuickBooks with **no edge and no money**. Our only moat is **UK retail depth** (payroll, VAT, age/HFSS, shrinkage — see [[Positioning]]). → Build it simple enough that any small shop *can* use it, but **sell + learn where the moat lives**: indie convenience, off-licence, vape.
+### 1. Learn BROAD, build/sell FOCUSED — they're different axes (refined 2026-07-18)
+The point of touching many shop types is **information**, not just feature reuse: the wider we learn, the more completely we know what the POS must do, so it can **cover more areas** and give each type exactly what it needs. So:
+- **Learn broad — deliberately wide.** It's just conversations (free) and it's what makes the eventual POS bigger. Interview across many rings, not just 1–2.
+- **Build/sell focused — sequence it.** Can't build deep for every vertical at once with no money/one person. Land in the strongest segment first for revenue + proof, then widen.
+
+**The bridge — Common Core + Vertical Modules:** broad discovery reveals (a) the **~80% every shop shares** — inventory, goods-in, sales, margins, suppliers, payments → **build this core once, everyone gets it**; and (b) the **~20% each vertical needs** — clothing size/colour variants, butcher scale+traceability, pub cellar stock, vape nicotine strength, bookshop sale-or-return → **bolt-on modules added one at a time**. This is *how* we cover more areas without building everything on day one (the Square/Shopify pattern). Broad discovery is what tells us where the core ends and the modules begin.
+
+**Still keep the edge:** a fully generic "inventory app for everyone" competes with Sortly / Zoho / QuickBooks with no moat. Our moat is **UK retail depth** (payroll, VAT, age/HFSS, shrinkage — [[Positioning]]). The core + module architecture *protects* the edge: the core carries the UK-compliance depth; modules extend reach without diluting it.
 
 #### Adjacent beachhead segments (widen the app's reach, ~0 new build)
 Off-licence + mini-mart are already covered by the built features. Three adjacencies that **reuse what's built, keep the cash-&-carry goods-in hook, and keep the moat** (age-verification and/or expiry) — widen the discovery net across these:

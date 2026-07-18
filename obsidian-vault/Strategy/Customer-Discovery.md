@@ -40,12 +40,16 @@ Always add: **"Show me how you do it now."** The notebook / spreadsheet / memory
 - ❌ "How much would you pay for…"
 - ❌ Describing our solution at all.
 
-## Capture sheet — log the SAME 5 things every visit
-| # | Shop (type) | Top 3 pains (their words) | Current workaround | What it costs (hrs/£/stress) | Emotion 1–5 | Paid to fix before? |
-|---|---|---|---|---|---|---|
-| 1 | | | | | | |
-| 2 | | | | | | |
-| … | | | | | | |
+## Capture sheet — log the SAME things every visit
+**Learn broad on purpose** — spread across shop types (rings 1–2, plus the odd ring-3 / pub / market trader). The breadth is the point: it maps what the POS must cover.
+
+Add the key column — **tag each pain UNIVERSAL vs VERTICAL-SPECIFIC**. That tag designs the [[Go-To-Market]] Common Core (universal → build once for everyone) vs Vertical Modules (specific → bolt on later).
+
+| # | Shop (type) | Top 3 pains (their words) | **Universal / Vertical?** | Current workaround | What it costs (hrs/£/stress) | Emotion 1–5 | Paid to fix before? |
+|---|---|---|---|---|---|---|---|
+| 1 | | | | | | | |
+| 2 | | | | | | | |
+| … | | | | | | | |
 
 ## What "done" looks like
 After 5–10 shops, one pain keeps coming up — in their words, emotional, and something they've tried/paid to solve. **That's the common ground.** It becomes the app's lead feature (hypothesis before we start: goods-in time + waste). Bring the filled sheet back and we design Phase 1 around it.
