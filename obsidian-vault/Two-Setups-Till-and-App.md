@@ -1,8 +1,10 @@
 # 🧭 Two Setups — The Till (web) and The App (mobile)
 
-Back to [[Home]] · Related: [[Feature-Inventory]] · [[Domains-Index]] · [[POS-and-Checkout]] · [[Overview-Dashboard]] · [[Accounting]]
+Back to [[Home]] · Related: [[Go-To-Market]] · [[Feature-Inventory]] · [[Domains-Index]] · [[POS-and-Checkout]] · [[Overview-Dashboard]] · [[Accounting]]
 
-> **Reference plan, locked 2026-07-16.** Vendora ships as **two setups** to each shop: the **Till** (existing web app, at the counter) and a **companion App** (mobile, carried). This note is the source of truth for *what goes where* and *why*. Grounded in a full code audit (see [[2026-07-16-Two-Setups-Scope-Lock]]).
+> **⚠️ SEQUENCE CHANGED 2026-07-18 — see [[Go-To-Market]].** The build **order** flipped: we now ship the **App first** (land), then the **Till** (expand), not the other way round. This note stays the source of truth for *what goes where* (the two setups are unchanged); [[Go-To-Market]] is the source of truth for *what order and why*.
+
+> **Reference plan, scope locked 2026-07-16.** Vendora ships as **two setups** to each shop: the **Till** (existing web app, at the counter) and a **companion App** (mobile, carried). This note is the source of truth for *what goes where*. Grounded in a full code audit (see [[2026-07-16-Two-Setups-Scope-Lock]]).
 
 ## The governing rule
 - **Till (web)** = where money is taken and where the shop is run. Needs the counter + its hardware (drawer, card reader, receipt printer, customer display, scale) or a desk. Used *in place*.
@@ -45,7 +47,10 @@ Real Stripe money must not sit on cracked foundations. All of these live on the 
 - **Void-PIN bypassable** — gate `&& authorisedPin` skips the check when the PIN is simply omitted (`saleRoutes.js:346`).
 - Card path is stub/simulation (`cardPaymentService.js`, `tapToPayRoutes.js`) — replaced by the real Stripe Connect + Terminal work.
 
-## Sequence
-1. **Till foundation fixes** (atomic + idempotent sale, loyalty bug, offline key, void-PIN). ← next
-2. **Stripe Connect Express + Terminal** on the till.
-3. **App**: scaffold (React Native) + goods-in scan + owner/worker views + suggest-to-owner + mobile stock-take.
+## Sequence — REVERSED 2026-07-18 (land-and-expand, see [[Go-To-Market]])
+1. **App first (Land):** inventory + goods-in / cash-&-carry scan + expiry/waste + suppliers + owner glance. Runs on their phone, alongside their existing till → zero switching cost. Freemium. Goal: trust + data + market + learn the sharpest pain.
+2. **Till foundation fixes** (atomic + idempotent sale, loyalty bug, offline key, void-PIN) — deferred to when the POS build begins, **not cancelled**.
+3. **Till (Expand):** launch the POS to already-hooked shops as a warm upsell; sales-driven insights + cheaper card fees are the carrots.
+4. **Stripe Connect Express + Terminal** on the till, on the atomic + idempotent foundation.
+
+> The App-side detail below (goods-in on-arrival confirm, stock-take, owner/worker views) is unchanged — it's just now **phase 1**, not phase 3.
