@@ -17,6 +17,11 @@ const GiftCard = require('../models/GiftCard');
 const CashDrawer = require('../models/CashDrawer');
 const Sale = require('../models/Sale');
 const StockMovement = require('../models/StockMovement');
+const MarketTrend = require('../models/MarketTrend');
+const Expense = require('../models/Expense');
+const AccountingSettings = require('../models/AccountingSettings');
+const MarginSettings = require('../models/MarginSettings');
+const { UK_DEFAULTS } = require('../services/marginService');
 const { generateCustomerCode } = require('./helpers');
 
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 10;
@@ -50,12 +55,17 @@ async function seed() {
   });
   logger.info(`Store created: ${store.name} (${store._id})`);
 
+  // ── SUBSCRIPTION ──────────────────────────────────────────────────────────
+  const { model: Subscription } = require('../models/Subscription');
+  await Subscription.createTrial(store._id);
+  logger.info('Trial subscription created');
+
   // ── STAFF ─────────────────────────────────────────────────────────────────
   const staffData = [
-    { employeeId: 'EMP001', displayName: 'Raj Patel',  email: 'raj@rajsofflicence.co.uk', pin: '1111', password: 'owner123',   role: 'owner',      permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 100, maxRefundAmount: 9999 } },
-    { employeeId: 'EMP002', displayName: 'Sarah Jones', email: 'sarah@rajsofflicence.co.uk', pin: '2222', password: 'manager123', role: 'manager',    permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 50, maxRefundAmount: 500 } },
-    { employeeId: 'EMP003', displayName: 'Tom Brown',  pin: '3333', role: 'supervisor', permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, maxDiscountPercent: 20, maxRefundAmount: 100 } },
-    { employeeId: 'EMP004', displayName: 'Lisa Ahmed', pin: '4444', role: 'cashier',    permissions: { canVoid: false, canRefund: false, canDiscount: false, canOpenDrawer: true, maxDiscountPercent: 0, maxRefundAmount: 0 } },
+    { employeeId: 'EMP001', displayName: 'Raj Patel',  email: 'raj@rajsofflicence.co.uk', pin: '1111', password: 'owner123',   role: 'owner',      permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 100, maxRefundAmount: 9999 }, payroll: { hourlyRate: 15.00, weeklyHours: 40 } },
+    { employeeId: 'EMP002', displayName: 'Sarah Jones', email: 'sarah@rajsofflicence.co.uk', pin: '2222', password: 'manager123', role: 'manager',    permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, canManageProducts: true, canManageStaff: true, maxDiscountPercent: 50, maxRefundAmount: 500 }, payroll: { hourlyRate: 13.00, weeklyHours: 35 } },
+    { employeeId: 'EMP003', displayName: 'Tom Brown',  pin: '3333', role: 'supervisor', permissions: { canVoid: true, canRefund: true, canDiscount: true, canViewReports: true, maxDiscountPercent: 20, maxRefundAmount: 100 }, payroll: { hourlyRate: 12.21, weeklyHours: 30 } },
+    { employeeId: 'EMP004', displayName: 'Lisa Ahmed', pin: '4444', role: 'cashier',    permissions: { canVoid: false, canRefund: false, canDiscount: false, canOpenDrawer: true, maxDiscountPercent: 0, maxRefundAmount: 0 }, payroll: { hourlyRate: 12.50, weeklyHours: 20 } },
   ];
 
   const staffMembers = [];
@@ -130,6 +140,30 @@ async function seed() {
     // Misc
     { barcode: '0000NEWSPAPER1', name: 'Daily Mirror', category: 'Newspapers', pricing: { costPrice: 0.45, retailPrice: 0.90, vatRate: 'zero' }, stock: { quantity: 50, lowStockThreshold: 5 } },
     { barcode: '0000NEWSPAPER2', name: 'The Sun',      category: 'Newspapers', pricing: { costPrice: 0.40, retailPrice: 0.80, vatRate: 'zero' }, stock: { quantity: 50, lowStockThreshold: 5 } },
+    // Lottery
+    { barcode: 'LOTT-LD-200', name: 'National Lottery Lucky Dip £2',    category: 'Lottery', pricing: { costPrice: 2.00,  retailPrice: 2.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: true, minimumAge: 18, requiresChallenge25: false }, brand: 'National Lottery' },
+    { barcode: 'LOTT-LD-500', name: 'National Lottery Lucky Dip £5',    category: 'Lottery', pricing: { costPrice: 5.00,  retailPrice: 5.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'National Lottery' },
+    { barcode: 'LOTT-EM-250', name: 'EuroMillions Lucky Dip £2.50',     category: 'Lottery', pricing: { costPrice: 2.50,  retailPrice: 2.50,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'EuroMillions' },
+    { barcode: 'LOTT-TB-100', name: 'Thunderball Lucky Dip £1',         category: 'Lottery', pricing: { costPrice: 1.00,  retailPrice: 1.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'National Lottery' },
+    { barcode: 'LOTT-SL-150', name: 'Set For Life £1.50',               category: 'Lottery', pricing: { costPrice: 1.50,  retailPrice: 1.50,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'National Lottery' },
+    { barcode: 'LOTT-IW-100', name: 'Instant Win Scratchcard £1',       category: 'Lottery', pricing: { costPrice: 1.00,  retailPrice: 1.00,  vatRate: 'zero' }, stock: { quantity: 200, lowStockThreshold: 20 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'National Lottery' },
+    { barcode: 'LOTT-IW-200', name: 'Instant Win Scratchcard £2',       category: 'Lottery', pricing: { costPrice: 2.00,  retailPrice: 2.00,  vatRate: 'zero' }, stock: { quantity: 200, lowStockThreshold: 20 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'National Lottery' },
+    { barcode: 'LOTT-IW-500', name: 'Instant Win Scratchcard £5',       category: 'Lottery', pricing: { costPrice: 5.00,  retailPrice: 5.00,  vatRate: 'zero' }, stock: { quantity: 100, lowStockThreshold: 10 }, attributes: { ageRestricted: true, minimumAge: 18 }, brand: 'National Lottery' },
+    // Mobile Top-Up
+    { barcode: 'TOPUP-EE-5',   name: 'EE Top-Up £5',            category: 'Mobile Top-Up', pricing: { costPrice: 5.00,   retailPrice: 5.00,   vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'EE' },
+    { barcode: 'TOPUP-EE-10',  name: 'EE Top-Up £10',           category: 'Mobile Top-Up', pricing: { costPrice: 10.00,  retailPrice: 10.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'EE' },
+    { barcode: 'TOPUP-EE-20',  name: 'EE Top-Up £20',           category: 'Mobile Top-Up', pricing: { costPrice: 20.00,  retailPrice: 20.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'EE' },
+    { barcode: 'TOPUP-VF-5',   name: 'Vodafone Top-Up £5',      category: 'Mobile Top-Up', pricing: { costPrice: 5.00,   retailPrice: 5.00,   vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Vodafone' },
+    { barcode: 'TOPUP-VF-10',  name: 'Vodafone Top-Up £10',     category: 'Mobile Top-Up', pricing: { costPrice: 10.00,  retailPrice: 10.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Vodafone' },
+    { barcode: 'TOPUP-VF-20',  name: 'Vodafone Top-Up £20',     category: 'Mobile Top-Up', pricing: { costPrice: 20.00,  retailPrice: 20.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Vodafone' },
+    { barcode: 'TOPUP-O2-5',   name: 'O2 Top-Up £5',            category: 'Mobile Top-Up', pricing: { costPrice: 5.00,   retailPrice: 5.00,   vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'O2' },
+    { barcode: 'TOPUP-O2-10',  name: 'O2 Top-Up £10',           category: 'Mobile Top-Up', pricing: { costPrice: 10.00,  retailPrice: 10.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'O2' },
+    { barcode: 'TOPUP-O2-20',  name: 'O2 Top-Up £20',           category: 'Mobile Top-Up', pricing: { costPrice: 20.00,  retailPrice: 20.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'O2' },
+    { barcode: 'TOPUP-3-5',    name: 'Three Top-Up £5',          category: 'Mobile Top-Up', pricing: { costPrice: 5.00,   retailPrice: 5.00,   vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Three' },
+    { barcode: 'TOPUP-3-10',   name: 'Three Top-Up £10',         category: 'Mobile Top-Up', pricing: { costPrice: 10.00,  retailPrice: 10.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Three' },
+    { barcode: 'TOPUP-3-20',   name: 'Three Top-Up £20',         category: 'Mobile Top-Up', pricing: { costPrice: 20.00,  retailPrice: 20.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Three' },
+    { barcode: 'TOPUP-GG-10',  name: 'giffgaff Top-Up £10',     category: 'Mobile Top-Up', pricing: { costPrice: 10.00,  retailPrice: 10.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'giffgaff' },
+    { barcode: 'TOPUP-SKY-10', name: 'Sky Mobile Top-Up £10',   category: 'Mobile Top-Up', pricing: { costPrice: 10.00,  retailPrice: 10.00,  vatRate: 'zero' }, stock: { quantity: 999, lowStockThreshold: 0 }, attributes: { ageRestricted: false }, brand: 'Sky Mobile' },
   ];
 
   const products = [];
@@ -138,6 +172,46 @@ async function seed() {
     products.push(product);
   }
   logger.info(`Created ${products.length} products`);
+
+  // ── EXPIRY BATCHES ─────────────────────────────────────────────────────────
+  const ExpiryMarkdownRule = require('../models/ExpiryMarkdownRule');
+  const { Types: { ObjectId: ObjId } } = require('mongoose');
+
+  // Default markdown rules for the store
+  await ExpiryMarkdownRule.insertMany([
+    { store: store._id, daysBeforeExpiry: 3, discountType: 'percentage', discountAmount: 20, active: true },
+    { store: store._id, daysBeforeExpiry: 1, discountType: 'percentage', discountAmount: 40, active: true },
+    { store: store._id, daysBeforeExpiry: 0, discountType: 'percentage', discountAmount: 50, active: true },
+  ]);
+  logger.info('Default expiry markdown rules created');
+
+  // Helper: today + N days
+  const daysFromNow = (n) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(23, 59, 0, 0); return d; };
+
+  // Add expiry batches to specific products for testing
+  const expiryData = [
+    // 3 items expiring TODAY (for immediate testing)
+    { barcode: '5010116030046', batches: [{ quantity: 12, expiryDate: daysFromNow(0), status: 'expiring_soon', costPrice: 0.65 }] }, // Carling 440ml
+    { barcode: '5449000000996', batches: [{ quantity: 24, expiryDate: daysFromNow(0), status: 'expiring_soon', costPrice: 0.28 }] }, // Coca-Cola 330ml
+    { barcode: '7622210100054', batches: [{ quantity: 8,  expiryDate: daysFromNow(0), status: 'expiring_soon', costPrice: 0.90 }] }, // Cadbury Dairy Milk
+
+    // 5 items expiring in 2 days
+    { barcode: '5000267013008', batches: [{ quantity: 18, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.85 }] }, // Stella Artois
+    { barcode: '5449000133328', batches: [{ quantity: 36, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.25 }] }, // Sprite
+    { barcode: '5000159461122', batches: [{ quantity: 20, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.28 }] }, // KitKat
+    { barcode: '5000328530012', batches: [{ quantity: 30, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.20 }] }, // Walkers Ready Salted
+    { barcode: '5010251012405', batches: [{ quantity: 12, expiryDate: daysFromNow(2), status: 'expiring_soon', costPrice: 0.65 }] }, // Red Bull
+
+    // 2 items with normal/upcoming expiry (this week)
+    { barcode: '5000267024004', batches: [{ quantity: 24, expiryDate: daysFromNow(5), status: 'ok', costPrice: 0.80 }] }, // Heineken
+    { barcode: '5449000054227', batches: [{ quantity: 12, expiryDate: daysFromNow(6), status: 'ok', costPrice: 0.95 }] }, // Coca-Cola 1.75L
+  ];
+
+  for (const { barcode, batches } of expiryData) {
+    const batched = batches.map(b => ({ batchId: new ObjId().toHexString(), receivedDate: new Date(), ...b }));
+    await Product.updateOne({ store: store._id, barcode }, { $push: { expiryBatches: { $each: batched } } });
+  }
+  logger.info(`Added expiry batches to ${expiryData.length} products`);
 
   // ── CUSTOMERS ─────────────────────────────────────────────────────────────
   const customersRaw = [
@@ -282,6 +356,141 @@ async function seed() {
     salesCreated++;
   }
   logger.info(`Created ${salesCreated} historical sales`);
+
+  // ── MARKET TRENDS ─────────────────────────────────────────────────────────
+  await MarketTrend.deleteMany({});
+  await MarketTrend.insertMany([
+    // Viral / Very High Trend
+    { category: 'Energy Drinks', productName: 'Prime Energy Drink', brand: 'Prime', trendScore: 97, trendDirection: 'viral', searchVolume: 9200, searchVolumeChange: 340, avgRetailPrice: 1.99, estimatedCostPrice: 0.95, estimatedMargin: 52, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['viral','gen_z','influencer'], seasonalFactors: [{ month: 6, multiplier: 1.4 },{ month: 7, multiplier: 1.5 }] },
+    { category: 'Vapes', productName: 'Elf Bar Disposable Vape', brand: 'Elf Bar', trendScore: 91, trendDirection: 'viral', searchVolume: 8800, searchVolumeChange: 280, avgRetailPrice: 5.99, estimatedCostPrice: 2.20, estimatedMargin: 63, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['viral','vapes','tobacco_alt'], seasonalFactors: [] },
+    { category: 'Energy Drinks', productName: 'Ghost Energy Drink', brand: 'Ghost', trendScore: 85, trendDirection: 'rising', searchVolume: 5400, searchVolumeChange: 180, avgRetailPrice: 1.79, estimatedCostPrice: 0.80, estimatedMargin: 55, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['gen_z','fitness','viral'], seasonalFactors: [] },
+    { category: 'Health', productName: 'Grenade Protein Bar', brand: 'Grenade', trendScore: 82, trendDirection: 'rising', searchVolume: 4100, searchVolumeChange: 95, avgRetailPrice: 1.49, estimatedCostPrice: 0.65, estimatedMargin: 56, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['health','protein','gym'], seasonalFactors: [{ month: 1, multiplier: 1.6 },{ month: 9, multiplier: 1.3 }] },
+
+    // Rising trends
+    { category: 'Alcohol Free', productName: 'Heineken 0.0% Beer', brand: 'Heineken', trendScore: 79, trendDirection: 'rising', searchVolume: 3800, searchVolumeChange: 72, avgRetailPrice: 1.20, estimatedCostPrice: 0.55, estimatedMargin: 54, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['alcohol_free','health','dry_january'], seasonalFactors: [{ month: 1, multiplier: 2.8 },{ month: 8, multiplier: 1.2 }] },
+    { category: 'Health', productName: 'Kombucha GT\'s Original', brand: 'GT\'s', trendScore: 74, trendDirection: 'rising', searchVolume: 2900, searchVolumeChange: 58, avgRetailPrice: 2.49, estimatedCostPrice: 1.10, estimatedMargin: 56, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['health','probiotic','wellness'], seasonalFactors: [] },
+    { category: 'Soft Drinks', productName: 'Fever-Tree Sparkling Water', brand: 'Fever-Tree', trendScore: 72, trendDirection: 'rising', searchVolume: 2600, searchVolumeChange: 44, avgRetailPrice: 1.29, estimatedCostPrice: 0.55, estimatedMargin: 57, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['premium','sparkling','health'], seasonalFactors: [{ month: 6, multiplier: 1.5 },{ month: 7, multiplier: 1.6 }] },
+    { category: 'Vapes', productName: 'Lost Mary Disposable Vape', brand: 'Lost Mary', trendScore: 71, trendDirection: 'rising', searchVolume: 3100, searchVolumeChange: 110, avgRetailPrice: 5.49, estimatedCostPrice: 2.00, estimatedMargin: 64, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['vapes','tobacco_alt'], seasonalFactors: [] },
+    { category: 'Dairy Alt', productName: 'Oatly Barista Oat Milk', brand: 'Oatly', trendScore: 69, trendDirection: 'rising', searchVolume: 2200, searchVolumeChange: 38, avgRetailPrice: 1.80, estimatedCostPrice: 0.85, estimatedMargin: 53, suggestedSupplier: 'Costco', relevantFor: ['convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['health','dairy_free','vegan'], seasonalFactors: [] },
+
+    // Stable / Steady
+    { category: 'Beer', productName: 'Stella Artois 330ml Bottle', brand: 'Stella Artois', trendScore: 68, trendDirection: 'stable', searchVolume: 6500, searchVolumeChange: 3, avgRetailPrice: 1.50, estimatedCostPrice: 0.70, estimatedMargin: 53, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'internal', tags: ['beer','premium'], seasonalFactors: [{ month: 6, multiplier: 1.4 },{ month: 7, multiplier: 1.5 },{ month: 8, multiplier: 1.4 }] },
+    { category: 'Snacks', productName: 'Walkers Max Crisps 65g', brand: 'Walkers', trendScore: 66, trendDirection: 'stable', searchVolume: 4200, searchVolumeChange: 5, avgRetailPrice: 1.19, estimatedCostPrice: 0.52, estimatedMargin: 56, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['snacks','sharing'], seasonalFactors: [] },
+    { category: 'Chocolate', productName: 'Cadbury Caramilk 90g', brand: 'Cadbury', trendScore: 65, trendDirection: 'rising', searchVolume: 3100, searchVolumeChange: 29, avgRetailPrice: 1.09, estimatedCostPrice: 0.48, estimatedMargin: 56, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['chocolate','new','limited'], seasonalFactors: [{ month: 10, multiplier: 1.3 },{ month: 12, multiplier: 1.5 }] },
+    { category: 'Soft Drinks', productName: 'Celsius Energy Drink', brand: 'Celsius', trendScore: 63, trendDirection: 'rising', searchVolume: 2800, searchVolumeChange: 67, avgRetailPrice: 1.69, estimatedCostPrice: 0.75, estimatedMargin: 56, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['fitness','health','gen_z'], seasonalFactors: [] },
+
+    // New entrants
+    { category: 'Alcohol Free', productName: 'Lucky Saint Unfiltered Lager', brand: 'Lucky Saint', trendScore: 62, trendDirection: 'new', searchVolume: 1400, searchVolumeChange: 290, avgRetailPrice: 1.59, estimatedCostPrice: 0.72, estimatedMargin: 55, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience'], region: 'UK', source: 'google_trends', tags: ['alcohol_free','premium','new'], seasonalFactors: [{ month: 1, multiplier: 2.5 }] },
+    { category: 'Health', productName: 'Pip & Nut Peanut Butter Cups', brand: 'Pip & Nut', trendScore: 61, trendDirection: 'new', searchVolume: 1200, searchVolumeChange: 220, avgRetailPrice: 1.29, estimatedCostPrice: 0.58, estimatedMargin: 55, suggestedSupplier: 'Costco', relevantFor: ['convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['health','protein','new'], seasonalFactors: [] },
+    { category: 'Snacks', productName: 'Takis Fuego 160g', brand: 'Takis', trendScore: 78, trendDirection: 'viral', searchVolume: 4300, searchVolumeChange: 190, avgRetailPrice: 1.99, estimatedCostPrice: 0.85, estimatedMargin: 57, suggestedSupplier: 'Costco', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['viral','gen_z','spicy','tiktok'], seasonalFactors: [] },
+
+    // Falling
+    { category: 'Tobacco', productName: 'Marlboro Gold 20s', brand: 'Marlboro', trendScore: 58, trendDirection: 'falling', searchVolume: 7200, searchVolumeChange: -18, avgRetailPrice: 12.50, estimatedCostPrice: 11.20, estimatedMargin: 10, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['tobacco'], seasonalFactors: [] },
+    { category: 'Soft Drinks', productName: 'Lucozade Energy Original 500ml', brand: 'Lucozade', trendScore: 55, trendDirection: 'falling', searchVolume: 3800, searchVolumeChange: -12, avgRetailPrice: 1.29, estimatedCostPrice: 0.58, estimatedMargin: 55, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['energy','classic'], seasonalFactors: [] },
+
+    // Seasonal Specifics
+    { category: 'Halal / Ethnic', productName: 'Medjool Dates 500g', brand: 'Various', trendScore: 88, trendDirection: 'rising', searchVolume: 5600, searchVolumeChange: 240, avgRetailPrice: 3.99, estimatedCostPrice: 1.80, estimatedMargin: 55, suggestedSupplier: 'Bestway', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'google_trends', tags: ['ramadan','halal','seasonal'], seasonalFactors: [{ month: 3, multiplier: 4.0 },{ month: 4, multiplier: 3.5 }] },
+    { category: 'Sports Drinks', productName: 'Lucozade Sport Orange 500ml', brand: 'Lucozade', trendScore: 64, trendDirection: 'stable', searchVolume: 3200, searchVolumeChange: 8, avgRetailPrice: 1.29, estimatedCostPrice: 0.55, estimatedMargin: 57, suggestedSupplier: 'Booker', relevantFor: ['off_licence','convenience','newsagent'], region: 'UK', source: 'internal', tags: ['sports','hydration'], seasonalFactors: [{ month: 5, multiplier: 1.4 },{ month: 6, multiplier: 1.6 },{ month: 7, multiplier: 1.7 }] },
+  ]);
+  logger.info('Market trends seeded (20 products)');
+
+  // ── ACCOUNTING SETTINGS ──────────────────────────────────────────────────
+  await AccountingSettings.deleteMany({});
+  await AccountingSettings.create({
+    store: store._id,
+    vat: {
+      registered:      true,
+      vatNumber:       'GB123456789',
+      scheme:          'standard',
+      returnFrequency: 'quarterly',
+      quarterGroup:    'jan_apr_jul_oct',
+    },
+    financialYearStart: { month: 4, day: 6 },
+    payroll: {
+      enabled:             true,
+      frequency:           'monthly',
+      payDay:              25,
+      payeReference:       '123/AB45678',
+      accountsOfficeRef:   '123PX00000000',
+      pensionProvider:     'NEST',
+      pensionRateEmployee: 5,
+      pensionRateEmployer: 3,
+    },
+  });
+  logger.info('Accounting settings created');
+
+  // ── SAMPLE EXPENSES ───────────────────────────────────────────────────────
+  await Expense.deleteMany({});
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  await Expense.insertMany([
+    // This month
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 1),
+      category: 'rent_rates', description: 'Monthly shop rent — April 2026',
+      supplier: 'Highstreet Property Ltd', netAmount: 1200.00, vatAmount: 0, grossAmount: 1200.00,
+      vatRate: 0, vatReclaimable: false, paymentMethod: 'bacs', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 3),
+      category: 'utilities', description: 'Electricity bill — April 2026',
+      supplier: 'British Gas', netAmount: 155.83, vatAmount: 31.17, grossAmount: 187.00,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'direct_debit', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 5),
+      category: 'software', description: 'Vendora POS subscription — April 2026',
+      supplier: 'Vendora Ltd', netAmount: 49.00, vatAmount: 9.80, grossAmount: 58.80,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'card', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(now.getFullYear(), now.getMonth(), 7),
+      category: 'insurance', description: 'Business insurance — annual instalment',
+      supplier: 'Aviva Commercial', netAmount: 83.33, vatAmount: 0, grossAmount: 83.33,
+      vatRate: 0, vatReclaimable: false, paymentMethod: 'direct_debit', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    // Last month
+    {
+      store: store._id, date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1),
+      category: 'rent_rates', description: 'Monthly shop rent — March 2026',
+      supplier: 'Highstreet Property Ltd', netAmount: 1200.00, vatAmount: 0, grossAmount: 1200.00,
+      vatRate: 0, vatReclaimable: false, paymentMethod: 'bacs', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 3),
+      category: 'utilities', description: 'Electricity bill — March 2026',
+      supplier: 'British Gas', netAmount: 170.00, vatAmount: 34.00, grossAmount: 204.00,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'direct_debit', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+    {
+      store: store._id, date: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 15),
+      category: 'repairs', description: 'CCTV system repair',
+      supplier: 'SecureTech Ltd', netAmount: 120.00, vatAmount: 24.00, grossAmount: 144.00,
+      vatRate: 20, vatReclaimable: true, paymentMethod: 'card', paymentStatus: 'paid',
+      createdBy: staffMembers[0]._id,
+    },
+  ]);
+  logger.info('Sample expenses created (7 records)');
+
+  // ── MARGIN SETTINGS ──────────────────────────────────────────────────────
+  await MarginSettings.deleteMany({ store: store._id });
+  await MarginSettings.create({
+    store: store._id,
+    defaultMargin: 30,
+    categories: UK_DEFAULTS,
+    alertBelowMinMargin: true,
+    autoSuggestPrice: true,
+    showMarginOnPOS: false,
+  });
+  logger.info('Margin settings seeded (UK c-store defaults)');
 
   logger.info('\n========================================');
   logger.info('SEED DATA COMPLETE!');

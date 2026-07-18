@@ -206,4 +206,61 @@ router.get('/:id/performance', requireRole('manager'), async (req, res, next) =>
   }
 });
 
+// GET /api/staff/leaderboard — requireRole supervisor
+router.get('/leaderboard', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const Sale = require('../models/Sale');
+    const { period = 'today' } = req.query;
+
+    const now = new Date();
+    let startDate;
+    if (period === 'week') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 7);
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else {
+      // today
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+
+    const pipeline = [
+      {
+        $match: {
+          store: req.storeId,
+          status: 'completed',
+          isTraining: { $ne: true },
+          createdAt: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: '$staff',
+          displayName: { $first: '$staffName' },
+          totalSales: { $sum: '$total' },
+          totalTransactions: { $sum: 1 },
+          avgBasket: { $avg: '$total' },
+        },
+      },
+      { $sort: { totalSales: -1 } },
+    ];
+
+    const results = await Sale.aggregate(pipeline);
+
+    const leaderboard = results.map((entry, index) => ({
+      staffId: entry._id,
+      displayName: entry.displayName || 'Unknown',
+      totalSales: Math.round((entry.totalSales || 0) * 100) / 100,
+      totalTransactions: entry.totalTransactions || 0,
+      averageBasket: Math.round((entry.avgBasket || 0) * 100) / 100,
+      rank: index + 1,
+    }));
+
+    res.json({ success: true, leaderboard });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

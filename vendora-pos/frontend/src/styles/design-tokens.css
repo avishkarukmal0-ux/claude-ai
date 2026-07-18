@@ -1,0 +1,57 @@
+/* Vendora POS Design Tokens */
+:root {
+  /* Backgrounds */
+  --bg-primary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-elevated: #243147;
+  --bg-hover: #263347;
+  --bg-input: #141E2E;
+
+  /* Borders */
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-focus: #2563EB;
+
+  /* Brand colors */
+  --blue: #2563EB;
+  --blue-light: #60A5FA;
+  --blue-dim: rgba(37, 99, 235, 0.18);
+
+  --green: #16A34A;
+  --green-light: #4ADE80;
+  --green-dim: rgba(22, 163, 74, 0.15);
+
+  --red: #DC2626;
+  --red-light: #F87171;
+  --red-dim: rgba(220, 38, 38, 0.15);
+
+  --amber: #D97706;
+  --amber-light: #FCD34D;
+  --amber-dim: rgba(217, 119, 6, 0.15);
+
+  --purple: #7C3AED;
+  --purple-light: #A78BFA;
+  --purple-dim: rgba(124, 58, 237, 0.15);
+
+  --cyan: #0891B2;
+  --cyan-light: #67E8F9;
+  --cyan-dim: rgba(8, 145, 178, 0.15);
+
+  /* Text */
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255, 255, 255, 0.60);
+  --text-muted: rgba(255, 255, 255, 0.35);
+
+  /* Typography */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 20px;
+
+  /* Transitions */
+  --transition: all 0.15s ease;
+  --transition-fast: all 0.10s ease;
+}

@@ -1,4 +1,5 @@
 const { Schema, model, Types: { ObjectId } } = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const StaffSchema = new Schema({
   store: { type: ObjectId, ref: 'Store', required: true },
@@ -59,5 +60,25 @@ const StaffSchema = new Schema({
 
 StaffSchema.index({ store: 1, employeeId: 1 }, { unique: true });
 StaffSchema.index({ store: 1, status: 1 });
+
+// Defense-in-depth: hash any plaintext credentials before save.
+// Routes and seedData already hash before writing, so this is a safety net.
+// Checks for bcrypt prefix to avoid double-hashing.
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS, 10) || 12;
+async function maybeHash(value) {
+  if (!value || value.startsWith('$2')) return value; // already hashed
+  return bcrypt.hash(value, BCRYPT_ROUNDS);
+}
+
+StaffSchema.pre('save', async function (next) {
+  if (this.isModified('pin'))       this.pin       = await maybeHash(this.pin);
+  if (this.isModified('duressPin')) this.duressPin = await maybeHash(this.duressPin);
+  if (this.isModified('password'))  this.password  = await maybeHash(this.password);
+  next();
+});
+
+StaffSchema.methods.verifyPin = function (pin) {
+  return bcrypt.compare(pin, this.pin);
+};
 
 module.exports = model('Staff', StaffSchema);

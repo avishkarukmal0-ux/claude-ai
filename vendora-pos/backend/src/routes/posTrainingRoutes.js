@@ -6,4 +6,5 @@ router.post('/end', async (req, res, next) => { try { const { tillId } = req.bod
 router.get('/active', async (req, res, next) => { try { const session = await tms.getActive(req.query.tillId || 'TILL-1', req.storeId); res.json({ success: true, session }); } catch (err) { next(err); } });
 router.get('/is-training', async (req, res, next) => { try { const isTraining = await tms.isTraining(req.query.tillId || 'TILL-1', req.storeId); res.json({ success: true, isTraining }); } catch (err) { next(err); } });
 router.post('/sale', async (req, res, next) => { try { const { tillId, total } = req.body; await tms.recordSale(tillId || 'TILL-1', req.storeId, total || 0); res.json({ success: true }); } catch (err) { next(err); } });
+router.post('/toggle', async (req, res, next) => { try { const { active, tillId } = req.body; const tid = tillId || 'TILL-1'; const session = active ? await tms.start(req.storeId, req.user._id, req.user.displayName, tid) : await tms.end(tid, req.storeId); res.json({ success: true, session }); } catch (err) { next(err); } });
 module.exports = router;

@@ -2,8 +2,10 @@
 
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const Customer = require('../models/Customer');
 const Sale = require('../models/Sale');
+const Staff = require('../models/Staff');
 const AppError = require('../utils/AppError');
 const { requireRole } = require('../middleware/permissions');
 const loyaltyService = require('../services/loyaltyService');
@@ -142,6 +144,264 @@ router.post('/:id/points/redeem', async (req, res, next) => {
     const store = req.store;
     const result = await loyaltyService.redeemPoints(req.params.id, pointsToRedeem, null, store ? store.settings : {});
     res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/customers/:id/loyalty — manual loyalty point adjustment (used by LoyaltyPage)
+router.post('/:id/loyalty', requireRole('manager'), async (req, res, next) => {
+  try {
+    const { points, reason } = req.body;
+    if (points == null) return next(AppError.validationError('points is required'));
+    const newBalance = await loyaltyService.adjustPoints(
+      req.params.id,
+      Number(points),
+      reason || 'Manual adjustment',
+      req.user._id
+    );
+    res.json({ success: true, newBalance });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── Customer Segmentation (#117) ─────────────────────────────────────────────
+
+// GET /api/customers/segments — group customers by spend/frequency/tier
+router.get('/segments', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+
+    const [tierStats, spendBands, recentVsInactive] = await Promise.all([
+      Customer.aggregate([
+        { $match: { store: req.storeId, isActive: true } },
+        { $group: { _id: '$loyalty.tier', count: { $sum: 1 }, avgPoints: { $avg: '$loyalty.points' }, avgSpend: { $avg: '$stats.totalSpend' } } },
+        { $sort: { _id: 1 } },
+      ]),
+      Customer.aggregate([
+        { $match: { store: req.storeId, isActive: true } },
+        {
+          $bucket: {
+            groupBy: '$stats.totalSpend',
+            boundaries: [0, 50, 200, 500, 1000, 5000],
+            default: '5000+',
+            output: { count: { $sum: 1 } },
+          },
+        },
+      ]),
+      Customer.aggregate([
+        { $match: { store: req.storeId, isActive: true } },
+        {
+          $group: {
+            _id: { $cond: [{ $gte: ['$stats.lastVisitAt', thirtyDaysAgo] }, 'active', 'inactive'] },
+            count: { $sum: 1 },
+            avgSpend: { $avg: '$stats.totalSpend' },
+          },
+        },
+      ]),
+    ]);
+
+    res.json({ success: true, byTier: tierStats, bySpend: spendBands, activeVsInactive: recentVsInactive });
+  } catch (err) { next(err); }
+});
+
+// ── Birthday Rewards (#111) ──────────────────────────────────────────────────
+
+// GET /api/customers/birthday-eligible — customers whose birthday month is current
+router.get('/birthday-eligible', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const month = new Date().getMonth() + 1;
+    const customers = await Customer.find({
+      store: req.storeId,
+      isActive: true,
+      $expr: { $eq: [{ $month: '$dateOfBirth' }, month] },
+    }).select('firstName lastName email phone loyalty dateOfBirth').limit(100);
+    res.json({ success: true, month, customers });
+  } catch (err) { next(err); }
+});
+
+// POST /api/customers/birthday-rewards — auto-award birthday bonus points (#111)
+router.post('/birthday-rewards', requireRole('manager'), async (req, res, next) => {
+  try {
+    const { bonusPoints = 100 } = req.body;
+    const month = new Date().getMonth() + 1;
+
+    const customers = await Customer.find({
+      store: req.storeId,
+      isActive: true,
+      $expr: { $eq: [{ $month: '$dateOfBirth' }, month] },
+      'loyalty.birthdayBonusAwardedYear': { $ne: new Date().getFullYear() },
+    });
+
+    let awarded = 0;
+    for (const c of customers) {
+      try {
+        await loyaltyService.adjustPoints(c._id, bonusPoints, `Birthday bonus — ${new Date().getFullYear()}`, req.user._id);
+        c.loyalty.birthdayBonusAwardedYear = new Date().getFullYear();
+        await c.save();
+        awarded++;
+      } catch { /* skip individual failures */ }
+    }
+
+    res.json({ success: true, eligible: customers.length, awarded, bonusPoints });
+  } catch (err) { next(err); }
+});
+
+// ── Account Payment for Trade Customers (#119) ───────────────────────────────
+
+// GET /api/customers/:id/account — get credit account info
+router.get('/:id/account', async (req, res, next) => {
+  try {
+    const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId })
+      .select('firstName lastName customerCode account');
+    if (!customer) return next(AppError.notFound('Customer'));
+    res.json({ success: true, customer });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/customers/:id/account — set credit limit / enable account
+router.put('/:id/account', requireRole('manager'), async (req, res, next) => {
+  try {
+    const { creditLimit, isTradeAccount, paymentTermsDays } = req.body;
+    const customer = await Customer.findOneAndUpdate(
+      { _id: req.params.id, store: req.storeId },
+      {
+        'account.isTradeAccount': isTradeAccount,
+        'account.creditLimit': creditLimit,
+        'account.paymentTermsDays': paymentTermsDays || 30,
+      },
+      { new: true }
+    );
+    if (!customer) return next(AppError.notFound('Customer'));
+    res.json({ success: true, customer });
+  } catch (err) { next(err); }
+});
+
+// POST /api/customers/:id/account/payment — record account payment
+router.post('/:id/account/payment', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const { amount, method = 'bank_transfer', reference, notes } = req.body;
+    const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId });
+    if (!customer) return next(AppError.notFound('Customer'));
+
+    const currentBalance = customer.account?.balance || 0;
+    const newBalance = Number((currentBalance - Number(amount)).toFixed(2));
+
+    await Customer.findByIdAndUpdate(req.params.id, {
+      'account.balance': newBalance,
+      $push: {
+        'account.payments': {
+          amount: Number(amount),
+          method,
+          reference,
+          notes,
+          recordedBy: req.user._id,
+          recordedByName: req.user.displayName,
+          recordedAt: new Date(),
+        },
+      },
+    });
+
+    res.json({ success: true, previousBalance: currentBalance, payment: Number(amount), newBalance });
+  } catch (err) { next(err); }
+});
+
+// ── GDPR Endpoints ───────────────────────────────────────────────────────────
+
+// GET /api/customers/:id/export — full data export (GDPR Article 20)
+router.get('/:id/export', requireRole('manager'), async (req, res, next) => {
+  try {
+    const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId });
+    if (!customer) return next(AppError.notFound('Customer'));
+
+    const purchases = await Sale.find({ customer: req.params.id, store: req.storeId })
+      .sort({ completedAt: -1 })
+      .select('receiptNumber total status completedAt items payments staffName');
+
+    const export_ = {
+      exportedAt: new Date().toISOString(),
+      exportedBy: req.user?._id,
+      profile: {
+        customerCode: customer.customerCode,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        phone: customer.phone,
+        dateOfBirth: customer.dateOfBirth,
+        address: customer.address,
+        marketingConsent: customer.marketingConsent,
+        createdAt: customer.createdAt,
+      },
+      loyalty: {
+        points: customer.loyalty?.points,
+        tier: customer.loyalty?.tier,
+        totalEarned: customer.loyalty?.totalEarned,
+        totalRedeemed: customer.loyalty?.totalRedeemed,
+        joinedAt: customer.loyalty?.joinedAt,
+        pointsHistory: customer.loyalty?.pointsHistory,
+      },
+      purchases,
+      stats: customer.stats,
+    };
+
+    res.setHeader('Content-Disposition', `attachment; filename="customer-export-${customer.customerCode}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(export_);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/customers/:id/gdpr-delete — anonymise personal data (GDPR Article 17)
+// Requires owner role + PIN confirmation. Keeps transactions for tax compliance.
+router.delete('/:id/gdpr-delete', requireRole('owner'), async (req, res, next) => {
+  try {
+    const { confirmPin } = req.body;
+    if (!confirmPin) return next(AppError.validation('confirmPin is required'));
+
+    // Verify owner PIN before proceeding
+    const owner = await Staff.findById(req.user._id);
+    if (!owner?.pin) return next(AppError.authInvalidCredentials());
+    const pinValid = await bcrypt.compare(String(confirmPin), owner.pin);
+    if (!pinValid) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_INVALID', message: 'Invalid PIN — deletion cancelled' },
+      });
+    }
+
+    const customer = await Customer.findOne({ _id: req.params.id, store: req.storeId });
+    if (!customer) return next(AppError.notFound('Customer'));
+
+    await Customer.findByIdAndUpdate(req.params.id, {
+      firstName: 'Deleted',
+      lastName: 'User',
+      email: null,
+      phone: null,
+      dateOfBirth: null,
+      address: null,
+      marketingConsent: false,
+      isActive: false,
+      'loyalty.pointsHistory': [],
+      gdprDeletedAt: new Date(),
+      gdprDeletedBy: req.user._id,
+    });
+
+    // Audit log
+    console.info(JSON.stringify({
+      type: 'gdpr_delete',
+      customerId: req.params.id,
+      customerCode: customer.customerCode,
+      storeId: req.storeId,
+      deletedBy: req.user._id,
+      ts: new Date().toISOString(),
+    }));
+
+    res.json({
+      success: true,
+      message: 'Customer personal data anonymised. Transaction records retained for tax compliance.',
+    });
   } catch (err) {
     next(err);
   }

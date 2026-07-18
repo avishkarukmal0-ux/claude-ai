@@ -2,10 +2,27 @@
 
 require('dotenv').config();
 
+// ── Startup security checks ───────────────────────────────────────────────────
+// Warn about weak secrets but never exit — Railway injects env vars at runtime
+// and process.exit(1) here would kill the dyno before env vars are available.
+const WEAK_SECRETS = ['vendora-dev-secret-fallback', 'vendora-refresh-secret-fallback', 'change-me', 'secret'];
+const jwtSecret        = process.env.JWT_SECRET || '';
+const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || '';
+
+if (!jwtSecret || jwtSecret.length < 32 || WEAK_SECRETS.some(w => jwtSecret.includes(w))) {
+  console.warn('\n⚠  WARNING: JWT_SECRET is missing or weak — auth tokens will be insecure');
+  console.warn('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
+  console.warn('   Set it as JWT_SECRET in Railway dashboard (Variables)\n');
+}
+if (!jwtRefreshSecret || jwtRefreshSecret.length < 32 || WEAK_SECRETS.some(w => jwtRefreshSecret.includes(w))) {
+  console.warn('⚠  WARNING: JWT_REFRESH_SECRET is missing or weak\n');
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const requestLogger = require('./middleware/requestLogger');
+const auditLog = require('./middleware/auditLog');
 const errorHandler = require('./middleware/errorHandler');
 const storeContext = require('./middleware/storeContext');
 const { generalLimiter } = require('./middleware/rateLimit');
@@ -18,12 +35,77 @@ const app = express();
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1);
 
-// Security
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+// ── Health check + root — registered FIRST so Railway/load-balancer probes always respond ──
+// Must be before helmet, CORS, rate-limiting, and all other middleware.
+const healthHandler = (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0', env: process.env.NODE_ENV });
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+app.get('/', (req, res) => {
+  res.json({ message: 'Vendora POS API', version: '3.0.0', status: 'running' });
+});
 
-// CORS
+// Security headers
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  hsts: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc:      ["'self'", 'data:', 'blob:'],
+      connectSrc:  ["'self'",
+        'https://*.mongodb.net',
+        'https://*.upstash.io',
+        'wss://localhost:*', 'ws://localhost:*',
+        ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : []),
+      ],
+      objectSrc:   ["'none'"],
+      frameSrc:    ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+    },
+  },
+}));
+
+// HTTPS redirect in production (#178)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (!req.secure && req.get('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, 'https://' + req.headers.host + req.url);
+    }
+    next();
+  });
+}
+
+// CORS — explicit origins + wildcard patterns for Vercel/Railway deployments
+const explicitOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean);
+
+if (process.env.FRONTEND_URL) explicitOrigins.push(process.env.FRONTEND_URL.trim());
+
+const ORIGIN_PATTERNS = [
+  /^https?:\/\/.*\.vercel\.app$/,
+  /^https?:\/\/.*\.railway\.app$/,
+];
+
+function isOriginAllowed(origin) {
+  if (!origin) return true; // curl, same-origin, mobile apps
+  if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (explicitOrigins.includes(origin)) return true;
+  if (ORIGIN_PATTERNS.some(re => re.test(origin))) return true;
+  return false;
+}
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -36,13 +118,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Request logging
 app.use(requestLogger);
 
+// Security audit log (sensitive routes)
+app.use('/api', auditLog);
+
 // Rate limiting
 app.use('/api', generalLimiter);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0' });
-});
 
 // Uploads directory
 const uploadPath = process.env.UPLOAD_PATH || './uploads';
