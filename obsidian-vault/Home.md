@@ -27,6 +27,7 @@
 - [[State-and-Contexts]] — React contexts, hooks, services
 
 ### Strategy 🎯
+- [[Implementation-Roadmap]] — 🗓️ **the build plan**: milestones M0–M5, locked decisions, first move ⭐
 - [[The-Whole-Story]] — 🧭 **the full arc on one page**: turning point · niches · what we build ⭐
 - [[App-Kickoff]] — 🚀 **START HERE in a fresh tab**: the one-page hand-off to begin building the Phase-1 app ⭐
 - [[Winning-Strategy]] — 🏆 **how we win**: burden-first not feature-first; accuracy + trust beat AI clones ⭐

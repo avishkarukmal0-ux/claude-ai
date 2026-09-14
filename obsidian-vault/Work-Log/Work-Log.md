@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-14-Implementation-Roadmap]] — turned the locked strategy into a **sprint-by-sprint build plan** (M0–M5 + Phase 2), each with a "done when" test; locked 4 decisions (PWA shell, lead pain = goods-in + MTD, freemium line, first vertical = off-licence) → [[Implementation-Roadmap]]
 - [[2026-07-18-Niche-Pain-Research]] — desk research across ~12 Phase-1 niches; **new top wedge: MTD for Income Tax (Apr 2026)**; perishable waste = biggest untooled leak; vape compliance-by-design; market-trader phone-first thesis validated → [[Niche-Pain-Research]]
 - [[2026-07-18-Go-To-Market-Pivot]] — **strategy pivot**: ship the **App first** (land — inventory/back-office on their phone, zero switching cost), earn trust+data+market, **then launch the Till** (expand). Reverses the till-first order. iPad-first; no-capital.
 - [[2026-07-16-Pricing-and-Margin-Validation]] — validated **£29/59/99 tiers** (keep) + computed the **payment margin**: works only on Stripe **Interchange++** (break-even basket ~£4 vs ~£100 on standard); +£77/store/mo at base case
