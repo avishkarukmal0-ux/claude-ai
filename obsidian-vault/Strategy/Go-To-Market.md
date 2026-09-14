@@ -47,6 +47,18 @@ Same feature-flag mechanism, second axis (plan × shopType). E.g. off-licence �
 
 **Note:** the architecture lets us *add* verticals cheaply later — it does NOT mean build them all now. Build core + first vertical; bolt on the rest as discovery/demand justifies.
 
+##### The 4-family taxonomy (canonical grouping, 2026-09-14)
+The ~12 shop types collapse into **4 families grouped by the module bundle each needs** (not by name) — so we build **4 bundles, not 12**. This is the live registry in `frontend/src/config/shopTypes.js` and the picker screen. Full detail: [[2026-09-14-Recategorise-Niches-4-Families]].
+
+| Family | Shared module bundle | Members |
+|---|---|---|
+| **Grocery & age-restricted** | barcode grocery + goods-in + margins + **age-verification** + PMP | Convenience/Mini-mart · Off-licence · Newsagent/CTN · Vape & CBD |
+| **Fresh & weighed** | **scale/loose-weight** + expiry/use-by + markdown + traceability/PPDS + production | Greengrocer · Butcher/Fishmonger · Bakery/Deli |
+| **World & specialist foods** | perishables + suppliers + **allergen/compliance** + cultural-calendar demand | International grocer · Health-food |
+| **Mobile & value** | **ad-hoc/no-barcode pricing** + phone-first + dead-stock | Market trader · Discount/Pound · Pet shop |
+
+The insight: off-licence / newsagent / vape are the *same grocery core + one toggle*, not separate builds. Modules key off `family` first, `member` for the toggle.
+
 #### Adjacent beachhead segments (widen the app's reach, ~0 new build)
 Off-licence + mini-mart are already covered by the built features. Three adjacencies that **reuse what's built, keep the cash-&-carry goods-in hook, and keep the moat** (age-verification and/or expiry) — widen the discovery net across these:
 1. **Newsagents / CTN** (Confectionery–Tobacco–Newsagent) — closest cousin; reuses age-verification (tobacco), barcode, goods-in, margins, PMP, loyalty. Wrinkle: newspaper/magazine sale-or-return (optional).
