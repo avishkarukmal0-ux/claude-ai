@@ -26,12 +26,14 @@ Make the existing code phone-ready and safe to build on.
 - **Done:** install on a phone → pick a shop type → land on a mobile home tailored to it. *(Live sales/numbers await the backend connection — see below.)*
 - ⏳ **Deferred to backend wiring:** real login/store-scoping on mobile + live data (needs MongoDB Atlas URI + always-on backend).
 
-### M1 — The daily hook: goods-in scan *(weeks 2–3)* ⭐
-The single most important build. ~70% exists (invoiceReader template).
-- Camera/barcode scan → goods-in session (add lines as you scan the trolley).
-- Unknown barcode → quick-create product inline.
-- "Received" → one `stockMovementService.receive()` that **increments stock + updates cost** (kill the inline `$inc` copies).
-- **Done when:** a shopkeeper scans a cash-&-carry trolley on their phone and stock + costs are correct after "Received."
+### M1 — The daily hook: goods-in scan *(weeks 2–3)* ⭐ — 🟢 working (local-first) 2026-09-14
+The single most important build — the first genuinely pay-worthy feature.
+- ✅ Camera/barcode scan (native `BarcodeDetector`) → goods-in session; manual entry fallback everywhere. *([[2026-09-14-Goods-In-And-Inventory]])*
+- ✅ Unknown barcode → quick-create inline; known barcode → prefills name/cost.
+- ✅ "Receive" → **increments stock + updates cost**; live **Inventory** view (search, low-stock, margins, qty steppers).
+- ✅ **Local-first** (`inventoryStore.js` over localStorage) — real & offline today; **survives reload**. Verified end-to-end in headless Chromium.
+- ⏳ **Backend leg (deferred):** sync stock across devices + the server-side `stockMovementService.receive()` — needs the DB connected.
+- **Done (local):** scan/type a trolley on the phone → stock + costs correct after Receive, persisted.
 
 ### M2 — MTD core + owner glance *(weeks 4–5)*
 The universal wedge + the reason the owner opens it daily.

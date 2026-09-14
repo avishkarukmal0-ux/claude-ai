@@ -6,6 +6,8 @@ import {
 } from '../config/shopTypes';
 import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
+import InventoryView from '../components/inventory/InventoryView';
+import GoodsInView from '../components/inventory/GoodsInView';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -104,16 +106,20 @@ export default function HomePage() {
             <div className="grid grid-cols-2 gap-3">
               {modules.map((m) => {
                 const Icon = m.icon;
+                const clickable = m.live && m.tab;
+                const Tag = clickable ? 'button' : 'div';
                 return (
-                  <div
+                  <Tag
                     key={m.id}
-                    className="relative flex flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                    type={clickable ? 'button' : undefined}
+                    onClick={clickable ? () => setTab(m.tab) : undefined}
+                    className={`relative flex flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm ${
+                      clickable ? 'transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2' : ''
+                    }`}
                   >
-                    {!m.live && (
-                      <span className="absolute right-2 top-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                        Soon
-                      </span>
-                    )}
+                    <span className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${m.live ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-400'}`}>
+                      {m.live ? 'Ready' : 'Soon'}
+                    </span>
                     <span
                       className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl"
                       style={{ backgroundColor: `${accent}1A`, color: accent }}
@@ -122,30 +128,16 @@ export default function HomePage() {
                     </span>
                     <span className="text-sm font-semibold leading-tight text-gray-900">{m.label}</span>
                     <span className="mt-1 text-[11px] leading-snug text-gray-500">{m.desc}</span>
-                  </div>
+                  </Tag>
                 );
               })}
             </div>
           </>
         )}
 
-        {tab === 'scan' && (
-          <ComingSoon
-            icon={ScanLine}
-            accent={accent}
-            title="Goods-in scan"
-            body="Scan your cash-&-carry trolley on arrival and stock updates itself. This is what we’re building next."
-          />
-        )}
+        {tab === 'scan' && <GoodsInView />}
 
-        {tab === 'stock' && (
-          <ComingSoon
-            icon={Package2}
-            accent={accent}
-            title="Stock"
-            body="Your live inventory, stock-takes and reorder suggestions will live here."
-          />
-        )}
+        {tab === 'stock' && <InventoryView />}
 
         {tab === 'more' && (
           <section className="space-y-2">
@@ -229,20 +221,3 @@ function NavTab({ label, icon: Icon, active, onClick, accent }) {
   );
 }
 
-function ComingSoon({ icon: Icon, accent, title, body }) {
-  return (
-    <div className="mt-8 flex flex-col items-center text-center">
-      <span
-        className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
-        style={{ backgroundColor: `${accent}1A`, color: accent }}
-      >
-        <Icon className="h-8 w-8" strokeWidth={1.75} />
-      </span>
-      <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-      <p className="mt-2 max-w-xs text-sm text-gray-500">{body}</p>
-      <span className="mt-4 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
-        Coming soon
-      </span>
-    </div>
-  );
-}
