@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Home as HomeIcon, ScanLine, Package2, MoreHorizontal, Settings, LogIn, ChevronRight } from 'lucide-react';
+import { Home as HomeIcon, ScanLine, Package2, MoreHorizontal, Settings, LogIn, ChevronRight, X } from 'lucide-react';
 import {
   getSavedShopType, getFamily, getMember, getModulesForFamily,
 } from '../config/shopTypes';
+import { getQuickToolsForFamily } from '../config/quickTools';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -13,6 +14,7 @@ import {
 export default function HomePage() {
   const saved = getSavedShopType();
   const [tab, setTab] = useState('home');
+  const [activeTool, setActiveTool] = useState(null);
 
   // No shop type picked yet → send them to the front door.
   if (!saved) return <Navigate to="/" replace />;
@@ -21,7 +23,9 @@ export default function HomePage() {
   const member = saved.memberId ? getMember(saved.familyId, saved.memberId) : null;
   const shopLabel = member?.label || family.label;
   const modules = getModulesForFamily(saved.familyId);
+  const tools = getQuickToolsForFamily(saved.familyId);
   const accent = family.accent;
+  const ToolComponent = activeTool?.component || null;
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -59,6 +63,35 @@ export default function HomePage() {
                     </li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            {/* Quick tools — glance-and-go helpers that work right now (no login, no backend) */}
+            {tools.length > 0 && (
+              <section className="mb-5">
+                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Quick tools</h2>
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {tools.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setActiveTool(t)}
+                        className="flex w-32 shrink-0 flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                      >
+                        <span
+                          className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg"
+                          style={{ backgroundColor: `${accent}1A`, color: accent }}
+                        >
+                          <Icon className="h-5 w-5" strokeWidth={1.75} />
+                        </span>
+                        <span className="text-sm font-semibold leading-tight text-gray-900">{t.label}</span>
+                        <span className="mt-0.5 text-[11px] leading-snug text-gray-500">{t.tagline}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </section>
             )}
 
@@ -139,6 +172,36 @@ export default function HomePage() {
         <NavTab label="Stock" icon={Package2} active={tab === 'stock'} onClick={() => setTab('stock')} accent={accent} />
         <NavTab label="More"  icon={MoreHorizontal} active={tab === 'more'} onClick={() => setTab('more')} accent={accent} />
       </nav>
+
+      {/* Quick-tool modal */}
+      {activeTool && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+          onClick={() => setActiveTool(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={activeTool.label}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-xl sm:rounded-3xl"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-gray-900">{activeTool.label}</h3>
+              <button
+                type="button"
+                onClick={() => setActiveTool(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {ToolComponent && <ToolComponent />}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

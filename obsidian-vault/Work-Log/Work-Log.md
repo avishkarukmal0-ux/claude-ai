@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-14-Quick-Tools]] — added glance-and-go **helper tools** (no POS, no backend): MTD countdown · margin calculator · age-check helper; per-shop-type gated; verified end-to-end
 - [[2026-09-14-Mobile-App-Home]] — **M0 complete**: pick → Continue → a mobile **app-home** tailored to the shop type (module catalog: core + family extras) + bottom-nav shell; verified end-to-end → [[Implementation-Roadmap]]
 - [[2026-09-14-Picker-Value-Promises]] — front door now sells + works: per-family **burden-first value promises**, a trust strap-line, and a **"Log in"** link for returning shops
 - [[2026-09-14-Recategorise-Niches-4-Families]] — grouped the ~12 shop types into **4 families by shared module bundle** (Grocery & age-restricted · Fresh & weighed · World & specialist · Mobile & value); picker now shows 4 tiles + optional sub-type → build 4 bundles not 12
