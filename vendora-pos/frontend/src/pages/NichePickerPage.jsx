@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Sparkles, Check, ChevronLeft } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Sparkles, Check, ChevronLeft, ArrowRight } from 'lucide-react';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
 
 /**
@@ -9,6 +9,7 @@ import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } f
  * Mobile-first: 1-up families on phones, 2-up on larger screens.
  */
 export default function NichePickerPage() {
+  const navigate = useNavigate();
   const saved = getSavedShopType();
   const [familyId, setFamilyId] = useState(saved?.familyId || null);
   const [memberId, setMemberId] = useState(saved?.memberId || null);
@@ -170,9 +171,18 @@ export default function NichePickerPage() {
         {/* Footer / confirmation */}
         <div className="mt-auto pt-6">
           {family ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl bg-success-light px-4 py-3 text-center text-sm font-medium text-success-dark">
-              <Sparkles className="h-4 w-4 shrink-0" />
-              Vendora is set up for {memberId ? getMember(familyId, memberId)?.label : family.label}.
+            <div className="space-y-3">
+              <div className="flex items-center justify-center gap-2 rounded-xl bg-success-light px-4 py-3 text-center text-sm font-medium text-success-dark">
+                <Sparkles className="h-4 w-4 shrink-0" />
+                Vendora is set up for {memberId ? getMember(familyId, memberId)?.label : family.label}.
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/home')}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-primary-600 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              >
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
           ) : (
             <p className="text-center text-xs text-gray-400">Tap the category that fits your shop.</p>

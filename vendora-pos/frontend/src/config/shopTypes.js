@@ -11,6 +11,8 @@ import {
   Wine, Newspaper, Cloud, ShoppingBasket,
   Carrot, Beef, Croissant,
   Leaf, Truck, BadgePercent, PawPrint,
+  LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
+  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote,
 } from 'lucide-react';
 
 export const SHOP_FAMILIES = [
@@ -27,6 +29,7 @@ export const SHOP_FAMILIES = [
       'Scan the cash-&-carry trolley — stock’s done',
       'Age checks logged for you',
     ],
+    moduleIds: ['age-check'],
     members: [
       { id: 'convenience', label: 'Convenience / Mini-mart', icon: ShoppingBasket, extra: 'Everyday grocery & chilled' },
       { id: 'off-licence', label: 'Off-licence', icon: Wine, extra: 'Alcohol duty & MUP' },
@@ -46,6 +49,7 @@ export const SHOP_FAMILIES = [
       'Weigh, price & label in one tap',
       'Use-by dates & traceability handled',
     ],
+    moduleIds: ['scale-labels', 'allergens'],
     members: [
       { id: 'greengrocer', label: 'Greengrocer', icon: Carrot, extra: 'Loose produce & daily repricing' },
       { id: 'butcher', label: 'Butcher / Fishmonger', icon: Beef, extra: 'Cuts, scale & traceability' },
@@ -64,6 +68,7 @@ export const SHOP_FAMILIES = [
       'Allergens & labels done right',
       'Every supplier’s prices in one place',
     ],
+    moduleIds: ['festival', 'allergens'],
     members: [
       { id: 'ethnic-grocer', label: 'International grocer', icon: Globe, extra: 'World foods & fresh produce' },
       { id: 'health-food', label: 'Health-food', icon: Leaf, extra: 'Batch, expiry & allergens' },
@@ -81,6 +86,7 @@ export const SHOP_FAMILIES = [
       'Cash & card totals reconciled on your phone',
       'See what’s not selling',
     ],
+    moduleIds: ['reconcile'],
     members: [
       { id: 'market-trader', label: 'Market trader', icon: Truck, extra: 'Phone-first cash & card' },
       { id: 'discount-pound', label: 'Discount / Pound', icon: BadgePercent, extra: 'Ad-hoc pricing & dead-stock' },
@@ -88,6 +94,33 @@ export const SHOP_FAMILIES = [
     ],
   },
 ];
+
+// ---- Module catalog ----------------------------------------------------------
+// Every module a shop can see. Which set a shop gets = CORE + its family's extras.
+// `live: false` = not built on mobile yet (shows a "Soon" badge on the home screen).
+export const MODULES = {
+  overview:    { id: 'overview',    label: 'Owner glance',   icon: LayoutDashboard, desc: 'Takings, waste & margin', live: false },
+  'goods-in':  { id: 'goods-in',    label: 'Goods-in scan',  icon: ScanLine,        desc: 'Scan the trolley on arrival', live: false },
+  inventory:   { id: 'inventory',   label: 'Inventory',      icon: Package,         desc: 'Products, prices & stock', live: false },
+  expiry:      { id: 'expiry',      label: 'Expiry & waste', icon: CalendarClock,   desc: 'Stop paying twice for waste', live: false },
+  suppliers:   { id: 'suppliers',   label: 'Suppliers',      icon: Truck,           desc: 'Orders & best prices', live: false },
+  mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
+  'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
+  'scale-labels': { id: 'scale-labels', label: 'Scale & labels', icon: ClipboardList, desc: 'Weigh, price & PPDS', live: false },
+  'festival':  { id: 'festival',    label: 'Festival planner', icon: CalendarHeart, desc: 'Order ahead for peak weeks', live: false },
+  allergens:   { id: 'allergens',   label: 'Allergens',      icon: AlertTriangle,   desc: 'PPDS & Natasha’s Law', live: false },
+  reconcile:   { id: 'reconcile',   label: 'Cash & card',    icon: Banknote,        desc: 'Totals reconciled on your phone', live: false },
+};
+
+// Core modules every shop gets, in display order.
+export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'expiry', 'suppliers', 'mtd', 'overview'];
+
+/** All modules for a family, in display order: core + that family's extras. */
+export function getModulesForFamily(familyId) {
+  const fam = getFamily(familyId);
+  const extraIds = fam?.moduleIds || [];
+  return [...CORE_MODULE_IDS, ...extraIds].map((id) => MODULES[id]).filter(Boolean);
+}
 
 export const SHOP_TYPE_STORAGE_KEY = 'vendora_shop_type'; // stores "familyId" or "familyId:memberId"
 

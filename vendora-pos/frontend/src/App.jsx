@@ -8,6 +8,7 @@ import { OfflineProvider } from './context/OfflineContext';
 import { NotificationProvider } from './context/NotificationContext';
 import Layout from './components/Layout';
 import NichePickerPage from './pages/NichePickerPage';
+import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import SubscriptionSuccessPage from './pages/SubscriptionSuccessPage';
@@ -62,8 +63,10 @@ export default function App() {
               <OfflineProvider>
                 <NotificationProvider>
                   <Routes>
-                    {/* Public front door — the 9-niche shop-type picker (replaces login as the entry for now). */}
+                    {/* Public front door — the shop-type picker (replaces login as the entry for now). */}
                     <Route path="/" element={<NichePickerPage />} />
+                    {/* Public mobile app-home — reflects the chosen shop type (M0). */}
+                    <Route path="/home" element={<HomePage />} />
                     <Route path="/login" element={<LoginPage />} />
                     {/* Authenticated app — same paths as before, now behind a path-less protected layout. */}
                     <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

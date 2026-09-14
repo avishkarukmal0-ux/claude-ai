@@ -18,12 +18,13 @@ Back to [[Home]] · Reads with [[The-Whole-Story]] · [[App-Kickoff]] · [[Featu
 
 ## The milestones (each ships something usable)
 
-### M0 — Foundations *(week 1)* — 🟡 in progress
+### M0 — Foundations *(week 1)* — ✅ done 2026-09-14
 Make the existing code phone-ready and safe to build on.
-- ✅ PWA shell: manifest + service worker on the existing frontend; installable "Add to Home Screen". *(done 2026-09-14 — [[2026-09-14-M0-PWA-Foundation]]; build + served-artifact verified.)*
-- ⬜ Mobile-first shell/nav for the app views (owner vs worker).
-- ⬜ Auth + store-scoping confirmed on mobile (login store-picker already exists).
-- **Done when:** you can install Vendora on a phone, log in, pick a store, see an (empty) mobile home.
+- ✅ PWA shell: manifest + service worker; installable "Add to Home Screen". *([[2026-09-14-M0-PWA-Foundation]])*
+- ✅ Front door = 4-family shop-type picker (login no longer forced) *([[2026-09-14-Niche-Picker-Front-Door]], [[2026-09-14-Recategorise-Niches-4-Families]])* + sells (promises/trust/log-in) *([[2026-09-14-Picker-Value-Promises]])*.
+- ✅ Mobile-first shell/nav + app-home: pick → **Continue** → `/home` with a tailored module grid (shopType dial visible) and a bottom-nav shell *([[2026-09-14-Mobile-App-Home]])*.
+- **Done:** install on a phone → pick a shop type → land on a mobile home tailored to it. *(Live sales/numbers await the backend connection — see below.)*
+- ⏳ **Deferred to backend wiring:** real login/store-scoping on mobile + live data (needs MongoDB Atlas URI + always-on backend).
 
 ### M1 — The daily hook: goods-in scan *(weeks 2–3)* ⭐
 The single most important build. ~70% exists (invoiceReader template).
