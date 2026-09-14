@@ -40,8 +40,9 @@ The universal wedge + the reason the owner opens it daily.
 
 ### M3 — shopType architecture + app faces *(weeks 6–7)*
 The dial that lets one app serve every inch.
-- `shopType` field on the store; extend `PLAN_FEATURES` (`backend/src/models/Subscription.js`) → shown = Core + (plan) + (shopType).
-- Module **registry** (config map, no `if`-spaghetti); default at signup + owner toggle.
+- ✅ *Head start:* front-end **shop-type registry** (`frontend/src/config/shopTypes.js`) + the 9-niche **picker** now the app's front door *(2026-09-14 — [[2026-09-14-Niche-Picker-Front-Door]])*. Config-driven, no `if`-spaghetti.
+- ⬜ `shopType` field on the store; extend `PLAN_FEATURES` (`backend/src/models/Subscription.js`) → shown = Core + (plan) + (shopType).
+- ⬜ Module **registry** wiring modules → shopType; default at signup + owner toggle.
 - Worker view (expiring-soon + trends; wire MarketIntel's dead buttons) + suggest-to-owner loop.
 - **Done when:** switching a store's `shopType` changes its visible modules with no code change.
 

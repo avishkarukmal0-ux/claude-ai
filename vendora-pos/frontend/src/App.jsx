@@ -7,6 +7,7 @@ import { SubscriptionProvider } from './context/SubscriptionContext';
 import { OfflineProvider } from './context/OfflineContext';
 import { NotificationProvider } from './context/NotificationContext';
 import Layout from './components/Layout';
+import NichePickerPage from './pages/NichePickerPage';
 import LoginPage from './pages/LoginPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import SubscriptionSuccessPage from './pages/SubscriptionSuccessPage';
@@ -51,14 +52,6 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
-// Where you land after login. Owners/managers/supervisors get the "Owner Home"
-// (Overview) so the state of the shop is the first thing they see; cashiers go
-// straight to the till.
-function HomeRedirect() {
-  const { hasRole } = useAuth();
-  return <Navigate to={hasRole('supervisor') ? '/overview' : '/pos'} replace />;
-}
-
 export default function App() {
   return (
     <BrowserRouter>
@@ -69,40 +62,42 @@ export default function App() {
               <OfflineProvider>
                 <NotificationProvider>
                   <Routes>
+                    {/* Public front door — the 9-niche shop-type picker (replaces login as the entry for now). */}
+                    <Route path="/" element={<NichePickerPage />} />
                     <Route path="/login" element={<LoginPage />} />
-                    <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                      <Route index element={<HomeRedirect />} />
-                      <Route path="overview" element={<ProtectedRoute requiredRole="supervisor"><OverviewPage /></ProtectedRoute>} />
-                      <Route path="pos" element={<POSPage />} />
-                      <Route path="products" element={<ProductsPage />} />
-                      <Route path="customers" element={<CustomersPage />} />
-                      <Route path="staff" element={<ProtectedRoute requiredRole="manager"><StaffPage /></ProtectedRoute>} />
-                      <Route path="reports" element={<ProtectedRoute requiredRole="supervisor"><ReportsPage /></ProtectedRoute>} />
-                      <Route path="cash-management" element={<CashManagementPage />} />
-                      <Route path="loss-prevention" element={<ProtectedRoute requiredRole="supervisor"><LossPreventionPage /></ProtectedRoute>} />
-                      <Route path="suppliers" element={<SuppliersPage />} />
-                      <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
-                      <Route path="promotions" element={<PromotionsPage />} />
-                      <Route path="gift-cards" element={<GiftCardsPage />} />
-                      <Route path="smart-reorder" element={<SmartReorderPage />} />
-                      <Route path="transactions" element={<TransactionHistoryPage />} />
-                      <Route path="stock-take" element={<StockTakePage />} />
-                      <Route path="expiry" element={<ExpiryDashboardPage />} />
-                      <Route path="invoice-reader" element={<InvoiceReaderPage />} />
-                      <Route path="market" element={<MarketIntelPage />} />
-                      <Route path="schedule" element={<SchedulePage />} />
-                      <Route path="invoices" element={<ProtectedRoute requiredRole="supervisor"><InvoicesPage /></ProtectedRoute>} />
-                      <Route path="loyalty" element={<LoyaltyPage />} />
-                      <Route path="label-printing" element={<LabelPrintingPage />} />
-                      <Route path="offline-queue" element={<OfflineQueuePage />} />
-                      <Route path="training" element={<TrainingModePage />} />
-                      <Route path="challenge25" element={<ProtectedRoute requiredRole="supervisor"><Challenge25Page /></ProtectedRoute>} />
-                      <Route path="accounting" element={<ProtectedRoute requiredRole="supervisor"><AccountingPage /></ProtectedRoute>} />
-                      <Route path="settings/margins" element={<ProtectedRoute requiredRole="supervisor"><MarginSettingsPage /></ProtectedRoute>} />
-                      <Route path="settings" element={<ProtectedRoute requiredRole="manager"><SettingsPage /></ProtectedRoute>} />
-                      <Route path="collection-orders" element={<CollectionOrdersPage />} />
-                      <Route path="subscription" element={<SubscriptionPage />} />
-                      <Route path="subscription/success" element={<SubscriptionSuccessPage />} />
+                    {/* Authenticated app — same paths as before, now behind a path-less protected layout. */}
+                    <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                      <Route path="/overview" element={<ProtectedRoute requiredRole="supervisor"><OverviewPage /></ProtectedRoute>} />
+                      <Route path="/pos" element={<POSPage />} />
+                      <Route path="/products" element={<ProductsPage />} />
+                      <Route path="/customers" element={<CustomersPage />} />
+                      <Route path="/staff" element={<ProtectedRoute requiredRole="manager"><StaffPage /></ProtectedRoute>} />
+                      <Route path="/reports" element={<ProtectedRoute requiredRole="supervisor"><ReportsPage /></ProtectedRoute>} />
+                      <Route path="/cash-management" element={<CashManagementPage />} />
+                      <Route path="/loss-prevention" element={<ProtectedRoute requiredRole="supervisor"><LossPreventionPage /></ProtectedRoute>} />
+                      <Route path="/suppliers" element={<SuppliersPage />} />
+                      <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+                      <Route path="/promotions" element={<PromotionsPage />} />
+                      <Route path="/gift-cards" element={<GiftCardsPage />} />
+                      <Route path="/smart-reorder" element={<SmartReorderPage />} />
+                      <Route path="/transactions" element={<TransactionHistoryPage />} />
+                      <Route path="/stock-take" element={<StockTakePage />} />
+                      <Route path="/expiry" element={<ExpiryDashboardPage />} />
+                      <Route path="/invoice-reader" element={<InvoiceReaderPage />} />
+                      <Route path="/market" element={<MarketIntelPage />} />
+                      <Route path="/schedule" element={<SchedulePage />} />
+                      <Route path="/invoices" element={<ProtectedRoute requiredRole="supervisor"><InvoicesPage /></ProtectedRoute>} />
+                      <Route path="/loyalty" element={<LoyaltyPage />} />
+                      <Route path="/label-printing" element={<LabelPrintingPage />} />
+                      <Route path="/offline-queue" element={<OfflineQueuePage />} />
+                      <Route path="/training" element={<TrainingModePage />} />
+                      <Route path="/challenge25" element={<ProtectedRoute requiredRole="supervisor"><Challenge25Page /></ProtectedRoute>} />
+                      <Route path="/accounting" element={<ProtectedRoute requiredRole="supervisor"><AccountingPage /></ProtectedRoute>} />
+                      <Route path="/settings/margins" element={<ProtectedRoute requiredRole="supervisor"><MarginSettingsPage /></ProtectedRoute>} />
+                      <Route path="/settings" element={<ProtectedRoute requiredRole="manager"><SettingsPage /></ProtectedRoute>} />
+                      <Route path="/collection-orders" element={<CollectionOrdersPage />} />
+                      <Route path="/subscription" element={<SubscriptionPage />} />
+                      <Route path="/subscription/success" element={<SubscriptionSuccessPage />} />
                     </Route>
                     <Route path="customer-display" element={<CustomerDisplayPage />} />
                     <Route path="self-checkout" element={<ProtectedRoute><SelfCheckoutPage /></ProtectedRoute>} />
