@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-14-Picker-Value-Promises]] — front door now sells + works: per-family **burden-first value promises**, a trust strap-line, and a **"Log in"** link for returning shops
 - [[2026-09-14-Recategorise-Niches-4-Families]] — grouped the ~12 shop types into **4 families by shared module bundle** (Grocery & age-restricted · Fresh & weighed · World & specialist · Mobile & value); picker now shows 4 tiles + optional sub-type → build 4 bundles not 12
 - [[2026-09-14-Niche-Picker-Front-Door]] — replaced login as the entry with a **9-niche shop-type picker** (`shopTypes.js` registry + `NichePickerPage`); seeds the M3 `shopType` dial; verified in headless Chromium → [[Implementation-Roadmap]]
 - [[2026-09-14-M0-PWA-Foundation]] — **first real build of Phase 1**: made the frontend an installable **PWA** (manifest + service worker + icons, no new deps); build + served-artifact verified → [[Implementation-Roadmap]] M0

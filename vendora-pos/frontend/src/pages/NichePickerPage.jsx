@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Sparkles, Check, ChevronLeft } from 'lucide-react';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
 
@@ -48,6 +49,11 @@ export default function NichePickerPage() {
           <p className="mt-1 text-sm text-gray-500">
             {family ? 'Which one fits best? (optional)' : 'What kind of shop do you run?'}
           </p>
+          {!family && (
+            <p className="mt-2 text-xs font-medium text-gray-400">
+              Built for UK shops · MTD-ready · Works alongside your till
+            </p>
+          )}
         </header>
 
         {/* STEP 1 — the 4 families */}
@@ -107,6 +113,26 @@ export default function NichePickerPage() {
               </div>
             </div>
 
+            {/* Burden-first value promises for this family */}
+            {family.promises?.length > 0 && (
+              <ul className="mb-5 space-y-2">
+                {family.promises.map((p) => (
+                  <li key={p} className="flex items-start gap-2.5 text-sm text-gray-700">
+                    <span
+                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: `${family.accent}1A`, color: family.accent }}
+                    >
+                      <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                    </span>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
+              Which one fits best? <span className="normal-case text-gray-400">(optional)</span>
+            </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {family.members.map((m) => {
                 const Icon = m.icon;
@@ -151,6 +177,13 @@ export default function NichePickerPage() {
           ) : (
             <p className="text-center text-xs text-gray-400">Tap the category that fits your shop.</p>
           )}
+
+          <p className="mt-4 text-center text-sm text-gray-500">
+            Already using Vendora?{' '}
+            <Link to="/login" className="font-semibold text-primary hover:underline">
+              Log in
+            </Link>
+          </p>
         </div>
       </div>
     </div>

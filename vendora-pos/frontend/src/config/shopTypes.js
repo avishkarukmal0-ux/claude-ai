@@ -21,6 +21,12 @@ export const SHOP_FAMILIES = [
     icon: Store,
     accent: '#2563EB', // brand blue
     // Shared: barcode grocery + goods-in + margins + age-verification + PMP.
+    // Burden-first value promises shown when this family is picked.
+    promises: [
+      'Your HMRC (MTD) filing just happens',
+      'Scan the cash-&-carry trolley — stock’s done',
+      'Age checks logged for you',
+    ],
     members: [
       { id: 'convenience', label: 'Convenience / Mini-mart', icon: ShoppingBasket, extra: 'Everyday grocery & chilled' },
       { id: 'off-licence', label: 'Off-licence', icon: Wine, extra: 'Alcohol duty & MUP' },
@@ -35,6 +41,11 @@ export const SHOP_FAMILIES = [
     icon: Scale,
     accent: '#16A34A', // green
     // Shared: scale/loose-weight + expiry/use-by + markdown + traceability/PPDS + production.
+    promises: [
+      'Stop paying twice for waste',
+      'Weigh, price & label in one tap',
+      'Use-by dates & traceability handled',
+    ],
     members: [
       { id: 'greengrocer', label: 'Greengrocer', icon: Carrot, extra: 'Loose produce & daily repricing' },
       { id: 'butcher', label: 'Butcher / Fishmonger', icon: Beef, extra: 'Cuts, scale & traceability' },
@@ -48,6 +59,11 @@ export const SHOP_FAMILIES = [
     icon: Globe,
     accent: '#EA580C', // orange
     // Shared: perishables + suppliers + allergen/compliance + cultural-calendar demand.
+    promises: [
+      'Order ahead for Eid, Diwali & peak weeks',
+      'Allergens & labels done right',
+      'Every supplier’s prices in one place',
+    ],
     members: [
       { id: 'ethnic-grocer', label: 'International grocer', icon: Globe, extra: 'World foods & fresh produce' },
       { id: 'health-food', label: 'Health-food', icon: Leaf, extra: 'Batch, expiry & allergens' },
@@ -60,6 +76,11 @@ export const SHOP_FAMILIES = [
     icon: Tag,
     accent: '#7C3AED', // violet
     // Shared: ad-hoc/no-barcode pricing + phone-first + dead-stock reporting.
+    promises: [
+      'Price anything in seconds — no barcode needed',
+      'Cash & card totals reconciled on your phone',
+      'See what’s not selling',
+    ],
     members: [
       { id: 'market-trader', label: 'Market trader', icon: Truck, extra: 'Phone-first cash & card' },
       { id: 'discount-pound', label: 'Discount / Pound', icon: BadgePercent, extra: 'Ad-hoc pricing & dead-stock' },
