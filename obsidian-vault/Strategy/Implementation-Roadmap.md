@@ -18,11 +18,11 @@ Back to [[Home]] · Reads with [[The-Whole-Story]] · [[App-Kickoff]] · [[Featu
 
 ## The milestones (each ships something usable)
 
-### M0 — Foundations *(week 1)*
+### M0 — Foundations *(week 1)* — 🟡 in progress
 Make the existing code phone-ready and safe to build on.
-- PWA shell: manifest + service worker on the existing frontend; installable "Add to Home Screen".
-- Mobile-first shell/nav for the app views (owner vs worker).
-- Auth + store-scoping confirmed on mobile (login store-picker already exists).
+- ✅ PWA shell: manifest + service worker on the existing frontend; installable "Add to Home Screen". *(done 2026-09-14 — [[2026-09-14-M0-PWA-Foundation]]; build + served-artifact verified.)*
+- ⬜ Mobile-first shell/nav for the app views (owner vs worker).
+- ⬜ Auth + store-scoping confirmed on mobile (login store-picker already exists).
 - **Done when:** you can install Vendora on a phone, log in, pick a store, see an (empty) mobile home.
 
 ### M1 — The daily hook: goods-in scan *(weeks 2–3)* ⭐

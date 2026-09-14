@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-14-M0-PWA-Foundation]] — **first real build of Phase 1**: made the frontend an installable **PWA** (manifest + service worker + icons, no new deps); build + served-artifact verified → [[Implementation-Roadmap]] M0
 - [[2026-09-14-Implementation-Roadmap]] — turned the locked strategy into a **sprint-by-sprint build plan** (M0–M5 + Phase 2), each with a "done when" test; locked 4 decisions (PWA shell, lead pain = goods-in + MTD, freemium line, first vertical = off-licence) → [[Implementation-Roadmap]]
 - [[2026-07-18-Niche-Pain-Research]] — desk research across ~12 Phase-1 niches; **new top wedge: MTD for Income Tax (Apr 2026)**; perishable waste = biggest untooled leak; vape compliance-by-design; market-trader phone-first thesis validated → [[Niche-Pain-Research]]
 - [[2026-07-18-Go-To-Market-Pivot]] — **strategy pivot**: ship the **App first** (land — inventory/back-office on their phone, zero switching cost), earn trust+data+market, **then launch the Till** (expand). Reverses the till-first order. iPad-first; no-capital.
