@@ -3,10 +3,11 @@
 // Universal tools show for every shop; gated tools show only when the family's
 // module set qualifies (e.g. age-check for age-restricted shops).
 
-import { FileClock, Percent, ShieldCheck } from 'lucide-react';
+import { FileClock, Percent, ShieldCheck, ShieldAlert } from 'lucide-react';
 import MtdCountdown from '../components/quicktools/MtdCountdown';
 import MarginCalculator from '../components/quicktools/MarginCalculator';
 import AgeCheckHelper from '../components/quicktools/AgeCheckHelper';
+import ComplianceRadar from '../components/quicktools/ComplianceRadar';
 import { getFamily } from './shopTypes';
 
 export const QUICK_TOOLS = {
@@ -24,6 +25,14 @@ export const QUICK_TOOLS = {
     tagline: 'Cost + price → margin',
     icon: Percent,
     component: MarginCalculator,
+    universal: true,
+  },
+  'compliance-radar': {
+    id: 'compliance-radar',
+    label: 'Compliance radar',
+    tagline: 'Deadlines for your shop',
+    icon: ShieldAlert,
+    component: ComplianceRadar,
     universal: true,
   },
   'age-check': {

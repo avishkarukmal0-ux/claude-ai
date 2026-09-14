@@ -5,6 +5,7 @@ import {
   getSavedShopType, getFamily, getMember, getModulesForFamily,
 } from '../config/shopTypes';
 import { getQuickToolsForFamily } from '../config/quickTools';
+import TodayAtShop from '../components/home/TodayAtShop';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -51,6 +52,9 @@ export default function HomePage() {
       <main className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
         {tab === 'home' && (
           <>
+            {/* Today at the shop — the morning glance, tailored to this family */}
+            <TodayAtShop familyId={saved.familyId} />
+
             {/* What Vendora does — burden-first promises for this family */}
             {family.promises?.length > 0 && (
               <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -183,11 +187,10 @@ export default function HomePage() {
           aria-label={activeTool.label}
         >
           <div
-            className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-xl sm:rounded-3xl"
-            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+            className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <h3 className="text-base font-bold text-gray-900">{activeTool.label}</h3>
               <button
                 type="button"
@@ -198,7 +201,12 @@ export default function HomePage() {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {ToolComponent && <ToolComponent />}
+            <div
+              className="overflow-y-auto px-5 pt-5"
+              style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
+            >
+              {ToolComponent && <ToolComponent />}
+            </div>
           </div>
         </div>
       )}
