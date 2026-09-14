@@ -8,6 +8,7 @@ import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
 import InventoryView from '../components/inventory/InventoryView';
 import GoodsInView from '../components/inventory/GoodsInView';
+import WasteView from '../components/waste/WasteView';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -17,6 +18,7 @@ import GoodsInView from '../components/inventory/GoodsInView';
 export default function HomePage() {
   const saved = getSavedShopType();
   const [tab, setTab] = useState('home');
+  const [screen, setScreen] = useState(null); // full-page module screen (e.g. 'waste')
   const [activeTool, setActiveTool] = useState(null);
 
   // No shop type picked yet → send them to the front door.
@@ -52,7 +54,9 @@ export default function HomePage() {
 
       {/* Scrollable content */}
       <main className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-        {tab === 'home' && (
+        {screen === 'waste' && <WasteView onBack={() => setScreen(null)} />}
+
+        {!screen && tab === 'home' && (
           <>
             {/* Today at the shop — the morning glance, tailored to this family */}
             <TodayAtShop familyId={saved.familyId} />
@@ -106,13 +110,14 @@ export default function HomePage() {
             <div className="grid grid-cols-2 gap-3">
               {modules.map((m) => {
                 const Icon = m.icon;
-                const clickable = m.live && m.tab;
+                const clickable = m.live && (m.tab || m.screen);
                 const Tag = clickable ? 'button' : 'div';
+                const open = () => { if (m.tab) setTab(m.tab); else if (m.screen) setScreen(m.screen); };
                 return (
                   <Tag
                     key={m.id}
                     type={clickable ? 'button' : undefined}
-                    onClick={clickable ? () => setTab(m.tab) : undefined}
+                    onClick={clickable ? open : undefined}
                     className={`relative flex flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm ${
                       clickable ? 'transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2' : ''
                     }`}
@@ -135,11 +140,11 @@ export default function HomePage() {
           </>
         )}
 
-        {tab === 'scan' && <GoodsInView />}
+        {!screen && tab === 'scan' && <GoodsInView />}
 
-        {tab === 'stock' && <InventoryView />}
+        {!screen && tab === 'stock' && <InventoryView />}
 
-        {tab === 'more' && (
+        {!screen && tab === 'more' && (
           <section className="space-y-2">
             <Link to="/" className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
               <Settings className="h-5 w-5 text-gray-400" />
@@ -163,10 +168,10 @@ export default function HomePage() {
         className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <NavTab label="Home"  icon={HomeIcon} active={tab === 'home'}  onClick={() => setTab('home')} accent={accent} />
-        <NavTab label="Scan"  icon={ScanLine} active={tab === 'scan'}  onClick={() => setTab('scan')} accent={accent} />
-        <NavTab label="Stock" icon={Package2} active={tab === 'stock'} onClick={() => setTab('stock')} accent={accent} />
-        <NavTab label="More"  icon={MoreHorizontal} active={tab === 'more'} onClick={() => setTab('more')} accent={accent} />
+        <NavTab label="Home"  icon={HomeIcon} active={!screen && tab === 'home'}  onClick={() => { setScreen(null); setTab('home'); }} accent={accent} />
+        <NavTab label="Scan"  icon={ScanLine} active={!screen && tab === 'scan'}  onClick={() => { setScreen(null); setTab('scan'); }} accent={accent} />
+        <NavTab label="Stock" icon={Package2} active={!screen && tab === 'stock'} onClick={() => { setScreen(null); setTab('stock'); }} accent={accent} />
+        <NavTab label="More"  icon={MoreHorizontal} active={!screen && tab === 'more'} onClick={() => { setScreen(null); setTab('more'); }} accent={accent} />
       </nav>
 
       {/* Quick-tool modal */}
