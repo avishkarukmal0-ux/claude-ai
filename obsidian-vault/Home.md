@@ -13,6 +13,7 @@
 - [[Tech-Stack]] — languages, frameworks, libraries
 - [[Running-Locally]] — local dev setup + how to log into Railway 🔑
 - [[Deployment]] — Railway, Vercel, Docker
+- [[Connect-Backend-MongoDB]] — 🔌 **step-by-step runbook** to go live: Atlas + Railway + Vercel env vars
 - [[Conventions]] — coding patterns, git workflow, house style
 
 ### Backend (`vendora-pos/backend`)

@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-15-Connect-Backend-MongoDB]] — backend is **ready to connect**: `/health` now reports **db status**; wrote the [[Connect-Backend-MongoDB]] runbook (Atlas → Railway → Vercel). Going live is now a config/deploy task (founder's URI + hosting)
 - [[2026-09-14-Waste-Tracker]] — **waste & savings tracker**: log binned vs rescued → £ wasted / £ saved this month, "you rescued £X" banner; local-first & persistent; opens from the Expiry & waste tile
 - [[2026-09-14-Goods-In-And-Inventory]] — **M1: the first pay-worthy workhorse** — goods-in scan (native BarcodeDetector + manual) → **live inventory** (search, low-stock, margins, qty steppers), **local-first & persistent**; verified scan→receive→stock→reload → [[Implementation-Roadmap]]
 - [[2026-09-14-Today-And-Compliance-Radar]] — **"Today at the shop"** morning glance + UK **Compliance Radar**, both **tailored per shop family** (verified across off-licence/butcher/world/market); fixed a modal-overflow bug

@@ -36,9 +36,19 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ── Health check + root — registered FIRST so Railway/load-balancer probes always respond ──
-// Must be before helmet, CORS, rate-limiting, and all other middleware.
+// Must be before helmet, CORS, rate-limiting, and all other middleware. Always 200 so the
+// platform probe passes even before the DB is up; the `db` field lets you verify the
+// MongoDB connection after deploy (open <backend-url>/health and look for db:"connected").
+const mongoose = require('mongoose');
+const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 const healthHandler = (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0', env: process.env.NODE_ENV });
+  res.json({
+    status: 'ok',
+    db: DB_STATES[mongoose.connection.readyState] || 'unknown',
+    timestamp: new Date().toISOString(),
+    version: '3.0.0',
+    env: process.env.NODE_ENV,
+  });
 };
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
