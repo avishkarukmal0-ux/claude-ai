@@ -9,10 +9,12 @@ const Incident = require('../models/Incident');
 const ShrinkageLog = require('../models/ShrinkageLog');
 const CustomerWatchlist = require('../models/CustomerWatchlist');
 const ReceiptVerification = require('../models/ReceiptVerification');
+const AgeRefusal = require('../models/AgeRefusal');
 const lossPreventionService = require('../services/lossPreventionService');
 const AppError = require('../utils/AppError');
 const { requireRole } = require('../middleware/permissions');
 const { todayStart, todayEnd } = require('../utils/helpers');
+const smsService = require('../services/smsService');
 
 // GET /api/loss-prevention/dashboard
 router.get('/dashboard', requireRole('supervisor'), async (req, res, next) => {
@@ -180,11 +182,158 @@ router.get('/exception-report', requireRole('supervisor'), async (req, res, next
   } catch (err) { next(err); }
 });
 
+// ── Age Refusal Logging (#22) ────────────────────────────────────────────────
+
+// POST /api/loss-prevention/age-refusals
+router.post('/age-refusals', async (req, res, next) => {
+  try {
+    const refusal = await AgeRefusal.create({
+      store: req.storeId,
+      staff: req.user._id,
+      staffName: req.user.displayName,
+      tillId: req.body.tillId || 'TILL-1',
+      productId: req.body.productId,
+      productName: req.body.productName,
+      productBarcode: req.body.productBarcode,
+      minimumAge: req.body.minimumAge || 18,
+      refusalReason: req.body.refusalReason || 'no_id',
+      refusalNotes: req.body.refusalNotes,
+      occurredAt: new Date(),
+    });
+    res.status(201).json({ success: true, refusal });
+  } catch (err) { next(err); }
+});
+
+// GET /api/loss-prevention/age-refusals — compliance audit report (#25)
+router.get('/age-refusals', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const { from, to, staffId, limit = 200, page = 1 } = req.query;
+    const query = { store: req.storeId };
+    if (staffId) query.staff = staffId;
+    if (from || to) {
+      query.occurredAt = {};
+      if (from) query.occurredAt.$gte = new Date(from);
+      if (to) query.occurredAt.$lte = new Date(to);
+    }
+    const skip = (Number(page) - 1) * Number(limit);
+    const [refusals, total] = await Promise.all([
+      AgeRefusal.find(query).sort({ occurredAt: -1 }).skip(skip).limit(Number(limit)).populate('staff', 'displayName employeeId'),
+      AgeRefusal.countDocuments(query),
+    ]);
+    res.json({ success: true, refusals, total, page: Number(page), limit: Number(limit) });
+  } catch (err) { next(err); }
+});
+
+// GET /api/loss-prevention/age-refusals/stats — C25 statistics (#26)
+router.get('/age-refusals/stats', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const now = new Date();
+    const weekAgo = new Date(now - 7 * 24 * 3600 * 1000);
+    const monthAgo = new Date(now - 30 * 24 * 3600 * 1000);
+
+    const [totalThisWeek, totalThisMonth, byStaffWeek, byReasonWeek, byStaffMonth] = await Promise.all([
+      AgeRefusal.countDocuments({ store: req.storeId, occurredAt: { $gte: weekAgo } }),
+      AgeRefusal.countDocuments({ store: req.storeId, occurredAt: { $gte: monthAgo } }),
+      AgeRefusal.aggregate([
+        { $match: { store: req.storeId, occurredAt: { $gte: weekAgo } } },
+        { $group: { _id: '$staffName', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }, { $limit: 10 },
+      ]),
+      AgeRefusal.aggregate([
+        { $match: { store: req.storeId, occurredAt: { $gte: weekAgo } } },
+        { $group: { _id: '$refusalReason', count: { $sum: 1 } } },
+      ]),
+      AgeRefusal.aggregate([
+        { $match: { store: req.storeId, occurredAt: { $gte: monthAgo } } },
+        { $group: { _id: '$staffName', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }, { $limit: 10 },
+      ]),
+    ]);
+
+    res.json({
+      success: true,
+      thisWeek: { total: totalThisWeek, byStaff: byStaffWeek, byReason: byReasonWeek },
+      thisMonth: { total: totalThisMonth, byStaff: byStaffMonth },
+    });
+  } catch (err) { next(err); }
+});
+
+// ── Transaction Replay (#43) ─────────────────────────────────────────────────
+
+// GET /api/loss-prevention/transaction-replay/:saleId
+router.get('/transaction-replay/:saleId', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const Sale = require('../models/Sale');
+    const sale = await Sale.findOne({ _id: req.params.saleId, store: req.storeId })
+      .populate('items.productId', 'name barcode category')
+      .populate('staff', 'displayName employeeId');
+    if (!sale) return next(AppError.notFound('Sale'));
+
+    // Build scan timeline from items with scanTime
+    const timeline = (sale.items || []).map((item, idx) => ({
+      seq: idx + 1,
+      time: item.scanTime || sale.createdAt,
+      barcode: item.barcode || item.productId?.barcode,
+      productName: item.productId?.name || item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      lineTotal: item.lineTotal,
+      ageVerified: item.ageVerified,
+    })).sort((a, b) => new Date(a.time) - new Date(b.time));
+
+    res.json({
+      success: true,
+      sale: {
+        _id: sale._id,
+        receiptNumber: sale.receiptNumber,
+        createdAt: sale.createdAt,
+        total: sale.total,
+        subtotal: sale.subtotal,
+        payments: sale.payments,
+        staffName: sale.staff?.displayName || sale.staffName,
+        tillId: sale.tillId,
+        cctvReference: sale.cctvReference || null,
+        isVoid: sale.isVoid,
+        isRefund: sale.isRefund,
+        isTraining: sale.isTraining,
+      },
+      timeline,
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/loss-prevention/transaction-replay/:saleId/cctv — store CCTV reference
+router.put('/transaction-replay/:saleId/cctv', requireRole('supervisor'), async (req, res, next) => {
+  try {
+    const Sale = require('../models/Sale');
+    const sale = await Sale.findOneAndUpdate(
+      { _id: req.params.saleId, store: req.storeId },
+      { cctvReference: req.body.cctvReference },
+      { new: true }
+    );
+    res.json({ success: true, cctvReference: sale?.cctvReference });
+  } catch (err) { next(err); }
+});
+
+// ── Panic (with SMS) ─────────────────────────────────────────────────────────
+
 // Panic
 router.post('/panic', async (req, res, next) => {
   try {
     const { tillId } = req.body;
     await lossPreventionService.triggerPanic(req.user._id, tillId || 'TILL-1', req.storeId, req.io);
+
+    // Fire SMS alert (#165) — non-blocking
+    const Store = require('../models/Store');
+    Store.findById(req.storeId).select('name address').then(store => {
+      smsService.sendPanicAlert({
+        storeName: store?.name || 'Store',
+        tillId: tillId || 'TILL-1',
+        staffName: req.user.displayName,
+        location: store?.address?.line1 || '',
+      }).catch(() => {});
+    }).catch(() => {});
+
     res.json({ success: true, message: 'Panic alert triggered' });
   } catch (err) { next(err); }
 });

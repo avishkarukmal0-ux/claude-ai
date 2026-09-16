@@ -1,0 +1,78 @@
+==================================================================
+  HOW TO GET YOUR DATABASE LINK  (MONGODB_URI)
+  This is the ONE thing only you can do. Takes about 2 minutes.
+==================================================================
+
+Your real shop data lives in MongoDB Atlas (project "cornershop-pos",
+Cluster0). To let this computer read it, you need to copy ONE line
+of text from Atlas and paste it into the file that opened in Notepad.
+
+Follow these steps in your web browser:
+
+------------------------------------------------------------------
+STEP 1 — Log in
+------------------------------------------------------------------
+  Go to:  https://cloud.mongodb.com
+  Sign in. You should see Project "cornershop-pos" and "Cluster0".
+  If Cluster0 says "Paused", click "Resume" and wait ~1 minute.
+
+------------------------------------------------------------------
+STEP 2 — Let THIS computer connect  (easy to forget!)
+------------------------------------------------------------------
+  Left menu -> SECURITY -> Network Access
+  Click  "+ ADD IP ADDRESS"
+  Click  "ALLOW ACCESS FROM ANYWHERE"   (it fills in 0.0.0.0/0)
+  Click  "Confirm"
+  (Your old laptop was allowed; this new PC is not, until you do this.)
+
+------------------------------------------------------------------
+STEP 3 — Copy the connection link
+------------------------------------------------------------------
+  Go back to  "Database"  (left menu) -> your Cluster0
+  Click the  "Connect"  button
+  Click  "Drivers"   (under "Connect to your application")
+  Make sure Driver = Node.js
+  You will see a box with a line that looks like:
+
+     mongodb+srv://USERNAME:<db_password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+
+  Click the little COPY icon next to it.
+
+------------------------------------------------------------------
+STEP 4 — Fix the password in the link
+------------------------------------------------------------------
+  The copied line has  <db_password>  as a placeholder.
+  Replace  <db_password>  (including the < > brackets) with your real
+  database password.
+
+  Don't remember the password? Reset it:
+    Left menu -> SECURITY -> Database Access
+    -> your user -> "Edit" -> "Edit Password"
+    -> type a new one -> "Update User"
+    Then use that new password in the link.
+
+------------------------------------------------------------------
+STEP 5 — Paste it into the .env file
+------------------------------------------------------------------
+  Switch to the Notepad window that opened (backend .env file).
+  Find the line that starts with:   MONGODB_URI=
+  Replace the whole line so it reads (all on ONE line):
+
+     MONGODB_URI=mongodb+srv://USERNAME:YOURPASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+
+  Save the file (Ctrl+S) and close Notepad.
+
+------------------------------------------------------------------
+DONE
+------------------------------------------------------------------
+  Go back to the launcher window and press a key.
+  The POS will open at  http://localhost:5173
+  Log in: pick your store -> Employee ID EMP001 -> PIN 1111
+
+  If the app opens but shows NO products / an empty shop, your data
+  is in a specific database name. In Atlas click "Browse Collections"
+  and note the database that has "stores" and "products". Then add
+  that name into the link just before the "?", like:
+     ...mongodb.net/THAT_NAME?retryWrites=...
+  Save and restart the launcher.
+==================================================================

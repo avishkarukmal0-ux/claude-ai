@@ -37,6 +37,13 @@ AppError.notFound = (resource = 'Resource') =>
 AppError.validation = (msg = 'Validation error', details = null) =>
   new AppError(msg, 422, 'VALIDATION_ERROR', details);
 
+// Alias with consistent naming used across routes
+AppError.validationError = (msg = 'Validation error') =>
+  new AppError(msg, 400, 'VALIDATION_ERROR');
+
+AppError.unauthorized = (msg = 'Unauthorized') =>
+  new AppError(msg, 401, 'UNAUTHORIZED');
+
 AppError.barcodeNotFound = (barcode) =>
   new AppError(`Barcode ${barcode} not found`, 404, 'BARCODE_NOT_FOUND');
 
@@ -87,5 +94,11 @@ AppError.loyaltyInsufficient = (required, available) =>
 
 AppError.subscriptionLimit = (msg = 'Subscription limit reached') =>
   new AppError(msg, 402, 'SUBSCRIPTION_LIMIT');
+
+AppError.serverError = (msg = 'Internal server error') =>
+  new AppError(msg, 500, 'INTERNAL_ERROR');
+
+AppError.conflict = (msg = 'Conflict') =>
+  new AppError(msg, 409, 'CONFLICT');
 
 module.exports = AppError;
