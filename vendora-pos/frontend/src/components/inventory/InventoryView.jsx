@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus } from 'lucide-react';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck } from 'lucide-react';
 import { useInventory, margin, isLowStock } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
-export default function InventoryView() {
+export default function InventoryView({ onOpenSuppliers }) {
   const { products, addProduct, updateProduct, removeProduct } = useInventory();
   const { suppliers } = useSuppliers();
   const [query, setQuery] = useState('');
@@ -32,13 +32,24 @@ export default function InventoryView() {
             {lowCount > 0 && <span className="text-danger"> · {lowCount} low</span>}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setAdding((v) => !v)}
-          className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm active:scale-95"
-        >
-          <Plus className="h-4 w-4" /> Add
-        </button>
+        <div className="flex items-center gap-2">
+          {onOpenSuppliers && (
+            <button
+              type="button"
+              onClick={onOpenSuppliers}
+              className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 active:scale-95"
+            >
+              <Truck className="h-4 w-4" /> Suppliers
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setAdding((v) => !v)}
+            className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm active:scale-95"
+          >
+            <Plus className="h-4 w-4" /> Add
+          </button>
+        </div>
       </div>
 
       {adding && <AddForm suppliers={suppliers} onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}

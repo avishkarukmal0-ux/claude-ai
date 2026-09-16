@@ -148,7 +148,7 @@ export default function HomePage() {
 
         {!screen && tab === 'scan' && <GoodsInView />}
 
-        {!screen && tab === 'stock' && <InventoryView />}
+        {!screen && tab === 'stock' && <InventoryView onOpenSuppliers={() => setScreen('suppliers')} />}
 
         {!screen && tab === 'more' && (
           <section className="space-y-2">
