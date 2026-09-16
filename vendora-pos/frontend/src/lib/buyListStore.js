@@ -30,7 +30,7 @@ export function useBuyList() {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const addItem = useCallback(({ productId, name, barcode, qty }) => {
+  const addItem = useCallback(({ productId, name, barcode, qty, supplierId, supplierName }) => {
     setItems((prev) => {
       // If it's already on the list (same product), just bump the qty.
       const idx = prev.findIndex((i) => productId && i.productId === productId);
@@ -39,7 +39,7 @@ export function useBuyList() {
         next = [...prev];
         next[idx] = { ...next[idx], qty: (Number(next[idx].qty) || 0) + (Number(qty) || 1), bought: false };
       } else {
-        next = [{ id: newId(), productId: productId || null, name: name || 'Item', barcode: barcode || '', qty: Number(qty) || 1, bought: false, addedAt: Date.now() }, ...prev];
+        next = [{ id: newId(), productId: productId || null, name: name || 'Item', barcode: barcode || '', qty: Number(qty) || 1, supplierId: supplierId || null, supplierName: supplierName || null, bought: false, addedAt: Date.now() }, ...prev];
       }
       persist(next);
       return next;

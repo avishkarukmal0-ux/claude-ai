@@ -30,6 +30,7 @@ export const SHOP_FAMILIES = [
       'Age checks logged for you',
     ],
     moduleIds: ['age-check'],
+    supplierIdeas: ['Cash & carry (Booker / Bestway)', 'Soft-drinks wholesaler', 'Tobacco / vape supplier', 'Newspaper distributor', 'Bread & milk roundsman'],
     members: [
       { id: 'convenience', label: 'Convenience / Mini-mart', icon: ShoppingBasket, extra: 'Everyday grocery & chilled' },
       { id: 'off-licence', label: 'Off-licence', icon: Wine, extra: 'Alcohol duty & MUP' },
@@ -50,6 +51,7 @@ export const SHOP_FAMILIES = [
       'Use-by dates & traceability handled',
     ],
     moduleIds: ['scale-labels', 'allergens'],
+    supplierIdeas: ['Fruit & veg market', 'Meat / fish supplier', 'Bakery ingredients wholesaler', 'Packaging supplier'],
     members: [
       { id: 'greengrocer', label: 'Greengrocer', icon: Carrot, extra: 'Loose produce & daily repricing' },
       { id: 'butcher', label: 'Butcher / Fishmonger', icon: Beef, extra: 'Cuts, scale & traceability' },
@@ -69,6 +71,7 @@ export const SHOP_FAMILIES = [
       'Every supplier’s prices in one place',
     ],
     moduleIds: ['festival', 'allergens'],
+    supplierIdeas: ['Ethnic cash & carry', 'Import wholesaler', 'Halal meat supplier', 'Spice & dry-goods supplier'],
     members: [
       { id: 'ethnic-grocer', label: 'International grocer', icon: Globe, extra: 'World foods & fresh produce' },
       { id: 'health-food', label: 'Health-food', icon: Leaf, extra: 'Batch, expiry & allergens' },
@@ -87,6 +90,7 @@ export const SHOP_FAMILIES = [
       'See what’s not selling',
     ],
     moduleIds: ['reconcile'],
+    supplierIdeas: ['General cash & carry', 'Clearance / wholesale', 'Pet-food wholesaler'],
     members: [
       { id: 'market-trader', label: 'Market trader', icon: Truck, extra: 'Phone-first cash & card' },
       { id: 'discount-pound', label: 'Discount / Pound', icon: BadgePercent, extra: 'Ad-hoc pricing & dead-stock' },
@@ -104,7 +108,7 @@ export const MODULES = {
   inventory:   { id: 'inventory',   label: 'Inventory',      icon: Package,         desc: 'Products, prices & stock', live: true, tab: 'stock' },
   expiry:      { id: 'expiry',      label: 'Expiry & waste', icon: CalendarClock,   desc: 'Stop paying twice for waste', live: true, screen: 'waste' },
   reorder:     { id: 'reorder',     label: 'Buy list',       icon: ShoppingCart,    desc: 'Low stock → cash-&-carry list', live: true, screen: 'reorder' },
-  suppliers:   { id: 'suppliers',   label: 'Suppliers',      icon: Truck,           desc: 'Orders & best prices', live: false },
+  suppliers:   { id: 'suppliers',   label: 'Suppliers',      icon: Truck,           desc: 'Your regular buying places', live: true, screen: 'suppliers' },
   mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
   'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
   'scale-labels': { id: 'scale-labels', label: 'Scale & labels', icon: ClipboardList, desc: 'Weigh, price & PPDS', live: false },

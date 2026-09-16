@@ -1,7 +1,8 @@
-import React from 'react';
-import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2 } from 'lucide-react';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
+import { useSuppliers } from '../../lib/supplierStore';
 
 // Suggested restock quantity to bring a low item back to a sensible "par" level.
 // Honest heuristic (no sales history yet — that's the later forecasting feature):
@@ -15,12 +16,27 @@ function suggestQty(p) {
 // Buy list — low stock turns into a tickable cash-&-carry list. Local-first.
 export default function ReorderView({ onBack }) {
   const { products } = useInventory();
+  const { suppliers } = useSuppliers();
   const { items, addItem, setQty, toggleBought, removeItem, clearBought, hasProduct } = useBuyList();
+
+  const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
 
   // Suggestions = low-stock products not already on the list.
   const suggestions = products.filter((p) => isLowStock(p) && !hasProduct(p.id));
   const boughtCount = items.filter((i) => i.bought).length;
   const totalUnits = items.reduce((n, i) => n + (Number(i.qty) || 0), 0);
+
+  // Group the buy list by supplier (name snapshot, falling back to current lookup).
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const i of items) {
+      const key = i.supplierName || supplierNameById[i.supplierId] || 'No supplier yet';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(i);
+    }
+    // Named suppliers first, "No supplier yet" last.
+    return [...map.entries()].sort((a, b) => (a[0] === 'No supplier yet' ? 1 : b[0] === 'No supplier yet' ? -1 : a[0].localeCompare(b[0])));
+  }, [items, supplierNameById]);
 
   return (
     <div>
@@ -44,7 +60,7 @@ export default function ReorderView({ onBack }) {
                 </span>
                 <button
                   type="button"
-                  onClick={() => addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: suggestQty(p) })}
+                  onClick={() => addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: suggestQty(p), supplierId: p.supplierId, supplierName: supplierNameById[p.supplierId] })}
                   className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95"
                 >
                   <Plus className="h-4 w-4" /> Add
@@ -76,38 +92,48 @@ export default function ReorderView({ onBack }) {
           </p>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {items.map((i) => (
-            <li key={i.id} className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${i.bought ? 'border-gray-100 bg-gray-50' : 'border-gray-100 bg-white'}`}>
-              <button
-                type="button"
-                onClick={() => toggleBought(i.id)}
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${i.bought ? 'border-success bg-success text-white' : 'border-gray-300 text-transparent'}`}
-                aria-label={i.bought ? 'Mark not bought' : 'Mark bought'}
-              >
-                <Check className="h-4 w-4" strokeWidth={3} />
-              </button>
-              <span className="min-w-0 flex-1">
-                <span className={`block truncate text-sm font-semibold ${i.bought ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{i.name}</span>
-                {i.barcode && <span className="block font-mono text-[11px] text-gray-400">{i.barcode}</span>}
-              </span>
-              {!i.bought && (
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setQty(i.id, (Number(i.qty) || 1) - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
-                    <Minus className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="w-6 text-center text-sm font-bold tabular-nums text-gray-900">{i.qty}</span>
-                  <button type="button" onClick={() => setQty(i.id, (Number(i.qty) || 0) + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label="Increase">
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
-              <button type="button" onClick={() => removeItem(i.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </li>
+        <div className="space-y-4">
+          {groups.map(([supplier, groupItems]) => (
+            <div key={supplier}>
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
+                <Building2 className="h-3.5 w-3.5 text-gray-400" /> {supplier}
+                <span className="text-gray-300">· {groupItems.reduce((n, x) => n + (Number(x.qty) || 0), 0)}</span>
+              </div>
+              <ul className="space-y-2">
+                {groupItems.map((i) => (
+                  <li key={i.id} className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${i.bought ? 'border-gray-100 bg-gray-50' : 'border-gray-100 bg-white'}`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleBought(i.id)}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${i.bought ? 'border-success bg-success text-white' : 'border-gray-300 text-transparent'}`}
+                      aria-label={i.bought ? 'Mark not bought' : 'Mark bought'}
+                    >
+                      <Check className="h-4 w-4" strokeWidth={3} />
+                    </button>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-sm font-semibold ${i.bought ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{i.name}</span>
+                      {i.barcode && <span className="block font-mono text-[11px] text-gray-400">{i.barcode}</span>}
+                    </span>
+                    {!i.bought && (
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setQty(i.id, (Number(i.qty) || 1) - 1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="w-6 text-center text-sm font-bold tabular-nums text-gray-900">{i.qty}</span>
+                        <button type="button" onClick={() => setQty(i.id, (Number(i.qty) || 0) + 1)} className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label="Increase">
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    <button type="button" onClick={() => removeItem(i.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
 
       {items.length > 0 && (

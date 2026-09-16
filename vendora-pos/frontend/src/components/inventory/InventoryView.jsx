@@ -1,13 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Minus, PackagePlus } from 'lucide-react';
 import { useInventory, margin, isLowStock } from '../../lib/inventoryStore';
+import { useSuppliers } from '../../lib/supplierStore';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
 export default function InventoryView() {
   const { products, addProduct, updateProduct, removeProduct } = useInventory();
+  const { suppliers } = useSuppliers();
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
+  const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -38,7 +41,7 @@ export default function InventoryView() {
         </button>
       </div>
 
-      {adding && <AddForm onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}
+      {adding && <AddForm suppliers={suppliers} onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}
 
       {products.length > 0 && (
         <div className="relative mb-3">
@@ -69,6 +72,17 @@ export default function InventoryView() {
                       {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
                       {m != null && <span className={m < 0 ? 'text-danger' : 'text-success'}>{(m * 100).toFixed(0)}% margin</span>}
                     </div>
+                    {suppliers.length > 0 && (
+                      <select
+                        value={p.supplierId || ''}
+                        onChange={(e) => updateProduct(p.id, { supplierId: e.target.value || null })}
+                        className="mt-1 max-w-[12rem] truncate rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+                        aria-label="Supplier"
+                      >
+                        <option value="">— supplier —</option>
+                        {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    )}
                   </div>
                   <button type="button" onClick={() => removeProduct(p.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete">
                     <Trash2 className="h-4 w-4" />
@@ -97,14 +111,20 @@ export default function InventoryView() {
   );
 }
 
-function AddForm({ onAdd, onCancel }) {
-  const [f, setF] = useState({ name: '', barcode: '', cost: '', price: '', qty: '' });
+function AddForm({ onAdd, onCancel, suppliers = [] }) {
+  const [f, setF] = useState({ name: '', barcode: '', cost: '', price: '', qty: '', supplierId: '' });
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
   return (
     <div className="mb-3 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
       <input value={f.name} onChange={set('name')} placeholder="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      {suppliers.length > 0 && (
+        <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
+          <option value="">Supplier (optional)</option>
+          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      )}
       <div className="mb-2 grid grid-cols-3 gap-2">
         <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />

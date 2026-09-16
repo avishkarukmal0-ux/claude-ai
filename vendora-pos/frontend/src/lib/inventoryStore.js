@@ -69,6 +69,7 @@ export function useInventory() {
       price: p.price === '' || p.price == null ? null : Number(p.price),
       qty: Number(p.qty) || 0,
       min: Number(p.min) || 0,
+      supplierId: p.supplierId || null,
       updatedAt: Date.now(),
     };
     setProducts((prev) => { const next = [product, ...prev]; persist(next); return next; });

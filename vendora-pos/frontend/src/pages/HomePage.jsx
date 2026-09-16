@@ -10,6 +10,7 @@ import InventoryView from '../components/inventory/InventoryView';
 import GoodsInView from '../components/inventory/GoodsInView';
 import WasteView from '../components/waste/WasteView';
 import ReorderView from '../components/reorder/ReorderView';
+import SuppliersView from '../components/suppliers/SuppliersView';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -58,6 +59,8 @@ export default function HomePage() {
         {screen === 'waste' && <WasteView onBack={() => setScreen(null)} />}
 
         {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
+
+        {screen === 'suppliers' && <SuppliersView onBack={() => setScreen(null)} familyId={saved.familyId} />}
 
         {!screen && tab === 'home' && (
           <>
