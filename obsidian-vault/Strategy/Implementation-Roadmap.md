@@ -35,31 +35,32 @@ The single most important build — the first genuinely pay-worthy feature.
 - ⏳ **Backend leg (deferred):** sync stock across devices + the server-side `stockMovementService.receive()` — needs the DB connected.
 - **Done (local):** scan/type a trolley on the phone → stock + costs correct after Receive, persisted.
 
-### M2 — MTD core + owner glance *(weeks 4–5)*
+### M2 — MTD core + owner glance *(weeks 4–5)* — 🟡 partial
 The universal wedge + the reason the owner opens it daily.
-- Auto-capture sales + expenses → **MTD-ready quarterly figures** export (start with a clean CSV/summary; API submission later).
-- Owner pocket view: reuse [[Overview-Dashboard]] (takings, waste £, margin, cash) + nightly "shop closed fine".
-- **Done when:** an owner sees this-quarter's MTD figures and today's glance on their phone.
+- ✅ Owner pocket view — live **Owner glance** (takings, waste £, products, low-stock), local-first *([[2026-09-14-Takings-And-Owner-Glance]])*.
+- ✅ MTD **countdown** quick tool + **compliance radar**.
+- ⬜ Auto-capture sales + expenses → **MTD-ready quarterly figures** export — *needs sales data + backend; deferred.*
+- ⏳ Nightly "shop closed fine" — exists on the till backend; not yet on the app.
 
-### M3 — shopType architecture + app faces *(weeks 6–7)*
+### M3 — shopType architecture + app faces *(weeks 6–7)* — 🟡 mostly done
 The dial that lets one app serve every inch.
-- ✅ *Head start:* front-end **shop-type registry** (`frontend/src/config/shopTypes.js`) + the 9-niche **picker** now the app's front door *(2026-09-14 — [[2026-09-14-Niche-Picker-Front-Door]])*. Config-driven, no `if`-spaghetti.
-- ⬜ `shopType` field on the store; extend `PLAN_FEATURES` (`backend/src/models/Subscription.js`) → shown = Core + (plan) + (shopType).
-- ⬜ Module **registry** wiring modules → shopType; default at signup + owner toggle.
-- Worker view (expiring-soon + trends; wire MarketIntel's dead buttons) + suggest-to-owner loop.
-- **Done when:** switching a store's `shopType` changes its visible modules with no code change.
+- ✅ Front-end **shop-type registry** (4 families + members) + **module catalog** (Core + per-family modules) + picker front door.
+- ✅ Per-shopType interface working (each family sees its own tools + quick tools).
+- ⬜ **Worker view** (expiring-soon + trends) — not built.
+- ⬜ **Suggest-to-owner loop** — not built.
+- ⏳ Backend `shopType`/`PLAN_FEATURES` wiring — deferred to backend.
 
-### M4 — Forecasting, markdown, migration *(weeks 8–10)*
+### M4 — Forecasting, markdown, migration *(weeks 8–10)* — 🟡 partial
 Complete the Core's money-savers + the switching wedge.
-- Demand forecasting (forecast-to-order).
-- Dynamic markdown *suggestions* on top of expiry rules.
-- Migration/onboarding import (old EPOS/spreadsheet → products/prices in minutes).
-- **Done when:** a new shop is imported in minutes and gets reorder + markdown suggestions.
+- ✅ **Reorder suggestions** (lite forecast: low-stock → buy list) *([[2026-09-16-Reorder-Buy-List]])*.
+- ✅ **Dynamic markdown / FEFO** — expiry "sell first" list *([[2026-09-16-Gap-Fills-1-4]])*.
+- ⬜ **Demand forecasting** (proper forecast-to-order) — not built (needs sales history).
+- ⬜ **Migration/onboarding import** (old EPOS/spreadsheet → products) — **not built; the switching wedge, still important.**
 
-### M5 — First vertical + FIELD VALIDATION *(weeks 11–12)*
+### M5 — First vertical + FIELD VALIDATION *(weeks 11–12)* — ❌ not started
 Prove it in a real shop before widening.
-- Off-licence module polished (MUP, duty) via the dial.
-- **Get it into 1–3 real shops.** Use [[Customer-Discovery]]: confirm the lead pain, the freemium line, and that goods-in + MTD are the hooks.
+- ✅ Off-licence essentials via the dial (MUP tool, age-check, compliance).
+- ⬜ **Get it into 1–3 real shops** — *the key remaining step; needs a shop.*
 - **Done when:** a real shop uses the app on its own wholesaler run and you have their feedback.
 
 ### Phase 2 (later, only once shops are hooked)
