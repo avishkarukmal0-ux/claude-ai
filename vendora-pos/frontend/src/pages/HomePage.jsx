@@ -17,6 +17,9 @@ import TakingsView from '../components/takings/TakingsView';
 import OverviewView from '../components/overview/OverviewView';
 import DeadStockView from '../components/deadstock/DeadStockView';
 import ImportView from '../components/import/ImportView';
+import WorkerBoard from '../components/worker/WorkerBoard';
+import SuggestionsInbox from '../components/worker/SuggestionsInbox';
+import { getOpenSuggestionCount } from '../lib/suggestionsStore';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -64,6 +67,7 @@ export default function HomePage() {
   const modules = getModulesForFamily(saved.familyId);
   const tools = getQuickToolsForFamily(saved.familyId);
   const accent = family.accent;
+  const suggestionCount = getOpenSuggestionCount();
   const ToolComponent = activeTool?.component || null;
 
   return (
@@ -93,6 +97,10 @@ export default function HomePage() {
         {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
 
         {screen === 'deadstock' && <DeadStockView onBack={() => setScreen(null)} />}
+
+        {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
+
+        {screen === 'suggestions' && <SuggestionsInbox onBack={() => setScreen(null)} />}
 
         {screen === 'suppliers' && <SuppliersView onBack={() => setScreen(null)} familyId={saved.familyId} />}
 
@@ -174,9 +182,15 @@ export default function HomePage() {
                       clickable ? 'transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2' : ''
                     }`}
                   >
-                    <span className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${m.live ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-400'}`}>
-                      {m.live ? 'Ready' : 'Soon'}
-                    </span>
+                    {m.id === 'suggestions' && suggestionCount > 0 ? (
+                      <span className="absolute right-2 top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+                        {suggestionCount}
+                      </span>
+                    ) : (
+                      <span className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${m.live ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-400'}`}>
+                        {m.live ? 'Ready' : 'Soon'}
+                      </span>
+                    )}
                     <span
                       className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl"
                       style={{ backgroundColor: `${accent}1A`, color: accent }}

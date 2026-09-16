@@ -12,7 +12,7 @@ import {
   Carrot, Beef, Croissant,
   Leaf, Truck, BadgePercent, PawPrint,
   LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
-  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins, Hourglass,
+  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins, Hourglass, Users, Inbox,
 } from 'lucide-react';
 
 export const SHOP_FAMILIES = [
@@ -111,6 +111,8 @@ export const MODULES = {
   suppliers:   { id: 'suppliers',   label: 'Suppliers',      icon: Truck,           desc: 'Your regular buying places', live: true, screen: 'suppliers' },
   takings:     { id: 'takings',     label: 'Takings & cash-up', icon: Coins,        desc: 'Day takings + drawer count', live: true, screen: 'takings' },
   overview:    { id: 'overview',    label: 'Owner glance',   icon: LayoutDashboard, desc: 'Takings, waste & margin', live: true, screen: 'overview' },
+  worker:      { id: 'worker',      label: 'Staff view',     icon: Users,           desc: 'For staff on shift', live: true, screen: 'worker' },
+  suggestions: { id: 'suggestions', label: 'From the team',  icon: Inbox,           desc: 'Staff flags & notes', live: true, screen: 'suggestions' },
   mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
   'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
   'scale-labels': { id: 'scale-labels', label: 'Scale & labels', icon: ClipboardList, desc: 'Weigh, price & PPDS', live: false },
@@ -120,7 +122,7 @@ export const MODULES = {
 };
 
 // Core modules every shop gets, in display order.
-export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'reorder', 'deadstock', 'expiry', 'suppliers', 'takings', 'mtd', 'overview'];
+export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'reorder', 'deadstock', 'expiry', 'suppliers', 'takings', 'overview', 'worker', 'suggestions', 'mtd'];
 
 /** All modules for a family, in display order: core + that family's extras. */
 export function getModulesForFamily(familyId) {
