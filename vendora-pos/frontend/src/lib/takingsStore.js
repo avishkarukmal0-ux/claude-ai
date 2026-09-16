@@ -34,11 +34,14 @@ export function entryTotals(e) {
   const card = Number(e.card) || 0;
   const cash = Number(e.cash) || 0;
   const float = Number(e.float) || 0;
+  // Pass-through = money in the drawer that ISN'T a retail sale (PayPoint bill pay,
+  // lottery, mobile top-ups). It sits in the drawer but must be excluded from takings.
+  const passThrough = Number(e.passThrough) || 0;
   const counted = e.counted === '' || e.counted == null ? null : Number(e.counted);
-  const takings = card + cash;
-  const expectedCash = float + cash;
+  const takings = card + cash;                     // true retail takings
+  const expectedCash = float + cash + passThrough; // what should be in the drawer
   const variance = counted == null ? null : counted - expectedCash;
-  return { card, cash, float, counted, takings, expectedCash, variance };
+  return { card, cash, float, passThrough, counted, takings, expectedCash, variance };
 }
 
 export function useTakings() {
@@ -55,7 +58,7 @@ export function useTakings() {
     const date = data.date || todayKey();
     setEntries((prev) => {
       const rest = prev.filter((e) => e.date !== date);
-      const entry = { id: newId(), date, card: Number(data.card) || 0, cash: Number(data.cash) || 0, float: Number(data.float) || 0, counted: data.counted === '' || data.counted == null ? null : Number(data.counted), ts: Date.now() };
+      const entry = { id: newId(), date, card: Number(data.card) || 0, cash: Number(data.cash) || 0, float: Number(data.float) || 0, passThrough: Number(data.passThrough) || 0, counted: data.counted === '' || data.counted == null ? null : Number(data.counted), ts: Date.now() };
       const next = [entry, ...rest].sort((a, b) => (a.date < b.date ? 1 : -1));
       persist(next);
       return next;

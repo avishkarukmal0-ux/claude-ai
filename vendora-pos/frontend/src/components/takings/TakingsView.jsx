@@ -6,7 +6,7 @@ import { useTakings, entryTotals } from '../../lib/takingsStore';
 // Shows total takings + cash variance. Local-first; feeds the Owner glance.
 export default function TakingsView({ onBack }) {
   const { entries, saveDay, removeEntry, todayEntry, monthTakings } = useTakings();
-  const [f, setF] = useState({ card: '', cash: '', float: '', counted: '' });
+  const [f, setF] = useState({ card: '', cash: '', float: '', passThrough: '', counted: '' });
 
   // Prefill from today's saved record if there is one.
   useEffect(() => {
@@ -15,6 +15,7 @@ export default function TakingsView({ onBack }) {
         card: String(todayEntry.card ?? ''),
         cash: String(todayEntry.cash ?? ''),
         float: String(todayEntry.float ?? ''),
+        passThrough: todayEntry.passThrough ? String(todayEntry.passThrough) : '',
         counted: todayEntry.counted == null ? '' : String(todayEntry.counted),
       });
     }
@@ -57,6 +58,9 @@ export default function TakingsView({ onBack }) {
         <div className="grid grid-cols-2 gap-2">
           <MoneyField icon={Wallet} label="Float £" value={f.float} onChange={set('float')} />
           <MoneyField icon={Coins} label="Counted £" value={f.counted} onChange={set('counted')} />
+        </div>
+        <div className="mt-2">
+          <MoneyField icon={Banknote} label="Pass-through £ (bill pay / lottery / top-ups)" value={f.passThrough} onChange={set('passThrough')} />
         </div>
 
         {live.variance != null && (

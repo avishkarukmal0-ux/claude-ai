@@ -66,6 +66,20 @@ export function expiryInfo(p, from = new Date()) {
   return { date: d, daysLeft, type, hard, status, mustPull: hard && daysLeft < 0 };
 }
 
+/** Days since the product last moved (sold), else since it was added; null if unknown. */
+export function daysSinceMovement(p, from = Date.now()) {
+  const ref = p.lastSoldAt || p.createdAt;
+  if (!ref) return null;
+  return Math.floor((from - ref) / 86400000);
+}
+
+/** Slow / dead stock: in stock but no movement for `days`+. */
+export function isSlowStock(p, days = 30) {
+  if ((Number(p.qty) || 0) <= 0) return false;
+  const d = daysSinceMovement(p);
+  return d != null && d >= days;
+}
+
 /** React hook: live inventory + mutators. Components re-render on every change. */
 export function useInventory() {
   const [products, setProducts] = useState(load);
@@ -94,6 +108,8 @@ export function useInventory() {
       supplierId: p.supplierId || null,
       expiry: p.expiry || null,
       dateType: p.dateType || 'best-before',
+      createdAt: Date.now(),
+      lastSoldAt: null,
       updatedAt: Date.now(),
     };
     setProducts((prev) => { const next = [product, ...prev]; persist(next); return next; });
@@ -102,7 +118,12 @@ export function useInventory() {
 
   const updateProduct = useCallback((id, patch) => {
     setProducts((prev) => {
-      const next = prev.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: Date.now() } : p));
+      const next = prev.map((p) => {
+        if (p.id !== id) return p;
+        // A qty drop is a "sale/movement" — stamp lastSoldAt so slow-stock ageing works.
+        const soldNow = patch.qty != null && Number(patch.qty) < (Number(p.qty) || 0);
+        return { ...p, ...patch, ...(soldNow ? { lastSoldAt: Date.now() } : {}), updatedAt: Date.now() };
+      });
       persist(next);
       return next;
     });
@@ -142,6 +163,11 @@ export function useInventory() {
             price: null,
             qty: addQty,
             min: 0,
+            supplierId: null,
+            expiry: null,
+            dateType: 'best-before',
+            createdAt: Date.now(),
+            lastSoldAt: null,
             updatedAt: Date.now(),
           });
         }
