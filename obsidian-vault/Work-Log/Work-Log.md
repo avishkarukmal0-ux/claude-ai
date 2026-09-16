@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-16-Takings-And-Owner-Glance]] — **day-takings + cash-up** (variance) and **Owner glance goes live** with real takings/waste/stock numbers — no till, no backend; verified
 - [[2026-09-16-Share-Buy-List]] — per-supplier **Share** (Web Share → WhatsApp/text, clipboard fallback) so shops order via any channel — Vendora is the brain across all suppliers, not a competitor to their apps; + Stock→Suppliers shortcut
 - [[2026-09-16-Suppliers]] — **Suppliers** (niche-aware buying places) wired through inventory → the buy list is now **grouped by where you shop**; verified end-to-end
 - [[2026-09-16-Reorder-Buy-List]] — **reorder suggestions**: low stock → a tickable **cash-&-carry buy list** (suggested qty, mark bought, feeds goods-in); local-first & persistent; verified

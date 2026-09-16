@@ -12,7 +12,7 @@ import {
   Carrot, Beef, Croissant,
   Leaf, Truck, BadgePercent, PawPrint,
   LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
-  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote, ShoppingCart,
+  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins,
 } from 'lucide-react';
 
 export const SHOP_FAMILIES = [
@@ -103,12 +103,13 @@ export const SHOP_FAMILIES = [
 // Every module a shop can see. Which set a shop gets = CORE + its family's extras.
 // `live: false` = not built on mobile yet (shows a "Soon" badge on the home screen).
 export const MODULES = {
-  overview:    { id: 'overview',    label: 'Owner glance',   icon: LayoutDashboard, desc: 'Takings, waste & margin', live: false },
   'goods-in':  { id: 'goods-in',    label: 'Goods-in scan',  icon: ScanLine,        desc: 'Scan the trolley on arrival', live: true, tab: 'scan' },
   inventory:   { id: 'inventory',   label: 'Inventory',      icon: Package,         desc: 'Products, prices & stock', live: true, tab: 'stock' },
   expiry:      { id: 'expiry',      label: 'Expiry & waste', icon: CalendarClock,   desc: 'Stop paying twice for waste', live: true, screen: 'waste' },
   reorder:     { id: 'reorder',     label: 'Buy list',       icon: ShoppingCart,    desc: 'Low stock → cash-&-carry list', live: true, screen: 'reorder' },
   suppliers:   { id: 'suppliers',   label: 'Suppliers',      icon: Truck,           desc: 'Your regular buying places', live: true, screen: 'suppliers' },
+  takings:     { id: 'takings',     label: 'Takings & cash-up', icon: Coins,        desc: 'Day takings + drawer count', live: true, screen: 'takings' },
+  overview:    { id: 'overview',    label: 'Owner glance',   icon: LayoutDashboard, desc: 'Takings, waste & margin', live: true, screen: 'overview' },
   mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
   'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
   'scale-labels': { id: 'scale-labels', label: 'Scale & labels', icon: ClipboardList, desc: 'Weigh, price & PPDS', live: false },
@@ -118,7 +119,7 @@ export const MODULES = {
 };
 
 // Core modules every shop gets, in display order.
-export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'reorder', 'expiry', 'suppliers', 'mtd', 'overview'];
+export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'reorder', 'expiry', 'suppliers', 'takings', 'mtd', 'overview'];
 
 /** All modules for a family, in display order: core + that family's extras. */
 export function getModulesForFamily(familyId) {
