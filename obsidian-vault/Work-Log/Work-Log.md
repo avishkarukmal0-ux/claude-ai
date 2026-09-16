@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-16-Gap-Fills-1-4]] — built the surgical gap set: **expiry/FEFO** (pet-med hard-stop) · **MUP+VPD** tools · **cash-up pass-through buckets** · **slow-stock ageing** (count-back depletion); all verified
 - [[2026-09-16-Niche-Gap-Analysis]] — 4 parallel research agents (one per family) → **ranked per-niche gaps** + the surgical build set (expiry/FEFO · MUP+VPD · PPDS labels · loose price/kg · cash-up buckets) → [[Niche-Gap-Analysis]]
 - [[2026-09-16-Backup-Restore]] — **export / restore backup** (all local data → one JSON file, share or download; restore replaces + reloads) — peace of mind before the backend; verified round-trip
 - [[2026-09-16-Takings-And-Owner-Glance]] — **day-takings + cash-up** (variance) and **Owner glance goes live** with real takings/waste/stock numbers — no till, no backend; verified

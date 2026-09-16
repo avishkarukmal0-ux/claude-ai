@@ -26,13 +26,16 @@ Back to [[Home]] · Related: [[Niche-Pain-Research]] · [[Features-To-Build]] ·
 
 **Mobile & value:** pet veterinary-medicine expiry **hard-stop** (criminal offence) · discount dead-stock/sell-through ageing · market per-day cash-up netting pitch fee + pitch league table · market van count-back depletion · discount per-SKU VAT (if VAT-registered) · pet AAL welfare log (if live animals) · pet repeat/subscription feed reorders · street-trading licence reminder.
 
-## The surgical build set (recommended order — fill gaps, no bloat)
-1. **⭐ Expiry/date + FEFO "sell first" + markdown → waste** — universal, legal for pet meds, upgrades waste. *Build first.*
-2. **MUP guardrail + VPD reprice** — both land 1 Oct 2026; shopType-gated. *Time-critical.*
-3. **PPDS / allergen label generator** — Natasha's Law; fresh + world + health.
-4. **Loose price-per-kg + shelf tickets** — fresh + world.
-5. **Cash-up buckets + count-back depletion** — grocery + market + discount (unlocks dead-stock ageing).
-6. Then niche-specifics as demand shows: cut/yield, sale-or-return, festival planner, imported-stock gate, CBD/health-claims, temp log, HND, etc.
+## The surgical build set — status (built 2026-09-16, see [[2026-09-16-Gap-Fills-1-4]])
+1. ✅ **Expiry/date + FEFO "sell first" → waste** — built (best-before soft; use-by/medicine hard-stop "pull now").
+2. ✅ **MUP guardrail + VPD reprice** — built (age-restricted quick tools).
+3. ✅ **Cash-up pass-through buckets** — built (kills the false daily variance).
+4. ✅ **Slow / dead-stock ageing + count-back depletion** — built (qty drop stamps lastSoldAt).
+5. ⏸️ **PPDS / allergen label generator** — *deferred* (print-hardware dependent → later, as PDF/A4 output).
+6. ⏸️ **Loose price-per-kg + shelf tickets** — *deferred* (same print/scale caveat).
+7. ⬜ Niche-specifics next, as demand shows: cut/yield (butcher), sale-or-return (newsagent), festival planner (world), imported-stock legality gate (world), CBD/health-claims (health-food), fridge temp log, HND ledger, PMP flag.
+
+*Reorder reason:* a phone can't reliably drive a label printer (esp. iOS), so print-dependent gaps dropped below the no-hardware wins.
 
 ## Caveats to honour (from the research)
 - Dates that have slipped/are pre-final: unit-pricing (~Apr 2026), DRS (Oct 2027), VPD duty-stamp mechanics, tobacco DOB commencement, Allwyn settlement flow — **field-check before promising a date in-app.**
