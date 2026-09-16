@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Home as HomeIcon, ScanLine, Package2, MoreHorizontal, Settings, LogIn, ChevronRight, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Home as HomeIcon, ScanLine, Package2, MoreHorizontal, Settings, LogIn, ChevronRight, X, Download, Upload } from 'lucide-react';
+import { downloadBackup, shareBackup, restoreFromText } from '../lib/backup';
 import {
   getSavedShopType, getFamily, getMember, getModulesForFamily,
 } from '../config/shopTypes';
@@ -24,6 +26,32 @@ export default function HomePage() {
   const [tab, setTab] = useState('home');
   const [screen, setScreen] = useState(null); // full-page module screen (e.g. 'waste')
   const [activeTool, setActiveTool] = useState(null);
+  const restoreInputRef = useRef(null);
+
+  async function onExport() {
+    const shared = await shareBackup();
+    if (shared) return;
+    const ok = downloadBackup();
+    toast[ok ? 'success' : 'error'](ok ? 'Backup downloaded' : 'Couldn’t create the backup');
+  }
+
+  function onRestoreFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = restoreFromText(String(reader.result || ''));
+      if (res.ok) {
+        toast.success('Backup restored — reloading…');
+        setTimeout(() => window.location.reload(), 900);
+      } else {
+        toast.error(res.error || 'Restore failed');
+      }
+    };
+    reader.onerror = () => toast.error('Couldn’t read that file');
+    reader.readAsText(file);
+  }
 
   // No shop type picked yet → send them to the front door.
   if (!saved) return <Navigate to="/" replace />;
@@ -176,6 +204,26 @@ export default function HomePage() {
               <span className="flex-1 text-sm font-medium text-gray-900">Log in to your shop</span>
               <ChevronRight className="h-4 w-4 text-gray-300" />
             </Link>
+
+            <div className="pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Backup</div>
+            <button type="button" onClick={onExport} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
+              <Download className="h-5 w-5 text-gray-400" />
+              <span className="flex-1">
+                <span className="block text-sm font-medium text-gray-900">Export backup</span>
+                <span className="block text-[11px] text-gray-400">Save your data to a file (or share it)</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-gray-300" />
+            </button>
+            <button type="button" onClick={() => restoreInputRef.current?.click()} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
+              <Upload className="h-5 w-5 text-gray-400" />
+              <span className="flex-1">
+                <span className="block text-sm font-medium text-gray-900">Restore from backup</span>
+                <span className="block text-[11px] text-gray-400">Load a backup file — replaces current data</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-gray-300" />
+            </button>
+            <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
+
             <p className="px-1 pt-2 text-center text-xs text-gray-400">
               Set up as {shopLabel} · Vendora
             </p>
