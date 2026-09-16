@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck } from 'lucide-react';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload } from 'lucide-react';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
-export default function InventoryView({ onOpenSuppliers }) {
+export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const { products, addProduct, updateProduct, removeProduct } = useInventory();
   const { suppliers } = useSuppliers();
   const [query, setQuery] = useState('');
@@ -33,13 +33,14 @@ export default function InventoryView({ onOpenSuppliers }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onOpenImport && (
+            <button type="button" onClick={onOpenImport} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95" aria-label="Import products">
+              <Upload className="h-4 w-4" />
+            </button>
+          )}
           {onOpenSuppliers && (
-            <button
-              type="button"
-              onClick={onOpenSuppliers}
-              className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 active:scale-95"
-            >
-              <Truck className="h-4 w-4" /> Suppliers
+            <button type="button" onClick={onOpenSuppliers} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95" aria-label="Suppliers">
+              <Truck className="h-4 w-4" />
             </button>
           )}
           <button
@@ -67,7 +68,7 @@ export default function InventoryView({ onOpenSuppliers }) {
       )}
 
       {products.length === 0 && !adding ? (
-        <EmptyState onAdd={() => setAdding(true)} />
+        <EmptyState onAdd={() => setAdding(true)} onImport={onOpenImport} />
       ) : (
         <ul className="space-y-2">
           {filtered.map((p) => {
@@ -173,15 +174,18 @@ function AddForm({ onAdd, onCancel, suppliers = [] }) {
   );
 }
 
-function EmptyState({ onAdd }) {
+function EmptyState({ onAdd, onImport }) {
   return (
     <div className="mt-6 flex flex-col items-center text-center">
       <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary">
         <PackagePlus className="h-7 w-7" strokeWidth={1.75} />
       </span>
       <p className="text-sm font-semibold text-gray-900">No stock yet</p>
-      <p className="mt-1 max-w-xs text-sm text-gray-500">Add your first product, or use the Scan tab to book in a delivery.</p>
-      <button type="button" onClick={onAdd} className="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white">Add a product</button>
+      <p className="mt-1 max-w-xs text-sm text-gray-500">Add your first product, scan a delivery, or import your list from an old till/spreadsheet.</p>
+      <div className="mt-4 flex gap-2">
+        <button type="button" onClick={onAdd} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white">Add a product</button>
+        {onImport && <button type="button" onClick={onImport} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-600">Import CSV</button>}
+      </div>
     </div>
   );
 }

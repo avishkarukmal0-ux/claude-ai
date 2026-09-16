@@ -16,6 +16,7 @@ import SuppliersView from '../components/suppliers/SuppliersView';
 import TakingsView from '../components/takings/TakingsView';
 import OverviewView from '../components/overview/OverviewView';
 import DeadStockView from '../components/deadstock/DeadStockView';
+import ImportView from '../components/import/ImportView';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -193,7 +194,9 @@ export default function HomePage() {
 
         {!screen && tab === 'scan' && <GoodsInView />}
 
-        {!screen && tab === 'stock' && <InventoryView onOpenSuppliers={() => setScreen('suppliers')} />}
+        {!screen && tab === 'stock' && <InventoryView onOpenSuppliers={() => setScreen('suppliers')} onOpenImport={() => setScreen('import')} />}
+
+        {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
 
         {!screen && tab === 'more' && (
           <section className="space-y-2">

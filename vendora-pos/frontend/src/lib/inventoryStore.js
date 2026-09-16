@@ -133,6 +133,41 @@ export function useInventory() {
     setProducts((prev) => { const next = prev.filter((p) => p.id !== id); persist(next); return next; });
   }, []);
 
+  /** Bulk import products (from CSV). Skips rows whose barcode already exists.
+   *  Persists synchronously (the import screen may unmount right after), then
+   *  updates state. Returns { added, skipped }. */
+  const importProducts = useCallback((rows) => {
+    const prev = load();
+    const seen = new Set(prev.filter((p) => p.barcode).map((p) => p.barcode));
+    let added = 0; let skipped = 0;
+    const created = [];
+    for (const r of rows) {
+      const barcode = (r.barcode || '').trim();
+      if (barcode && seen.has(barcode)) { skipped++; continue; }
+      if (barcode) seen.add(barcode);
+      created.push({
+        id: newId(),
+        barcode,
+        name: (r.name || '').trim() || 'Unnamed item',
+        cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
+        price: r.price === '' || r.price == null ? null : Number(r.price),
+        qty: Number(r.qty) || 0,
+        min: 0,
+        supplierId: null,
+        expiry: null,
+        dateType: 'best-before',
+        createdAt: Date.now(),
+        lastSoldAt: null,
+        updatedAt: Date.now(),
+      });
+      added++;
+    }
+    const next = [...created, ...prev];
+    persist(next);      // synchronous — not dependent on a React update running
+    setProducts(next);
+    return { added, skipped };
+  }, []);
+
   const findByBarcode = useCallback((barcode) => {
     const b = (barcode || '').trim();
     if (!b) return null;
@@ -177,5 +212,5 @@ export function useInventory() {
     });
   }, []);
 
-  return { products, addProduct, updateProduct, removeProduct, findByBarcode, receiveLines, commit };
+  return { products, addProduct, updateProduct, removeProduct, findByBarcode, receiveLines, importProducts, commit };
 }
