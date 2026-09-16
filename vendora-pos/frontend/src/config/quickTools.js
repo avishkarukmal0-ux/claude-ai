@@ -3,11 +3,13 @@
 // Universal tools show for every shop; gated tools show only when the family's
 // module set qualifies (e.g. age-check for age-restricted shops).
 
-import { FileClock, Percent, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud } from 'lucide-react';
 import MtdCountdown from '../components/quicktools/MtdCountdown';
 import MarginCalculator from '../components/quicktools/MarginCalculator';
 import AgeCheckHelper from '../components/quicktools/AgeCheckHelper';
 import ComplianceRadar from '../components/quicktools/ComplianceRadar';
+import MupCalculator from '../components/quicktools/MupCalculator';
+import VpdCalculator from '../components/quicktools/VpdCalculator';
 import { getFamily } from './shopTypes';
 
 export const QUICK_TOOLS = {
@@ -42,6 +44,22 @@ export const QUICK_TOOLS = {
     icon: ShieldCheck,
     component: AgeCheckHelper,
     // Shown only for families whose module set includes age verification.
+    requiresModule: 'age-check',
+  },
+  'mup': {
+    id: 'mup',
+    label: 'MUP floor',
+    tagline: 'Min alcohol price check',
+    icon: Wine,
+    component: MupCalculator,
+    requiresModule: 'age-check',
+  },
+  'vpd': {
+    id: 'vpd',
+    label: 'Vape duty',
+    tagline: 'VPD reprice (Oct 2026)',
+    icon: Cloud,
+    component: VpdCalculator,
     requiresModule: 'age-check',
   },
 };
