@@ -9,6 +9,7 @@ import TodayAtShop from '../components/home/TodayAtShop';
 import InventoryView from '../components/inventory/InventoryView';
 import GoodsInView from '../components/inventory/GoodsInView';
 import WasteView from '../components/waste/WasteView';
+import ReorderView from '../components/reorder/ReorderView';
 
 /**
  * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
@@ -55,6 +56,8 @@ export default function HomePage() {
       {/* Scrollable content */}
       <main className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
         {screen === 'waste' && <WasteView onBack={() => setScreen(null)} />}
+
+        {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
 
         {!screen && tab === 'home' && (
           <>

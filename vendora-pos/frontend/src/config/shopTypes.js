@@ -12,7 +12,7 @@ import {
   Carrot, Beef, Croissant,
   Leaf, Truck, BadgePercent, PawPrint,
   LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
-  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote,
+  ShieldCheck, ClipboardList, CalendarHeart, AlertTriangle, Banknote, ShoppingCart,
 } from 'lucide-react';
 
 export const SHOP_FAMILIES = [
@@ -103,6 +103,7 @@ export const MODULES = {
   'goods-in':  { id: 'goods-in',    label: 'Goods-in scan',  icon: ScanLine,        desc: 'Scan the trolley on arrival', live: true, tab: 'scan' },
   inventory:   { id: 'inventory',   label: 'Inventory',      icon: Package,         desc: 'Products, prices & stock', live: true, tab: 'stock' },
   expiry:      { id: 'expiry',      label: 'Expiry & waste', icon: CalendarClock,   desc: 'Stop paying twice for waste', live: true, screen: 'waste' },
+  reorder:     { id: 'reorder',     label: 'Buy list',       icon: ShoppingCart,    desc: 'Low stock → cash-&-carry list', live: true, screen: 'reorder' },
   suppliers:   { id: 'suppliers',   label: 'Suppliers',      icon: Truck,           desc: 'Orders & best prices', live: false },
   mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
   'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
@@ -113,7 +114,7 @@ export const MODULES = {
 };
 
 // Core modules every shop gets, in display order.
-export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'expiry', 'suppliers', 'mtd', 'overview'];
+export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'reorder', 'expiry', 'suppliers', 'mtd', 'overview'];
 
 /** All modules for a family, in display order: core + that family's extras. */
 export function getModulesForFamily(familyId) {

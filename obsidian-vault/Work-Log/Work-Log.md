@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-16-Reorder-Buy-List]] — **reorder suggestions**: low stock → a tickable **cash-&-carry buy list** (suggested qty, mark bought, feeds goods-in); local-first & persistent; verified
 - [[2026-09-16-ADR-Shared-Backend]] — locked the architecture decision: **one shared v3 backend/DB for App + Till** (not separate); reasoning + mitigations in [[ADR-001-Shared-Backend]]
 - [[2026-09-15-Connect-Backend-MongoDB]] — backend is **ready to connect**: `/health` now reports **db status**; wrote the [[Connect-Backend-MongoDB]] runbook (Atlas → Railway → Vercel). Going live is now a config/deploy task (founder's URI + hosting)
 - [[2026-09-14-Waste-Tracker]] — **waste & savings tracker**: log binned vs rescued → £ wasted / £ saved this month, "you rescued £X" banner; local-first & persistent; opens from the Expiry & waste tile
