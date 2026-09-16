@@ -36,6 +36,7 @@
 - [[Go-To-Market]] — ⭐ **the master plan**: land with the App, expand to the Till (land-and-expand) *locked 2026-07-18*
 - [[Customer-Discovery]] — 🔎 **field kit**: how to talk to 5–10 shops and find the pain to build around
 - [[Niche-Pain-Research]] — 🔬 per-niche pains (2025–26), evidence-backed: universal core vs vertical modules
+- [[Niche-Gap-Analysis]] — 🔬 **what we've MISSED per niche** (2026): ranked gaps + the surgical build set ⭐
 - [[Features-To-Build]] — 🧱 **the ADD list**: net-new features to build (vs [[Feature-Inventory]] = already built)
 - [[Two-Setups-Till-and-App]] — what goes in the Till (web) vs the App (mobile) *scope locked 2026-07-16; build order now reversed → see [[Go-To-Market]]*
 - [[Positioning]] — how Vendora wins vs Square/Shopify/Epos Now & AI clones ⭐
