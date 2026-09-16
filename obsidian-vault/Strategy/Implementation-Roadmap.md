@@ -42,20 +42,19 @@ The universal wedge + the reason the owner opens it daily.
 - ⬜ Auto-capture sales + expenses → **MTD-ready quarterly figures** export — *needs sales data + backend; deferred.*
 - ⏳ Nightly "shop closed fine" — exists on the till backend; not yet on the app.
 
-### M3 — shopType architecture + app faces *(weeks 6–7)* — 🟡 mostly done
+### M3 — shopType architecture + app faces *(weeks 6–7)* — ✅ done (front-end)
 The dial that lets one app serve every inch.
 - ✅ Front-end **shop-type registry** (4 families + members) + **module catalog** (Core + per-family modules) + picker front door.
 - ✅ Per-shopType interface working (each family sees its own tools + quick tools).
-- ⬜ **Worker view** (expiring-soon + trends) — not built.
-- ⬜ **Suggest-to-owner loop** — not built.
-- ⏳ Backend `shopType`/`PLAN_FEATURES` wiring — deferred to backend.
+- ✅ **Worker "Staff view"** (expiring + low-stock, one-tap flags) + **suggest-to-owner loop** (owner "From the team" inbox with badge) *(2026-09-16)*.
+- ⏳ Backend `shopType`/`PLAN_FEATURES` wiring — deferred to backend (front-end dial is complete).
 
-### M4 — Forecasting, markdown, migration *(weeks 8–10)* — 🟡 partial
+### M4 — Forecasting, markdown, migration *(weeks 8–10)* — 🟡 mostly done
 Complete the Core's money-savers + the switching wedge.
 - ✅ **Reorder suggestions** (lite forecast: low-stock → buy list) *([[2026-09-16-Reorder-Buy-List]])*.
 - ✅ **Dynamic markdown / FEFO** — expiry "sell first" list *([[2026-09-16-Gap-Fills-1-4]])*.
-- ⬜ **Demand forecasting** (proper forecast-to-order) — not built (needs sales history).
-- ⬜ **Migration/onboarding import** (old EPOS/spreadsheet → products) — **not built; the switching wedge, still important.**
+- ✅ **Migration/onboarding CSV import** (old EPOS/spreadsheet → products in minutes) — the switching wedge *(2026-09-16)*.
+- ⬜ **Demand forecasting** (proper forecast-to-order) — not built; **needs real sales history → after the backend**.
 
 ### M5 — First vertical + FIELD VALIDATION *(weeks 11–12)* — ❌ not started
 Prove it in a real shop before widening.
