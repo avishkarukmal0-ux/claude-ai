@@ -44,6 +44,28 @@ export function isLowStock(p) {
   return min > 0 ? qty <= min : qty <= 3; // default low-stock threshold
 }
 
+// Date types: best-before = soft (sell if fit / mark down); use-by & medicine =
+// LEGAL hard-stop (illegal / criminal to sell after date).
+export const DATE_TYPES = {
+  'best-before': { label: 'Best before', hard: false },
+  'use-by': { label: 'Use by', hard: true },
+  'medicine': { label: 'Medicine expiry', hard: true },
+};
+
+/** Expiry status for a product, or null if no date set. */
+export function expiryInfo(p, from = new Date()) {
+  if (!p.expiry) return null;
+  const d = new Date(p.expiry); d.setHours(0, 0, 0, 0);
+  const today = new Date(from); today.setHours(0, 0, 0, 0);
+  const daysLeft = Math.round((d - today) / 86400000);
+  const type = DATE_TYPES[p.dateType] ? p.dateType : 'best-before';
+  const hard = DATE_TYPES[type].hard;
+  let status = 'ok';
+  if (daysLeft < 0) status = 'expired';
+  else if (daysLeft <= 7) status = 'soon';
+  return { date: d, daysLeft, type, hard, status, mustPull: hard && daysLeft < 0 };
+}
+
 /** React hook: live inventory + mutators. Components re-render on every change. */
 export function useInventory() {
   const [products, setProducts] = useState(load);
@@ -70,6 +92,8 @@ export function useInventory() {
       qty: Number(p.qty) || 0,
       min: Number(p.min) || 0,
       supplierId: p.supplierId || null,
+      expiry: p.expiry || null,
+      dateType: p.dateType || 'best-before',
       updatedAt: Date.now(),
     };
     setProducts((prev) => { const next = [product, ...prev]; persist(next); return next; });

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Minus, PackagePlus, Truck } from 'lucide-react';
-import { useInventory, margin, isLowStock } from '../../lib/inventoryStore';
+import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
@@ -94,6 +94,30 @@ export default function InventoryView({ onOpenSuppliers }) {
                         {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     )}
+                    <div className="mt-1 flex items-center gap-1">
+                      <input
+                        type="date"
+                        value={p.expiry || ''}
+                        onChange={(e) => updateProduct(p.id, { expiry: e.target.value || null })}
+                        className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+                        aria-label="Expiry date"
+                      />
+                      {p.expiry && (
+                        <select
+                          value={p.dateType || 'best-before'}
+                          onChange={(e) => updateProduct(p.id, { dateType: e.target.value })}
+                          className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+                          aria-label="Date type"
+                        >
+                          {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      )}
+                      {(() => { const ei = expiryInfo(p); if (!ei || ei.status === 'ok') return null; return (
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ei.mustPull ? 'bg-danger text-white' : ei.status === 'expired' ? 'bg-warning-light text-warning-dark' : 'bg-warning-light text-warning-dark'}`}>
+                          {ei.daysLeft < 0 ? (ei.mustPull ? 'PULL' : 'expired') : `${ei.daysLeft}d`}
+                        </span>
+                      ); })()}
+                    </div>
                   </div>
                   <button type="button" onClick={() => removeProduct(p.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete">
                     <Trash2 className="h-4 w-4" />

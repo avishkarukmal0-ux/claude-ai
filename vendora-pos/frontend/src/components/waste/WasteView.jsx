@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Trash2, TrendingDown, PiggyBank, Plus } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ArrowLeft, Trash2, TrendingDown, PiggyBank, Plus, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useWaste } from '../../lib/wasteStore';
+import { useInventory, expiryInfo, DATE_TYPES } from '../../lib/inventoryStore';
 
 // Waste & savings tracker — money lost to the bin vs money rescued by marking down
 // in time. Local-first; the "£ saved this month" line is the motivating headline.
 export default function WasteView({ onBack }) {
   const { entries, addEntry, removeEntry, monthWasted, monthSaved } = useWaste();
+  const { products } = useInventory();
   const [form, setForm] = useState({ name: '', value: '', qty: '1' });
 
   function log(type) {
@@ -13,6 +15,14 @@ export default function WasteView({ onBack }) {
     addEntry({ type, name: form.name, value: form.value, qty: form.qty });
     setForm({ name: '', value: '', qty: '1' });
   }
+
+  // FEFO — products with a date, expired or within 7 days, soonest first.
+  const expiring = useMemo(() => {
+    return products
+      .map((p) => ({ p, info: expiryInfo(p) }))
+      .filter((x) => x.info && (x.info.status === 'expired' || x.info.status === 'soon'))
+      .sort((a, b) => a.info.daysLeft - b.info.daysLeft);
+  }, [products]);
 
   const monthName = new Date().toLocaleDateString('en-GB', { month: 'long' });
 
@@ -24,6 +34,38 @@ export default function WasteView({ onBack }) {
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Waste &amp; savings</h2>
       <p className="mb-4 text-xs text-gray-400">Log what you bin and what you rescue. See the money either way.</p>
+
+      {/* FEFO — expiring / sell first */}
+      {expiring.length > 0 && (
+        <section className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <CalendarClock className="h-3.5 w-3.5" /> Sell first — expiring
+          </h3>
+          <ul className="space-y-2">
+            {expiring.map(({ p, info }) => (
+              <li key={p.id} className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${info.mustPull ? 'border-danger/40 bg-danger-light' : info.status === 'expired' ? 'border-warning/40 bg-warning-light' : 'border-gray-100 bg-white'}`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
+                  <span className={`block text-[11px] ${info.status === 'expired' ? 'text-danger' : 'text-gray-500'}`}>
+                    {DATE_TYPES[info.type].label} {info.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ·{' '}
+                    {info.daysLeft < 0 ? `${Math.abs(info.daysLeft)}d ago` : info.daysLeft === 0 ? 'today' : `in ${info.daysLeft}d`}
+                  </span>
+                  {info.mustPull && (
+                    <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-danger-dark"><AlertTriangle className="h-3 w-3" /> Do not sell — pull now</span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => addEntry({ type: 'wasted', name: p.name, value: p.cost ?? 0, qty: 1 })}
+                  className="shrink-0 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95"
+                >
+                  Binned
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Headline stats */}
       <div className="mb-4 grid grid-cols-2 gap-3">
