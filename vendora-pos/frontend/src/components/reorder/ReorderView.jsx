@@ -1,8 +1,26 @@
 import React, { useMemo } from 'react';
-import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2, Share2 } from 'lucide-react';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
+
+// Share/copy a supplier's outstanding list so the shop can send it to that
+// wholesaler or rep (WhatsApp, text, paste into the supplier's own app).
+async function shareGroup(supplier, groupItems) {
+  const lines = groupItems.filter((i) => !i.bought).map((i) => `• ${i.name} x${i.qty}`);
+  if (lines.length === 0) { toast('Nothing left to order here'); return; }
+  const text = `Order — ${supplier}\n${lines.join('\n')}\n\n— via Vendora`;
+  try {
+    if (navigator.share) { await navigator.share({ title: `Order — ${supplier}`, text }); return; }
+  } catch { /* user cancelled or share failed — fall back to copy */ }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success('List copied — paste it to your supplier');
+    return;
+  } catch { /* clipboard blocked */ }
+  toast('Couldn’t copy automatically', { icon: 'ℹ️' });
+}
 
 // Suggested restock quantity to bring a low item back to a sensible "par" level.
 // Honest heuristic (no sales history yet — that's the later forecasting feature):
@@ -98,6 +116,13 @@ export default function ReorderView({ onBack }) {
               <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-500">
                 <Building2 className="h-3.5 w-3.5 text-gray-400" /> {supplier}
                 <span className="text-gray-300">· {groupItems.reduce((n, x) => n + (Number(x.qty) || 0), 0)}</span>
+                <button
+                  type="button"
+                  onClick={() => shareGroup(supplier, groupItems)}
+                  className="ml-auto flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary active:scale-95"
+                >
+                  <Share2 className="h-3.5 w-3.5" /> Share
+                </button>
               </div>
               <ul className="space-y-2">
                 {groupItems.map((i) => (
