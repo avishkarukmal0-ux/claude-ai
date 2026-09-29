@@ -19,6 +19,18 @@ House style observed across the codebase — follow these when adding code.
 - Money helpers: round to 2dp with a local `r2()` (`Math.round(n*100)/100`).
 - Response shape: `{ success: true, ...data }` or `{ success:false, error:{ code, message } }`.
 
+## PWA local-first patterns (2026-09-30, see [[ADR-002-App-Till-Separation]])
+- **All localStorage goes through `lib/storage.js`** — never `localStorage.getItem/setItem` directly in a
+  store. It scopes keys to the active workspace and surfaces write failures (don't swallow them).
+- Stock only changes via a **typed movement** (`movementStore`): a manual qty edit is `stock_adjustment`,
+  a sale is `sale` (`sellUnits`), binning is `waste` (`recordWaste`). Never infer a sale from any decrease.
+- **Unknown ≠ zero.** `margin()` and valuations return null / exclude unknown-cost items; show coverage.
+- Persist **deterministically**: read → compute → `persist()` synchronously → `setState` → then log the
+  movement. Don't read a value you assigned inside a `setState` updater (it runs later).
+- Backups: validate → snapshot → write → rollback on failure; never touch non-app (token/account) keys.
+- Frontend tests: **Vitest** (`npm test` in `frontend`). Backend DB-free tests: `npm run test:unit`;
+  integration needs Mongo (`VENDORA_TEST_URI`). Don't weaken assertions to go green — split, don't skip.
+
 ## Frontend patterns
 - One `services/*.js` module per API domain, each a thin axios wrapper.
 - Pages fetch via `useCallback` + `useEffect`; toast on error.

@@ -5,6 +5,7 @@ Back to [[Home]]
 Running journal of **everything we do from here onwards** — newest first. Each entry is its own note (date-prefixed) so they sort and link cleanly. Use [[_Template]] to start a new one.
 
 ## Entries
+- [[2026-09-30-Reliability-Review]] — **reliability & security review + App/Till separation**: scoped/failure-visible storage, typed movements (adjustments≠sales, deterministic), waste-reduces-stock w/ undo, honest unknown-cost, atomic backup/rollback; backend middleware order, shop-scoped/idempotent/discount-aware refunds, void-PIN enforced, prod secret fail-fast, loyalty deducted; PWA initial JS 643→152 kB via lazy till. 35 FE + 50 BE unit tests; [[ADR-002-App-Till-Separation]]
 - [[2026-09-29-Flagship-Stocktake]] — **Flagship ②: Stocktake / audit mode** — scan-or-type count, expected-vs-counted variance, **£ shrinkage** summary + history; applies as corrections (never pollutes velocity). The theft/waste wedge made real, no hardware.
 - [[2026-09-29-Smarter-Brain]] — **10x pivot: PWA-only** (till/Phase-2 shelved) + **the shop gets a brain**: sell-through velocity, urgent velocity-aware reorder, a "Do this today" action engine (£ impact + one-tap fix), and owner insights (stock value, dead money, weekly projection, best sellers)
 - [[2026-09-16-M3-M4-Push]] — **M4 migration CSV import** (switching wedge) + **M3 worker Staff view & suggest-to-owner loop**; roadmap: local-first build essentially complete, remainder backend/shop-blocked

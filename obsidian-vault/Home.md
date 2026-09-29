@@ -28,7 +28,8 @@
 - [[State-and-Contexts]] — React contexts, hooks, services
 
 ### Strategy 🎯
-- [[ADR-001-Shared-Backend]] — 🧭 **locked decision**: one shared v3 backend for App + Till (not separate) ⭐
+- [[ADR-001-Shared-Backend]] — 🧭 one shared v3 backend for App + Till (not separate)
+- [[ADR-002-App-Till-Separation]] — 🧭 **PWA is a standalone product; till deferred & lazy-loaded** — one data model, not two DBs (2026-09-30) ⭐
 - [[Implementation-Roadmap]] — 🗓️ **the build plan**: milestones M0–M5, locked decisions, first move ⭐
 - [[The-Whole-Story]] — 🧭 **the full arc on one page**: turning point · niches · what we build ⭐
 - [[App-Kickoff]] — 🚀 **START HERE in a fresh tab**: the one-page hand-off to begin building the Phase-1 app ⭐
