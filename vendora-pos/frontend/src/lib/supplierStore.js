@@ -1,20 +1,16 @@
 // Local-first suppliers store — the places a shop buys from regularly
-// (cash-&-carry, wholesalers, roundsmen). Persists to localStorage. No backend.
+// (cash-&-carry, wholesalers, roundsmen). Scoped to the active workspace (via lib/storage).
 import { useCallback, useEffect, useState } from 'react';
+import { readJSON, writeJSON } from './storage';
 
-const KEY = 'vendora_suppliers_v1';
+const NAME = 'suppliers_v1';
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+  const arr = readJSON(NAME, []);
+  return Array.isArray(arr) ? arr : [];
 }
 function persist(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* ignore */ }
+  return writeJSON(NAME, list);
 }
 function newId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -25,9 +21,13 @@ export function useSuppliers() {
   const [suppliers, setSuppliers] = useState(load);
 
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setSuppliers(load()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const refresh = () => setSuppliers(load());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
+    };
   }, []);
 
   const addSupplier = useCallback(({ name, phone, notes }) => {

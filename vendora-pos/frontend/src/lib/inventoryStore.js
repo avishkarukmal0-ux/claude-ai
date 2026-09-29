@@ -1,42 +1,51 @@
-// Local-first inventory store — real, working stock data saved on the device.
-// No backend yet: persists to localStorage so it survives reloads and works offline.
-// When the backend lands, this same shape syncs up. Every mutation re-persists.
+// Local-first inventory store — real, working stock data saved on the device, scoped to
+// the active workspace (guest or a specific shop). No backend yet: persists to localStorage
+// (via lib/storage) so it survives reloads and works offline. When the backend lands, this
+// same shape syncs up.
+//
+// Correctness rules (see Work-Log 2026-09-30):
+//  - Every stock change writes a TYPED movement with the right reason. A manual quantity
+//    edit is a `stock_adjustment`, NOT a sale. Real sales go through sellUnits(); waste
+//    through recordWaste(); deliveries through receiveLines().
+//  - Writes are deterministic: read → compute → persist synchronously → update state →
+//    log the movement. Nothing depends on a deferred React updater running.
 import { useCallback, useEffect, useState } from 'react';
-import { recordSale } from './movementStore';
+import { readJSON, writeJSON, getActiveWorkspace } from './storage';
+import { recordMovement, removeByBatch, MOVEMENT_TYPES } from './movementStore';
 
-const KEY = 'vendora_inventory_v1';
+const NAME = 'inventory_v1';
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+  const arr = readJSON(NAME, []);
+  return Array.isArray(arr) ? arr : [];
 }
-
 function persist(products) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(products));
-  } catch {
-    /* ignore — private mode / quota */
-  }
+  return writeJSON(NAME, products); // { ok, error? } — storage emits a visible error event on failure
 }
-
 function newId() {
-  try {
-    if (crypto?.randomUUID) return crypto.randomUUID();
-  } catch { /* ignore */ }
+  try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
   return `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Profit margin as a share of sell price (0–1), or null if not computable. */
+/**
+ * Profit margin as a share of sell price (0–1), or null if not computable.
+ * IMPORTANT: an unknown/blank/invalid cost is NOT the same as a zero cost. Unknown cost
+ * returns null (so the UI can show "—" / "cost missing") instead of a fake 100% margin.
+ */
 export function margin(p) {
-  const cost = Number(p.cost);
   const price = Number(p.price);
-  if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(cost)) return null;
-  return (price - cost) / price;
+  if (!Number.isFinite(price) || price <= 0) return null;
+  if (p.cost == null || p.cost === '') return null;       // unknown cost → unknown margin
+  const cost = Number(p.cost);
+  if (!Number.isFinite(cost) || cost < 0) return null;    // invalid cost → unknown margin
+  return (price - cost) / price;                          // explicit 0 cost is allowed (→ 100%)
+}
+
+/** True if a product's cost is unknown (blank/null/invalid) — for honest valuation coverage. */
+export function costKnown(p) {
+  if (p == null || p.cost == null || p.cost === '') return false;
+  const c = Number(p.cost);
+  return Number.isFinite(c) && c >= 0;
 }
 
 export function isLowStock(p) {
@@ -67,7 +76,7 @@ export function expiryInfo(p, from = new Date()) {
   return { date: d, daysLeft, type, hard, status, mustPull: hard && daysLeft < 0 };
 }
 
-/** Days since the product last moved (sold), else since it was added; null if unknown. */
+/** Days since the product last moved, else since it was added; null if unknown. */
 export function daysSinceMovement(p, from = Date.now()) {
   const ref = p.lastSoldAt || p.createdAt;
   if (!ref) return null;
@@ -81,79 +90,132 @@ export function isSlowStock(p, days = 30) {
   return d != null && d >= days;
 }
 
+function normaliseNew(p) {
+  return {
+    id: newId(),
+    barcode: (p.barcode || '').trim(),
+    name: (p.name || '').trim() || 'Unnamed item',
+    cost: p.cost === '' || p.cost == null ? null : Number(p.cost),
+    price: p.price === '' || p.price == null ? null : Number(p.price),
+    qty: Number(p.qty) || 0,
+    min: Number(p.min) || 0,
+    supplierId: p.supplierId || null,
+    expiry: p.expiry || null,
+    dateType: p.dateType || 'best-before',
+    createdAt: Date.now(),
+    lastSoldAt: null,
+    updatedAt: Date.now(),
+  };
+}
+
 /** React hook: live inventory + mutators. Components re-render on every change. */
 export function useInventory() {
   const [products, setProducts] = useState(load);
 
-  // Keep multiple open tabs/instances roughly in sync.
+  // Reload on cross-tab writes and on workspace switch (different shop = different data).
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setProducts(load()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  const commit = useCallback((next) => {
-    setProducts(next);
-    persist(next);
+    const refresh = () => setProducts(load());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
+    };
   }, []);
 
   const addProduct = useCallback((p) => {
-    const product = {
-      id: newId(),
-      barcode: (p.barcode || '').trim(),
-      name: (p.name || '').trim() || 'Unnamed item',
-      cost: p.cost === '' || p.cost == null ? null : Number(p.cost),
-      price: p.price === '' || p.price == null ? null : Number(p.price),
-      qty: Number(p.qty) || 0,
-      min: Number(p.min) || 0,
-      supplierId: p.supplierId || null,
-      expiry: p.expiry || null,
-      dateType: p.dateType || 'best-before',
-      createdAt: Date.now(),
-      lastSoldAt: null,
-      updatedAt: Date.now(),
-    };
-    setProducts((prev) => { const next = [product, ...prev]; persist(next); return next; });
+    const product = normaliseNew(p);
+    const next = [product, ...load()];
+    persist(next);
+    setProducts(next);
     return product;
   }, []);
 
+  /**
+   * Generic edit. A quantity change is logged as a STOCK_ADJUSTMENT (a correction), never a
+   * sale — use sellUnits() for real sales. Deterministic: persist first, then log.
+   */
   const updateProduct = useCallback((id, patch) => {
-    let soldUnits = 0;
-    setProducts((prev) => {
-      const next = prev.map((p) => {
-        if (p.id !== id) return p;
-        // A qty drop is a "sale/movement" — stamp lastSoldAt so slow-stock ageing
-        // works, and capture the units so velocity/reorder can reason about it.
-        const soldNow = patch.qty != null && Number(patch.qty) < (Number(p.qty) || 0);
-        if (soldNow) soldUnits = (Number(p.qty) || 0) - Number(patch.qty);
-        return { ...p, ...patch, ...(soldNow ? { lastSoldAt: Date.now() } : {}), updatedAt: Date.now() };
-      });
-      persist(next);
-      return next;
+    const prev = load();
+    let delta = 0;
+    const next = prev.map((p) => {
+      if (p.id !== id) return p;
+      if (patch.qty != null) delta = (Number(patch.qty) || 0) - (Number(p.qty) || 0);
+      return { ...p, ...patch, updatedAt: Date.now() };
     });
-    // Log the sale after the state update (keeps the updater pure).
-    if (soldUnits > 0) recordSale(id, soldUnits);
+    persist(next);
+    setProducts(next);
+    if (delta !== 0) {
+      recordMovement({ productId: id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta, reason: patch.reason || 'manual adjustment' });
+    }
+    return next.find((p) => p.id === id) || null;
   }, []);
 
   const removeProduct = useCallback((id) => {
-    setProducts((prev) => { const next = prev.filter((p) => p.id !== id); persist(next); return next; });
+    const next = load().filter((p) => p.id !== id);
+    persist(next);
+    setProducts(next);
   }, []);
 
-  /** Apply stocktake counts: set exact qty for each id. A count is a CORRECTION,
-   *  not a sale — so this never records a movement or stamps lastSoldAt. */
-  const setCounts = useCallback((counts) => {
-    setProducts((prev) => {
-      const next = prev.map((p) => (
-        counts[p.id] != null ? { ...p, qty: Math.max(0, Number(counts[p.id]) || 0), updatedAt: Date.now() } : p
-      ));
-      persist(next);
-      return next;
+  /**
+   * Record a real sale of `units` for a product: reduces stock and logs a SALE movement
+   * (the trustworthy basis for velocity). This is the integration point for a future
+   * quick-sell / till link. Won't sell more than is in stock.
+   */
+  const sellUnits = useCallback((id, units) => {
+    const u = Math.max(0, Number(units) || 0);
+    if (u <= 0) return { ok: false, error: 'Quantity must be positive' };
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    const sold = Math.min(u, Number(p.qty) || 0);
+    if (sold <= 0) return { ok: false, error: 'Nothing in stock to sell' };
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) - sold, lastSoldAt: Date.now(), updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    recordMovement({ productId: id, type: MOVEMENT_TYPES.SALE, delta: -sold, valuation: (Number(p.price) || 0) * sold });
+    return { ok: true, sold };
+  }, []);
+
+  /**
+   * Bin stock: reduce quantity and log a WASTE movement (never counted as a sale).
+   * Guards against over-binning. `batchId` links it to a waste-ledger entry so undo can
+   * reverse both together. Returns { ok, applied }.
+   */
+  const recordWaste = useCallback(({ id, qty, valuation, reason, batchId }) => {
+    const want = Math.max(0, Number(qty) || 0);
+    if (want <= 0) return { ok: false, error: 'Quantity must be positive' };
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    const applied = Math.min(want, Number(p.qty) || 0);
+    if (applied <= 0) return { ok: false, error: 'No stock left to bin' };
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) - applied, updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    recordMovement({
+      productId: id,
+      type: MOVEMENT_TYPES.WASTE,
+      delta: -applied,
+      valuation: valuation != null ? Number(valuation) : (Number(p.cost) || 0) * applied,
+      reason: reason || 'binned',
+      batchId,
     });
+    return { ok: true, applied };
   }, []);
 
-  /** Bulk import products (from CSV). Skips rows whose barcode already exists.
-   *  Persists synchronously (the import screen may unmount right after), then
-   *  updates state. Returns { added, skipped }. */
+  /** Reverse a waste event (undo): restore stock and drop its movement(s). */
+  const reverseWaste = useCallback(({ id, qty, batchId }) => {
+    const restore = Math.max(0, Number(qty) || 0);
+    const prev = load();
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    if (batchId) removeByBatch(batchId);
+    return { ok: true };
+  }, []);
+
+  /** Bulk import (from CSV). Skips rows whose barcode already exists. Deterministic persist. */
   const importProducts = useCallback((rows) => {
     const prev = load();
     const seen = new Set(prev.filter((p) => p.barcode).map((p) => p.barcode));
@@ -163,25 +225,11 @@ export function useInventory() {
       const barcode = (r.barcode || '').trim();
       if (barcode && seen.has(barcode)) { skipped++; continue; }
       if (barcode) seen.add(barcode);
-      created.push({
-        id: newId(),
-        barcode,
-        name: (r.name || '').trim() || 'Unnamed item',
-        cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
-        price: r.price === '' || r.price == null ? null : Number(r.price),
-        qty: Number(r.qty) || 0,
-        min: 0,
-        supplierId: null,
-        expiry: null,
-        dateType: 'best-before',
-        createdAt: Date.now(),
-        lastSoldAt: null,
-        updatedAt: Date.now(),
-      });
+      created.push(normaliseNew({ ...r, min: 0 }));
       added++;
     }
     const next = [...created, ...prev];
-    persist(next);      // synchronous — not dependent on a React update running
+    persist(next);
     setProducts(next);
     return { added, skipped };
   }, []);
@@ -192,43 +240,67 @@ export function useInventory() {
     return load().find((p) => p.barcode && p.barcode === b) || null;
   }, []);
 
-  /** Apply a goods-in delivery: lines = [{ barcode, name, cost, qty }].
-   *  Known barcode → qty += received (+ cost update); unknown → create. */
+  /** Apply a goods-in delivery: lines = [{ barcode, name, cost, qty }]. Logs GOODS_RECEIVED. */
   const receiveLines = useCallback((lines) => {
-    setProducts((prev) => {
-      const next = [...prev];
-      for (const line of lines) {
-        const addQty = Number(line.qty) || 0;
-        const idx = line.barcode ? next.findIndex((p) => p.barcode && p.barcode === line.barcode.trim()) : -1;
-        if (idx >= 0) {
-          next[idx] = {
-            ...next[idx],
-            qty: (Number(next[idx].qty) || 0) + addQty,
-            cost: line.cost === '' || line.cost == null ? next[idx].cost : Number(line.cost),
-            updatedAt: Date.now(),
-          };
-        } else {
-          next.unshift({
-            id: newId(),
-            barcode: (line.barcode || '').trim(),
-            name: (line.name || '').trim() || 'New item',
-            cost: line.cost === '' || line.cost == null ? null : Number(line.cost),
-            price: null,
-            qty: addQty,
-            min: 0,
-            supplierId: null,
-            expiry: null,
-            dateType: 'best-before',
-            createdAt: Date.now(),
-            lastSoldAt: null,
-            updatedAt: Date.now(),
-          });
-        }
+    const prev = load();
+    const next = [...prev];
+    const received = [];
+    for (const line of lines) {
+      const addQty = Number(line.qty) || 0;
+      if (addQty <= 0) continue;
+      const idx = line.barcode ? next.findIndex((p) => p.barcode && p.barcode === line.barcode.trim()) : -1;
+      if (idx >= 0) {
+        next[idx] = {
+          ...next[idx],
+          qty: (Number(next[idx].qty) || 0) + addQty,
+          cost: line.cost === '' || line.cost == null ? next[idx].cost : Number(line.cost),
+          updatedAt: Date.now(),
+        };
+        received.push({ id: next[idx].id, delta: addQty });
+      } else {
+        const created = normaliseNew({ barcode: line.barcode, name: line.name || 'New item', cost: line.cost, price: null, qty: addQty });
+        next.unshift(created);
+        received.push({ id: created.id, delta: addQty });
       }
-      persist(next);
-      return next;
-    });
+    }
+    persist(next);
+    setProducts(next);
+    for (const r of received) {
+      recordMovement({ productId: r.id, type: MOVEMENT_TYPES.GOODS_RECEIVED, delta: r.delta, reason: 'goods-in' });
+    }
   }, []);
 
-  return { products, addProduct, updateProduct, removeProduct, setCounts, findByBarcode, receiveLines, importProducts, commit };
+  /**
+   * Apply stocktake counts: set exact qty for each id. A count is a CORRECTION, logged as a
+   * STOCK_ADJUSTMENT (never a sale), so velocity stays clean after a stocktake.
+   */
+  const setCounts = useCallback((counts) => {
+    const prev = load();
+    const changes = [];
+    const next = prev.map((p) => {
+      if (counts[p.id] == null) return p;
+      const target = Math.max(0, Number(counts[p.id]) || 0);
+      const delta = target - (Number(p.qty) || 0);
+      if (delta !== 0) changes.push({ id: p.id, delta });
+      return { ...p, qty: target, updatedAt: Date.now() };
+    });
+    persist(next);
+    setProducts(next);
+    for (const c of changes) {
+      recordMovement({ productId: c.id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta: c.delta, reason: 'stocktake' });
+    }
+  }, []);
+
+  const commit = useCallback((nextProducts) => {
+    persist(nextProducts);
+    setProducts(nextProducts);
+  }, []);
+
+  return {
+    products,
+    workspace: getActiveWorkspace(),
+    addProduct, updateProduct, removeProduct,
+    sellUnits, recordWaste, reverseWaste,
+    setCounts, findByBarcode, receiveLines, importProducts, commit,
+  };
 }

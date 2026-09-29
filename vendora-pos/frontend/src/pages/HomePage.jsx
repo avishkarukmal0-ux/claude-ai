@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Home as HomeIcon, ScanLine, Package2, MoreHorizontal, Settings, LogIn, ChevronRight, X, Download, Upload } from 'lucide-react';
-import { downloadBackup, shareBackup, restoreFromText } from '../lib/backup';
+import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import {
   getSavedShopType, getFamily, getMember, getModulesForFamily,
 } from '../config/shopTypes';
@@ -48,12 +48,27 @@ export default function HomePage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const res = restoreFromText(String(reader.result || ''));
+      const parsed = readBackup(String(reader.result || ''));
+      if (!parsed.ok) { toast.error(parsed.error || 'That file isn’t a valid backup'); return; }
+
+      // Preview + explicit confirmation (this REPLACES current data).
+      const lines = Object.entries(parsed.summary).map(([k, n]) => `• ${k.replace(/_v1$/, '')}: ${n}`).join('\n');
+      const when = parsed.meta.exportedAt ? new Date(parsed.meta.exportedAt).toLocaleString('en-GB') : 'unknown date';
+      const ok = window.confirm(
+        `Restore this backup (from ${when})?\n\n${lines}\n\n` +
+        'This REPLACES the data in your current view. A recovery copy of your current data will be downloaded first so you can undo.',
+      );
+      if (!ok) return;
+
+      // Recovery backup of current data before overwriting.
+      downloadBackup(undefined, 'vendora-recovery');
+
+      const res = restoreBackup(parsed.data, { mode: 'replace' });
       if (res.ok) {
-        toast.success('Backup restored — reloading…');
+        toast.success(`Restored ${res.restored} item groups — reloading…`);
         setTimeout(() => window.location.reload(), 900);
       } else {
-        toast.error(res.error || 'Restore failed');
+        toast.error(res.error || 'Restore failed — your data was left unchanged');
       }
     };
     reader.onerror = () => toast.error('Couldn’t read that file');

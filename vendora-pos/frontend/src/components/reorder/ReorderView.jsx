@@ -4,7 +4,7 @@ import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Build
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
-import { useMovements, velocityPerDay, daysOfCover } from '../../lib/movementStore';
+import { useMovements, velocity, daysOfCover } from '../../lib/movementStore';
 
 // How far ahead we want stock to cover, and how few days left flags a fast mover
 // for reorder before it hits the low-stock floor.
@@ -71,8 +71,8 @@ export default function ReorderView({ onBack }) {
     return products
       .filter((p) => !hasProduct(p.id))
       .map((p) => {
-        const vpd = velocityPerDay(records, p.id);
-        return { p, vpd, cover: daysOfCover(p.qty, vpd) };
+        const { vpd, basis } = velocity(records, p.id);
+        return { p, vpd, basis, cover: daysOfCover(p.qty, vpd) };
       })
       .filter(({ p, cover }) => isLowStock(p) || (Number.isFinite(cover) && cover <= LOW_COVER_DAYS))
       .sort((a, b) => a.cover - b.cover);
@@ -106,7 +106,7 @@ export default function ReorderView({ onBack }) {
         <section className="mb-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Running low — most urgent first</h3>
           <ul className="space-y-2">
-            {suggestions.map(({ p, vpd, cover }) => {
+            {suggestions.map(({ p, vpd, basis, cover }) => {
               const sq = suggestQty(p, vpd);
               const fast = vpd && Number.isFinite(cover) && cover <= 3;
               return (
@@ -122,8 +122,8 @@ export default function ReorderView({ onBack }) {
                     </span>
                     <span className="block text-[11px] text-gray-500">
                       {vpd
-                        ? <>Sells {weeklyLabel(vpd)} · <span className={fast ? 'font-semibold text-danger' : ''}>{coverLabel(cover, p.qty)}</span> · suggest +{sq}</>
-                        : <>In stock: {Number(p.qty) || 0} · suggest +{sq}</>}
+                        ? <>{basis === 'estimated' ? 'Est. sells' : 'Sells'} {weeklyLabel(vpd)} · <span className={fast ? 'font-semibold text-danger' : ''}>{coverLabel(cover, p.qty)}</span> · suggest +{sq}</>
+                        : <>In stock: {Number(p.qty) || 0} · low · suggest +{sq}</>}
                     </span>
                   </span>
                   <button

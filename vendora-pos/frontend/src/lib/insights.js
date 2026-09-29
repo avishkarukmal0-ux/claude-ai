@@ -1,62 +1,90 @@
-// Owner insights — the "how's the shop really doing?" numbers, derived from the
-// local stores (inventory + sell-through). Pure functions, no backend. These turn
-// raw stock rows into the handful of figures an owner actually acts on.
+// Owner insights — the "how's the shop really doing?" numbers, derived from the local
+// stores. Pure functions, no backend.
+//
+// Honesty rules (see Work-Log 2026-09-30):
+//  - Valuations only count products whose cost is KNOWN. Unknown-cost items are reported
+//    separately (coverage) instead of being silently valued at £0 (which faked 100% margins).
+//  - Sales projections say whether they're from confirmed sales or an estimate, so the
+//    owner knows how much to trust them.
 
-import { margin, isSlowStock } from './inventoryStore';
-import { velocityPerDay, topMovers } from './movementStore';
+import { margin, isSlowStock, costKnown } from './inventoryStore';
+import { velocity, topMovers, salesCoverage } from './movementStore';
 
 const qtyOf = (p) => Number(p.qty) || 0;
 
-/** Capital sitting on the shelves right now (qty × cost). */
+/** Capital sitting on the shelves (qty × cost), counting only known-cost stock. */
 export function stockValue(products) {
-  return products.reduce((n, p) => n + qtyOf(p) * (Number(p.cost) || 0), 0);
+  let value = 0; let unknownCount = 0; let knownCount = 0;
+  for (const p of products) {
+    if (qtyOf(p) <= 0) continue;
+    if (costKnown(p)) { value += qtyOf(p) * Number(p.cost); knownCount += 1; }
+    else unknownCount += 1;
+  }
+  return { value, knownCount, unknownCount };
 }
 
-/** Cost value of stock that hasn't moved in `days`+ — cash that's stuck. */
+/** Cost value of slow stock (30d+), known-cost only. */
 export function slowStockValue(products, days = 30) {
-  return products.filter((p) => isSlowStock(p, days)).reduce((n, p) => n + qtyOf(p) * (Number(p.cost) || 0), 0);
+  let value = 0; let unknownCount = 0; let count = 0;
+  for (const p of products) {
+    if (!isSlowStock(p, days)) continue;
+    count += 1;
+    if (costKnown(p)) value += qtyOf(p) * Number(p.cost);
+    else unknownCount += 1;
+  }
+  return { value, count, unknownCount };
 }
 
 /**
- * Forward projection: expected retail sales per week if current velocity holds.
- * Sums (units/day × 7 × price) across products we have a rate for. Null if we
- * can't project anything yet (no history).
+ * Expected retail sales per week if current velocity holds.
+ * @returns { value, basis, counted } — basis 'sales' | 'estimated' | null.
+ *   If ANY product has confirmed sales, basis is 'sales'; else 'estimated' from stock
+ *   movement; else null (no evidence at all).
  */
 export function projectedWeeklySales(products, records) {
-  let total = 0;
-  let counted = 0;
+  let total = 0; let counted = 0; let sawSales = false; let sawEstimate = false;
   for (const p of products) {
-    const vpd = velocityPerDay(records, p.id);
+    const { vpd, basis } = velocity(records, p.id);
     if (!vpd) continue;
     const price = Number(p.price) || 0;
     if (price <= 0) continue;
     total += vpd * 7 * price;
     counted += 1;
+    if (basis === 'sales') sawSales = true;
+    else if (basis === 'estimated') sawEstimate = true;
   }
-  return counted > 0 ? total : null;
+  if (counted === 0) return { value: null, basis: null, counted: 0 };
+  return { value: total, basis: sawSales ? 'sales' : (sawEstimate ? 'estimated' : null), counted };
 }
 
 /**
- * Average gross margin across priced products, weighted by shelf value so a big
- * line counts more than a single niche item. Returns 0-1, or null if uncomputable.
+ * Average gross margin across priced products with a KNOWN cost, weighted by shelf value.
+ * @returns { value, pricedCount, knownCount } — value is 0–1 or null if none computable.
  */
 export function avgMargin(products) {
-  let weighted = 0;
-  let weight = 0;
+  let weighted = 0; let weight = 0; let pricedCount = 0; let knownCount = 0;
   for (const p of products) {
+    const price = Number(p.price) || 0;
+    if (price > 0) pricedCount += 1;
     const m = margin(p);
     if (m == null) continue;
-    const w = qtyOf(p) * (Number(p.price) || 0) || 1; // fall back to equal weight
+    knownCount += 1;
+    const w = qtyOf(p) * price || 1;
     weighted += m * w;
     weight += w;
   }
-  return weight > 0 ? weighted / weight : null;
+  return { value: weight > 0 ? weighted / weight : null, pricedCount, knownCount };
 }
 
-/** Best sellers over the window, joined to product names: [{ id, name, units }]. */
+/** Best sellers over the window (confirmed sales only), joined to names: [{ id, name, units }]. */
 export function bestSellers(products, records, windowDays = 28, limit = 5) {
   const byId = Object.fromEntries(products.map((p) => [p.id, p]));
   return topMovers(records, windowDays, Date.now(), limit)
     .map(({ productId, units }) => ({ id: productId, name: byId[productId]?.name || 'Unknown item', units }))
     .filter((x) => x.units > 0);
+}
+
+/** How many products have confirmed sales evidence in the window (for "coverage" copy). */
+export function salesEvidenceCount(records, windowDays = 28) {
+  return salesCoverage(records, windowDays);
 }

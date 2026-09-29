@@ -1,19 +1,47 @@
 import React, { useState, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import { ArrowLeft, Trash2, TrendingDown, PiggyBank, Plus, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useWaste } from '../../lib/wasteStore';
 import { useInventory, expiryInfo, DATE_TYPES } from '../../lib/inventoryStore';
+
+function newBatchId() {
+  try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
+  return `wb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 // Waste & savings tracker — money lost to the bin vs money rescued by marking down
 // in time. Local-first; the "£ saved this month" line is the motivating headline.
 export default function WasteView({ onBack }) {
   const { entries, addEntry, removeEntry, monthWasted, monthSaved } = useWaste();
-  const { products } = useInventory();
+  const { products, recordWaste, reverseWaste } = useInventory();
+
   const [form, setForm] = useState({ name: '', value: '', qty: '1' });
 
   function log(type) {
     if (!form.value) return;
+    // Quick-log is standalone (no product link) — it does NOT change stock.
     addEntry({ type, name: form.name, value: form.value, qty: form.qty });
     setForm({ name: '', value: '', qty: '1' });
+  }
+
+  // Bin a catalogued product as ONE operation: reduce stock + log a typed waste movement
+  // + add the £ ledger entry, all linked by a batchId so it can be undone together.
+  function binProduct(p) {
+    const qty = 1;
+    const batchId = newBatchId();
+    const res = recordWaste({ id: p.id, qty, valuation: (p.cost ?? 0) * qty, reason: 'expired / near-date', batchId });
+    if (!res.ok) { toast.error(res.error || 'Couldn’t bin that'); return; }
+    addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId, reason: 'expired / near-date' });
+    toast.success(`Binned ${res.applied} × ${p.name} · stock updated`);
+  }
+
+  // Deleting a waste entry undoes it. For product-linked waste that means restoring the
+  // stock and removing the movement too, so history stays consistent.
+  function undoEntry(e) {
+    if (e.type === 'wasted' && e.productId && e.batchId) {
+      reverseWaste({ id: e.productId, qty: e.qty, batchId: e.batchId });
+    }
+    removeEntry(e.id);
   }
 
   // FEFO — products with a date, expired or within 7 days, soonest first.
@@ -56,8 +84,9 @@ export default function WasteView({ onBack }) {
                 </span>
                 <button
                   type="button"
-                  onClick={() => addEntry({ type: 'wasted', name: p.name, value: p.cost ?? 0, qty: 1 })}
-                  className="shrink-0 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95"
+                  disabled={(Number(p.qty) || 0) <= 0}
+                  onClick={() => binProduct(p)}
+                  className="shrink-0 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95 disabled:opacity-40"
                 >
                   Binned
                 </button>
@@ -105,7 +134,9 @@ export default function WasteView({ onBack }) {
           </button>
         </div>
         <p className="mt-2 text-[11px] leading-snug text-gray-400">
-          “Saved” = marked down or used before it expired. That’s money you kept.
+          “Saved” = marked down or used before it expired. That’s money you kept. This quick log is
+          for stock that isn’t in your catalogue — it doesn’t change stock levels. To bin a catalogued
+          item and update stock, use the <span className="font-semibold">Sell first</span> list above.
         </p>
       </div>
 
@@ -128,7 +159,7 @@ export default function WasteView({ onBack }) {
                 <span className={`text-sm font-bold tabular-nums ${e.type === 'saved' ? 'text-success' : 'text-danger'}`}>
                   {e.type === 'saved' ? '+' : '−'}£{e.value.toFixed(2)}
                 </span>
-                <button type="button" onClick={() => removeEntry(e.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete">
+                <button type="button" onClick={() => undoEntry(e)} className="p-1 text-gray-300 hover:text-danger" aria-label={e.productId ? 'Undo — restores stock' : 'Delete'} title={e.productId ? 'Undo — restores stock' : 'Delete'}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>

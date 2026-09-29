@@ -1,47 +1,37 @@
-// Local data backup + restore. All app data lives in localStorage under
-// "vendora_" keys; this bundles it into one JSON file the shop can save and
-// restore on another device — peace of mind before the backend exists.
+// Backup + restore for the active workspace's data. Versioned, validated, and safe:
+// a restore takes an in-memory recovery snapshot first and rolls back on any failure, so it
+// can never leave the device half-written or claim success after a partial write.
+//
+// Format v2 stores LOGICAL store names (not raw keys) so a backup is portable across
+// workspaces. v1 backups (raw `vendora_*` keys) are still accepted and mapped in.
+import {
+  STORE_NAMES, read, write, removeKey, getActiveWorkspace,
+} from './storage';
 
-const PREFIX = 'vendora_';
-const APP_KEYS = [
-  'vendora_shop_type',
-  'vendora_inventory_v1',
-  'vendora_suppliers_v1',
-  'vendora_buylist_v1',
-  'vendora_waste_v1',
-  'vendora_takings_v1',
-];
+const BACKUP_VERSION = 2;
 
-export function buildBackup() {
+// --- build -----------------------------------------------------------------
+export function buildBackup(ws = getActiveWorkspace()) {
   const data = {};
-  try {
-    // Grab known keys plus any future vendora_* keys, so backups stay complete.
-    const keys = new Set(APP_KEYS);
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith(PREFIX)) keys.add(k);
-    }
-    for (const k of keys) {
-      const v = localStorage.getItem(k);
-      if (v != null) data[k] = v;
-    }
-  } catch { /* storage blocked */ }
-  return { app: 'vendora', version: 1, exportedAt: new Date().toISOString(), data };
+  for (const name of STORE_NAMES) {
+    const v = read(name, null, ws);
+    if (v != null) data[name] = v; // raw string, lossless
+  }
+  return { app: 'vendora', version: BACKUP_VERSION, exportedAt: new Date().toISOString(), workspace: ws, data };
 }
 
-export function backupFilename() {
-  return `vendora-backup-${new Date().toISOString().slice(0, 10)}.json`;
+export function backupFilename(prefix = 'vendora-backup') {
+  return `${prefix}-${new Date().toISOString().slice(0, 10)}.json`;
 }
 
-/** Trigger a download of the backup JSON. Returns true if it started. */
-export function downloadBackup() {
+export function downloadBackup(ws = getActiveWorkspace(), prefix) {
   try {
-    const json = JSON.stringify(buildBackup(), null, 2);
+    const json = JSON.stringify(buildBackup(ws), null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = backupFilename();
+    a.download = backupFilename(prefix);
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -52,10 +42,9 @@ export function downloadBackup() {
   }
 }
 
-/** Share the backup as a file where supported (nice on iOS). Returns true if shared. */
-export async function shareBackup() {
+export async function shareBackup(ws = getActiveWorkspace()) {
   try {
-    const json = JSON.stringify(buildBackup(), null, 2);
+    const json = JSON.stringify(buildBackup(ws), null, 2);
     const file = new File([json], backupFilename(), { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: 'Vendora backup' });
@@ -65,25 +54,92 @@ export async function shareBackup() {
   return false;
 }
 
-/** Restore from a backup JSON string. Overwrites current data. Returns a result. */
-export function restoreFromText(text) {
+// --- parse + validate (no mutation) ---------------------------------------
+const LEGACY_PREFIX = 'vendora_';
+
+/** Normalise a backup's data into { logicalName: rawString } and validate. */
+export function readBackup(text) {
   let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return { ok: false, error: 'That file isn’t a valid Vendora backup.' };
-  }
-  const data = parsed && parsed.data;
-  if (!data || typeof data !== 'object' || parsed.app !== 'vendora') {
+  try { parsed = JSON.parse(text); }
+  catch { return { ok: false, error: 'That file isn’t valid JSON.' }; }
+
+  if (!parsed || typeof parsed !== 'object' || parsed.app !== 'vendora' || !parsed.data || typeof parsed.data !== 'object') {
     return { ok: false, error: 'That doesn’t look like a Vendora backup.' };
   }
-  try {
-    let count = 0;
-    for (const [k, v] of Object.entries(data)) {
-      if (k.startsWith(PREFIX) && typeof v === 'string') { localStorage.setItem(k, v); count++; }
-    }
-    return { ok: true, count };
-  } catch {
-    return { ok: false, error: 'Couldn’t write the backup to this device.' };
+  if (typeof parsed.version !== 'number' || parsed.version > BACKUP_VERSION) {
+    return { ok: false, error: 'This backup was made by a newer version of Vendora. Update the app first.' };
   }
+
+  const known = new Set(STORE_NAMES);
+  const data = {};
+  const summary = {};
+  for (const [rawKey, value] of Object.entries(parsed.data)) {
+    if (typeof value !== 'string') continue; // we only store raw string values
+    const name = rawKey.startsWith(LEGACY_PREFIX) ? rawKey.slice(LEGACY_PREFIX.length) : rawKey;
+    if (!known.has(name)) continue; // ignore unknown/unrelated keys — never import them
+    data[name] = value;
+    // best-effort count for the preview
+    try {
+      const v = JSON.parse(value);
+      summary[name] = Array.isArray(v) ? v.length : 1;
+    } catch { summary[name] = 1; }
+  }
+  if (Object.keys(data).length === 0) {
+    return { ok: false, error: 'This backup has no recognisable Vendora data.' };
+  }
+  return { ok: true, meta: { version: parsed.version, exportedAt: parsed.exportedAt, workspace: parsed.workspace }, data, summary };
+}
+
+// --- restore (atomic w/ rollback) -----------------------------------------
+/**
+ * Restore normalised { name: rawString } into the active workspace.
+ * mode 'replace' (default): our store keys not in the backup are CLEARED; unrelated keys
+ *   (tokens/accounts/other) are never touched. mode 'merge': only writes backup keys.
+ * Takes an in-memory snapshot of the affected keys first and rolls back if any write fails.
+ * @returns { ok, restored, cleared, error? }
+ */
+export function restoreBackup(data, { mode = 'replace', ws = getActiveWorkspace() } = {}) {
+  if (!data || typeof data !== 'object') return { ok: false, error: 'Nothing to restore.' };
+
+  // 1. Snapshot the keys we may touch (only our STORE_NAMES — never anything else).
+  const snapshot = {};
+  for (const name of STORE_NAMES) snapshot[name] = read(name, null, ws);
+
+  const rollback = () => {
+    for (const name of STORE_NAMES) {
+      if (snapshot[name] == null) removeKey(name, ws);
+      else write(name, snapshot[name], ws);
+    }
+  };
+
+  try {
+    let restored = 0; let cleared = 0;
+    for (const name of STORE_NAMES) {
+      if (Object.prototype.hasOwnProperty.call(data, name)) {
+        const res = write(name, data[name], ws);
+        if (!res.ok) { rollback(); return { ok: false, error: res.error || 'Write failed — nothing changed.' }; }
+        restored += 1;
+      } else if (mode === 'replace') {
+        const res = removeKey(name, ws);
+        if (!res.ok) { rollback(); return { ok: false, error: 'Couldn’t clear old data — nothing changed.' }; }
+        cleared += 1;
+      }
+    }
+    return { ok: true, restored, cleared };
+  } catch (e) {
+    rollback();
+    return { ok: false, error: 'Restore failed and was rolled back.' };
+  }
+}
+
+/**
+ * Convenience: parse + validate + restore (replace) in one call, with rollback on failure.
+ * Kept for existing callers. Returns { ok, count, error? }.
+ */
+export function restoreFromText(text, opts = {}) {
+  const parsed = readBackup(text);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const res = restoreBackup(parsed.data, opts);
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, count: res.restored };
 }

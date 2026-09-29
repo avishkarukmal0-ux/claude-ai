@@ -14,6 +14,7 @@ import {
   LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
   ShieldCheck, ClipboardList, ClipboardCheck, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins, Hourglass, Users, Inbox,
 } from 'lucide-react';
+import { read as storageRead, write as storageWrite } from '../lib/storage';
 
 export const SHOP_FAMILIES = [
   {
@@ -132,7 +133,7 @@ export function getModulesForFamily(familyId) {
   return [...CORE_MODULE_IDS, ...extraIds].map((id) => MODULES[id]).filter(Boolean);
 }
 
-export const SHOP_TYPE_STORAGE_KEY = 'vendora_shop_type'; // stores "familyId" or "familyId:memberId"
+export const SHOP_TYPE_NAME = 'shop_type'; // logical store name; value "familyId" or "familyId:memberId"
 
 export function getFamily(familyId) {
   return SHOP_FAMILIES.find((f) => f.id === familyId) || null;
@@ -143,23 +144,15 @@ export function getMember(familyId, memberId) {
   return fam ? fam.members.find((m) => m.id === memberId) || null : null;
 }
 
-/** Read the shop type last picked on this device: { familyId, memberId } or null. */
+/** Read the shop type last picked for the active workspace: { familyId, memberId } or null. */
 export function getSavedShopType() {
-  try {
-    const raw = localStorage.getItem(SHOP_TYPE_STORAGE_KEY);
-    if (!raw) return null;
-    const [familyId, memberId = null] = raw.split(':');
-    return getFamily(familyId) ? { familyId, memberId } : null;
-  } catch {
-    return null;
-  }
+  const raw = storageRead(SHOP_TYPE_NAME, null);
+  if (!raw) return null;
+  const [familyId, memberId = null] = raw.split(':');
+  return getFamily(familyId) ? { familyId, memberId } : null;
 }
 
-/** Remember the picked shop type on this device. memberId is optional. */
+/** Remember the picked shop type for the active workspace. memberId is optional. */
 export function saveShopType(familyId, memberId = null) {
-  try {
-    localStorage.setItem(SHOP_TYPE_STORAGE_KEY, memberId ? `${familyId}:${memberId}` : familyId);
-  } catch {
-    /* ignore — private mode / blocked storage */
-  }
+  return storageWrite(SHOP_TYPE_NAME, memberId ? `${familyId}:${memberId}` : familyId);
 }

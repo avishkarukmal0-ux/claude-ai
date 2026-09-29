@@ -1,17 +1,15 @@
 // Local-first "suggest to owner" inbox. Staff flag things (stock this / mark down /
 // problem); the owner sees and clears them. Persists to localStorage.
 import { useCallback, useEffect, useState } from 'react';
+import { readJSON, writeJSON } from './storage';
 
-const KEY = 'vendora_suggestions_v1';
+const NAME = 'suggestions_v1';
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
+  const arr = readJSON(NAME, []);
+  return Array.isArray(arr) ? arr : [];
 }
-function persist(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* ignore */ } }
+function persist(list) { return writeJSON(NAME, list); }
 function newId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
   return `sg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -28,9 +26,13 @@ export function useSuggestions() {
   const [items, setItems] = useState(load);
 
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setItems(load()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const refresh = () => setItems(load());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
+    };
   }, []);
 
   const add = useCallback(({ kind, text, productName }) => {

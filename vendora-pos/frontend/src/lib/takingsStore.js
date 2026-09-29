@@ -2,20 +2,16 @@
 // card + cash takings, float, counted drawer → total takings and cash variance.
 // Persists to localStorage; also exposes non-hook reads for the Owner glance.
 import { useCallback, useEffect, useState } from 'react';
+import { readJSON, writeJSON } from './storage';
 
-const KEY = 'vendora_takings_v1';
+const NAME = 'takings_v1';
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+  const arr = readJSON(NAME, []);
+  return Array.isArray(arr) ? arr : [];
 }
 function persist(entries) {
-  try { localStorage.setItem(KEY, JSON.stringify(entries)); } catch { /* ignore */ }
+  return writeJSON(NAME, entries);
 }
 function newId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -48,9 +44,13 @@ export function useTakings() {
   const [entries, setEntries] = useState(load);
 
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setEntries(load()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const refresh = () => setEntries(load());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
+    };
   }, []);
 
   // Save today's record (replaces an existing same-day record).

@@ -58,20 +58,32 @@ export default function OverviewView({ onBack, onOpen }) {
 
       {/* Capital row — money on the shelves vs money stuck */}
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="Stock value" value={`£${insights.stock.toFixed(0)}`} icon={Boxes} tone="text-gray-900" onClick={() => onOpen?.('stock')} />
-        <Stat label="Not moving" value={`£${insights.slow.toFixed(0)}`} icon={Hourglass} tone={insights.slow > 0 ? 'text-warning' : 'text-gray-900'} onClick={() => onOpen?.('deadstock')} />
+        <Stat label="Stock value" value={`£${insights.stock.value.toFixed(0)}`} icon={Boxes} tone="text-gray-900" onClick={() => onOpen?.('stock')} hint={insights.stock.unknownCount > 0 ? `Excludes ${insights.stock.unknownCount} with no cost` : undefined} />
+        <Stat label="Not moving" value={`£${insights.slow.value.toFixed(0)}`} icon={Hourglass} tone={insights.slow.value > 0 ? 'text-warning' : 'text-gray-900'} onClick={() => onOpen?.('deadstock')} />
       </div>
 
       {/* Forward view — only once we have enough sell-through to project */}
-      {(insights.projected != null || insights.margin != null) && (
+      {(insights.projected.value != null || insights.margin.value != null) && (
         <div className="mt-3 grid grid-cols-2 gap-3">
-          {insights.projected != null && (
-            <Stat label="Expected sales/wk" value={`£${insights.projected.toFixed(0)}`} icon={LineChart} tone="text-primary" hint="At current pace" />
+          {insights.projected.value != null && (
+            <Stat
+              label="Expected sales/wk"
+              value={`£${insights.projected.value.toFixed(0)}`}
+              icon={LineChart}
+              tone="text-primary"
+              hint={insights.projected.basis === 'estimated' ? 'Estimate — from stock changes' : 'From recorded sales'}
+            />
           )}
-          {insights.margin != null && (
-            <Stat label="Avg margin" value={`${Math.round(insights.margin * 100)}%`} icon={Percent} tone="text-success" hint="Weighted by value" />
+          {insights.margin.value != null && (
+            <Stat label="Avg margin" value={`${Math.round(insights.margin.value * 100)}%`} icon={Percent} tone="text-success" hint={insights.margin.knownCount < insights.margin.pricedCount ? `${insights.margin.knownCount}/${insights.margin.pricedCount} with cost` : 'Weighted by value'} />
           )}
         </div>
+      )}
+
+      {insights.stock.unknownCount > 0 && (
+        <p className="mt-3 rounded-xl bg-warning-light/60 px-3 py-2 text-[11px] leading-snug text-warning-dark">
+          {insights.stock.unknownCount} product{insights.stock.unknownCount === 1 ? ' has' : 's have'} no cost set, so £ valuations here are partial. Add costs in Stock for a full picture.
+        </p>
       )}
 
       {/* Best sellers — the shop's engine, last 28 days */}

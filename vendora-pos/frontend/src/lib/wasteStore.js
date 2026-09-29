@@ -1,20 +1,22 @@
-// Local-first waste & savings store. Tracks money lost to the bin and money
-// rescued by marking down / using stock in time. Persists to localStorage.
+// Waste & savings ledger. Tracks money lost to the bin and money rescued by marking down /
+// using stock in time. Scoped to the active workspace (via lib/storage).
+//
+// Two kinds of waste entry:
+//  - PRODUCT-LINKED (has productId + batchId): created together with a stock reduction and a
+//    typed WASTE movement in inventoryStore.recordWaste(); deleting it undoes both.
+//  - STANDALONE (no productId): a manual "quick log" for stock that isn't in the catalogue.
+// "saved" entries are a motivational counter (money kept), not a stock event.
 import { useCallback, useEffect, useState } from 'react';
+import { readJSON, writeJSON } from './storage';
 
-const KEY = 'vendora_waste_v1';
+const NAME = 'waste_v1';
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+  const arr = readJSON(NAME, []);
+  return Array.isArray(arr) ? arr : [];
 }
 function persist(entries) {
-  try { localStorage.setItem(KEY, JSON.stringify(entries)); } catch { /* ignore */ }
+  return writeJSON(NAME, entries);
 }
 function newId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -31,12 +33,16 @@ export function useWaste() {
   const [entries, setEntries] = useState(load);
 
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setEntries(load()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const refresh = () => setEntries(load());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
+    };
   }, []);
 
-  const addEntry = useCallback(({ type, name, value, qty, reason }) => {
+  const addEntry = useCallback(({ type, name, value, qty, reason, productId, batchId }) => {
     const entry = {
       id: newId(),
       type: type === 'saved' ? 'saved' : 'wasted',
@@ -44,14 +50,20 @@ export function useWaste() {
       value: Number(value) || 0,
       qty: Number(qty) || 1,
       reason: (reason || '').trim(),
+      productId: productId || null,
+      batchId: batchId || null,
       ts: Date.now(),
     };
-    setEntries((prev) => { const next = [entry, ...prev]; persist(next); return next; });
+    const next = [entry, ...load()];
+    persist(next);
+    setEntries(next);
     return entry;
   }, []);
 
   const removeEntry = useCallback((id) => {
-    setEntries((prev) => { const next = prev.filter((e) => e.id !== id); persist(next); return next; });
+    const next = load().filter((e) => e.id !== id);
+    persist(next);
+    setEntries(next);
   }, []);
 
   const monthWasted = entries.filter((e) => e.type === 'wasted' && sameMonth(e.ts)).reduce((s, e) => s + e.value, 0);

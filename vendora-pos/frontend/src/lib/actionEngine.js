@@ -9,7 +9,7 @@
 // info (worth doing today). We only ever surface the top few so it stays glanceable.
 
 import { expiryInfo, isLowStock, isSlowStock } from './inventoryStore';
-import { velocityPerDay, daysOfCover } from './movementStore';
+import { velocity, daysOfCover } from './movementStore';
 
 const qtyOf = (p) => Number(p.qty) || 0;
 const costOf = (p) => (qtyOf(p) * (Number(p.cost) || 0));
@@ -62,7 +62,7 @@ export function buildActions({ products = [], records = [], todayEntry = null, n
 
   // 3) WARN — fast movers about to sell out (velocity known, <3 days of cover).
   const fastOut = inStock.filter((p) => {
-    const vpd = velocityPerDay(records, p.id);
+    const { vpd } = velocity(records, p.id);
     return vpd && daysOfCover(p.qty, vpd) <= 3;
   });
   const fastOutIds = new Set(fastOut.map((p) => p.id));

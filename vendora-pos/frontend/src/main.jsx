@@ -3,7 +3,12 @@ import ReactDOM from 'react-dom/client';
 import { Toaster } from 'react-hot-toast';
 import App from './App.jsx';
 import { registerServiceWorker } from './pwa.js';
+import { migrateLegacyToLocalOnce } from './lib/storage.js';
 import './index.css';
+
+// One-time, non-destructive: copy any pre-scoping data into the guest workspace so existing
+// users keep seeing their data under the new scoped storage. Runs before React reads stores.
+migrateLegacyToLocalOnce();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

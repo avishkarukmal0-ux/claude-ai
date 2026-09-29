@@ -5,23 +5,18 @@
 // Applying counts to stock is done by the caller via inventory.setCounts(); this
 // store only holds the session and computes the maths.
 import { useCallback, useEffect, useState } from 'react';
+import { readJSON, writeJSON, removeKey } from './storage';
 
-const S_KEY = 'vendora_stocktake_v1';          // active session
-const H_KEY = 'vendora_stocktake_history_v1';  // past summaries
+const S_KEY = 'stocktake_v1';          // active session (logical name)
+const H_KEY = 'stocktake_history_v1';  // past summaries (logical name)
 
-function loadJSON(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
+function loadJSON(name, fallback) {
+  const v = readJSON(name, undefined);
+  return v === undefined ? fallback : v;
 }
-function persist(key, value) {
-  try {
-    if (value == null) localStorage.removeItem(key);
-    else localStorage.setItem(key, JSON.stringify(value));
-  } catch { /* ignore */ }
+function persist(name, value) {
+  if (value == null) return removeKey(name);
+  return writeJSON(name, value);
 }
 function newId(prefix = 's') {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -66,12 +61,13 @@ export function useStocktake() {
   const [history, setHistory] = useState(() => loadJSON(H_KEY, []));
 
   useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key === S_KEY) setSession(loadJSON(S_KEY, null));
-      if (e.key === H_KEY) setHistory(loadJSON(H_KEY, []));
+    const refresh = () => { setSession(loadJSON(S_KEY, null)); setHistory(loadJSON(H_KEY, [])); };
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
     };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   const start = useCallback((name) => {

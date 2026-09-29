@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { STORAGE_ERROR_EVENT } from './lib/storage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { SettingsProvider } from './context/SettingsContext';
@@ -54,6 +56,13 @@ function ProtectedRoute({ children, requiredRole }) {
 }
 
 export default function App() {
+  // Surface storage-write failures instead of losing data silently (was swallowed before).
+  useEffect(() => {
+    const onErr = (e) => toast.error(e.detail?.error || 'Couldn’t save to this device.', { id: 'storage-error', duration: 6000 });
+    window.addEventListener(STORAGE_ERROR_EVENT, onErr);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onErr);
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

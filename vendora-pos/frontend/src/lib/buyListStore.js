@@ -1,20 +1,16 @@
 // Local-first "buy list" (cash-&-carry list). Items the shopkeeper plans to
 // restock, tickable as bought. Persists to localStorage. No backend.
 import { useCallback, useEffect, useState } from 'react';
+import { readJSON, writeJSON } from './storage';
 
-const KEY = 'vendora_buylist_v1';
+const NAME = 'buylist_v1';
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+  const arr = readJSON(NAME, []);
+  return Array.isArray(arr) ? arr : [];
 }
 function persist(items) {
-  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch { /* ignore */ }
+  return writeJSON(NAME, items);
 }
 function newId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -25,9 +21,13 @@ export function useBuyList() {
   const [items, setItems] = useState(load);
 
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setItems(load()); };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const refresh = () => setItems(load());
+    window.addEventListener('storage', refresh);
+    window.addEventListener('vendora:workspace', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('vendora:workspace', refresh);
+    };
   }, []);
 
   const addItem = useCallback(({ productId, name, barcode, qty, supplierId, supplierName }) => {
