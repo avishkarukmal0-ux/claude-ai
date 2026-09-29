@@ -4,7 +4,7 @@ Back to [[Home]] · Reads with [[The-Whole-Story]] · [[App-Kickoff]] · [[Featu
 
 > **The execution plan (2026-09-14).** Strategy is done — this is *what we build, in what order, and how we know each piece is finished.* Milestones are small on purpose so a real shop can use something early. Decisions that were "open" are **locked below with recommendations** so nothing stalls; override any of them by saying so.
 
-> ⚠️ **PIVOT (2026-09-29): PWA-only.** The founder called it — **forget the till system; the PWA is the product.** Phase 2 (till foundation + Stripe Connect payment margin) is **shelved indefinitely**. All effort goes into making the phone app 10x. The 10x work order: **① Smarter brain ✅ → ② New flagship → ③ Real-app feel → ④ PWA superpowers.** See [[2026-09-29-Smarter-Brain]].
+> ⚠️ **PIVOT (2026-09-29): PWA-only.** The founder called it — **forget the till system; the PWA is the product.** Phase 2 (till foundation + Stripe Connect payment margin) is **shelved indefinitely**. All effort goes into making the phone app 10x. The 10x work order: **① Smarter brain ✅ → ② New flagship ✅ (Stocktake) → ③ Real-app feel → ④ PWA superpowers.** See [[2026-09-29-Smarter-Brain]], [[2026-09-29-Flagship-Stocktake]].
 
 ---
 
