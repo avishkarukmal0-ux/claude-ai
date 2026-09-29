@@ -12,7 +12,7 @@ import {
   Carrot, Beef, Croissant,
   Leaf, Truck, BadgePercent, PawPrint,
   LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
-  ShieldCheck, ClipboardList, ClipboardCheck, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins, Hourglass, Users, Inbox,
+  ShieldCheck, ClipboardList, ClipboardCheck, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins, Hourglass, Users, Inbox, PackageOpen,
 } from 'lucide-react';
 import { read as storageRead, write as storageWrite } from '../lib/storage';
 
@@ -107,6 +107,7 @@ export const MODULES = {
   'goods-in':  { id: 'goods-in',    label: 'Goods-in scan',  icon: ScanLine,        desc: 'Scan the trolley on arrival', live: true, tab: 'scan' },
   inventory:   { id: 'inventory',   label: 'Inventory',      icon: Package,         desc: 'Products, prices & stock', live: true, tab: 'stock' },
   stocktake:   { id: 'stocktake',   label: 'Stocktake',      icon: ClipboardCheck,  desc: 'Count stock, catch shrinkage', live: true, screen: 'stocktake' },
+  refill:      { id: 'refill',      label: 'Shelf refill',   icon: PackageOpen,     desc: 'Move back-room stock to the shelf', live: true, screen: 'refill' },
   expiry:      { id: 'expiry',      label: 'Expiry & waste', icon: CalendarClock,   desc: 'Stop paying twice for waste', live: true, screen: 'waste' },
   reorder:     { id: 'reorder',     label: 'Buy list',       icon: ShoppingCart,    desc: 'Low stock → cash-&-carry list', live: true, screen: 'reorder' },
   deadstock:   { id: 'deadstock',   label: 'Slow stock',     icon: Hourglass,       desc: 'Money not moving', live: true, screen: 'deadstock' },
@@ -124,7 +125,7 @@ export const MODULES = {
 };
 
 // Core modules every shop gets, in display order.
-export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'stocktake', 'reorder', 'deadstock', 'expiry', 'suppliers', 'takings', 'overview', 'worker', 'suggestions', 'mtd'];
+export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'stocktake', 'refill', 'reorder', 'deadstock', 'expiry', 'suppliers', 'takings', 'overview', 'worker', 'suggestions', 'mtd'];
 
 /** All modules for a family, in display order: core + that family's extras. */
 export function getModulesForFamily(familyId) {

@@ -91,6 +91,34 @@ export function isSlowStock(p, days = 30) {
   return d != null && d >= days;
 }
 
+// ---- optional locations (shelf vs back room) -------------------------------
+// `qty` is always TOTAL shop stock (source of truth). `shelfQty` is how much of that is on the
+// shop floor; null means the owner isn't tracking locations for this product. back = qty − shelf.
+export function shelfTracked(p) { return p != null && p.shelfQty != null; }
+export function shelfQtyOf(p) { return shelfTracked(p) ? Math.max(0, Number(p.shelfQty) || 0) : null; }
+export function backQtyOf(p) {
+  if (!shelfTracked(p)) return null;
+  return Math.max(0, (Number(p.qty) || 0) - shelfQtyOf(p));
+}
+/** Shelf is empty but there's stock out back → a refill is possible (NOT a purchase need). */
+export function needsRefill(p) {
+  return shelfTracked(p) && shelfQtyOf(p) <= 0 && (Number(p.qty) || 0) > 0;
+}
+
+/**
+ * How trustworthy a product's on-hand number is, for honest labelling:
+ *  - 'counted'    : physically counted (has countedAt); most trustworthy.
+ *  - 'calculated' : derived from recorded movements only (no recent count).
+ * Sales aren't connected in a standalone PWA, so `salesConnected` is always false for now.
+ */
+export function stockStatus(p) {
+  return {
+    basis: p && p.countedAt ? 'counted' : 'calculated',
+    countedAt: p ? p.countedAt || null : null,
+    salesConnected: false,
+  };
+}
+
 function normaliseNew(p) {
   return {
     id: newId(),
@@ -103,6 +131,8 @@ function normaliseNew(p) {
     supplierId: p.supplierId || null,
     expiry: p.expiry || null,
     dateType: p.dateType || 'best-before',
+    shelfQty: p.shelfQty == null ? null : Math.max(0, Number(p.shelfQty) || 0),
+    countedAt: null,
     createdAt: Date.now(),
     lastSoldAt: null,
     updatedAt: Date.now(),
@@ -329,6 +359,81 @@ export function useInventory() {
   }, []);
 
   /**
+   * Apply a physical count SNAPSHOT-SAFELY. Each item carries the qty that was on the system
+   * when it was counted (`expectedAt`); we apply the count's *correction* (counted − expectedAt)
+   * to the CURRENT qty, so a sale/delivery that happened during the count is preserved instead
+   * of being overwritten by a stale total. Marks countedAt (for "confirmed" status) on every
+   * counted line. Logs a stock_adjustment (never a sale) for real changes.
+   * @param items [{ id, counted, expectedAt?, reason? }]
+   * @returns { applied, changes:[{id,delta,reason}] }
+   */
+  const applyCounts = useCallback((items) => {
+    const prev = load();
+    const byId = new Map(items.map((it) => [it.id, it]));
+    const changes = [];
+    const now = Date.now();
+    const next = prev.map((p) => {
+      const it = byId.get(p.id);
+      if (!it) return p;
+      const counted = Math.max(0, Number(it.counted) || 0);
+      const current = Number(p.qty) || 0;
+      const expectedAt = it.expectedAt == null ? current : Number(it.expectedAt) || 0;
+      const delta = counted - expectedAt;                 // correction implied by the count
+      const newQty = Math.max(0, current + delta);        // applied to CURRENT, not blind overwrite
+      if (delta !== 0) changes.push({ id: p.id, delta, reason: it.reason || '' });
+      return { ...p, qty: newQty, countedAt: now, updatedAt: now };
+    });
+    persist(next);
+    setProducts(next);
+    for (const c of changes) {
+      recordMovement({
+        productId: c.id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta: c.delta,
+        reason: c.reason ? `stocktake: ${c.reason}` : 'stocktake',
+      });
+    }
+    return { applied: changes.length, changes };
+  }, []);
+
+  /** Start tracking a shelf/back split for a product (units currently on the shop floor). */
+  const setShelfQty = useCallback((id, units) => {
+    const prev = load();
+    const next = prev.map((p) => {
+      if (p.id !== id) return p;
+      const q = Number(p.qty) || 0;
+      return { ...p, shelfQty: Math.max(0, Math.min(q, Number(units) || 0)), updatedAt: Date.now() };
+    });
+    persist(next); setProducts(next);
+  }, []);
+
+  /**
+   * Move units between back room and shop floor. TOTAL shop stock (qty) is unchanged — only the
+   * shelf/back split moves. Logs a `transfer` movement (ignored by sales/velocity). Clamped so
+   * shelf stays within [0, qty]. dir: 'to_shelf' (refill) | 'to_back'.
+   */
+  const transferStock = useCallback((id, units, dir = 'to_shelf') => {
+    const move = Math.max(0, Number(units) || 0);
+    if (move <= 0) return { ok: false, error: 'Quantity must be positive' };
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    const q = Number(p.qty) || 0;
+    const shelf = shelfTracked(p) ? shelfQtyOf(p) : 0;
+    const newShelf = dir === 'to_back'
+      ? Math.max(0, shelf - move)
+      : Math.min(q, shelf + move);
+    const applied = Math.abs(newShelf - shelf);
+    if (applied <= 0) return { ok: false, error: dir === 'to_back' ? 'Nothing on the shelf to move back' : 'No back-room stock to move' };
+    const next = prev.map((x) => (x.id === id ? { ...x, shelfQty: newShelf, updatedAt: Date.now() } : x));
+    persist(next); setProducts(next);
+    recordMovement({
+      productId: id, type: MOVEMENT_TYPES.TRANSFER, delta: applied,
+      location: dir === 'to_back' ? 'shelf→back' : 'back→shelf',
+      reason: dir === 'to_back' ? 'return to back room' : 'shelf refill',
+    });
+    return { ok: true, applied, shelfQty: newShelf };
+  }, []);
+
+  /**
    * Apply stocktake counts: set exact qty for each id. A count is a CORRECTION, logged as a
    * STOCK_ADJUSTMENT (never a sale), so velocity stays clean after a stocktake.
    */
@@ -359,6 +464,7 @@ export function useInventory() {
     workspace: getActiveWorkspace(),
     addProduct, updateProduct, removeProduct,
     sellUnits, recordWaste, reverseWaste,
-    setCounts, findByBarcode, receiveLines, applyDelivery, importProducts, commit,
+    setCounts, applyCounts, setShelfQty, transferStock,
+    findByBarcode, receiveLines, applyDelivery, importProducts, commit,
   };
 }

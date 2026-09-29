@@ -30,15 +30,19 @@ function newId(prefix = 's') {
 export function buildSummary(session, products) {
   const byId = Object.fromEntries(products.map((p) => [p.id, p]));
   const counts = session?.counts || {};
+  const expectedMap = session?.expected || {};
+  const reasons = session?.reasons || {};
   const lines = [];
   for (const [productId, countedRaw] of Object.entries(counts)) {
     const p = byId[productId];
     if (!p) continue;
-    const expected = Number(p.qty) || 0;
+    // Expected = what the system said WHEN COUNTED (snapshot), so variance reflects the true
+    // discrepancy at count time even if stock moved since. Falls back to current for old sessions.
+    const expected = expectedMap[productId] == null ? (Number(p.qty) || 0) : Number(expectedMap[productId]) || 0;
     const counted = Number(countedRaw) || 0;
     const variance = counted - expected;          // negative = missing
     const cost = Number(p.cost) || 0;
-    lines.push({ productId, name: p.name, barcode: p.barcode, expected, counted, variance, value: variance * cost });
+    lines.push({ productId, name: p.name, barcode: p.barcode, expected, counted, variance, value: variance * cost, reason: reasons[productId] || '' });
   }
   const discrepancies = lines.filter((l) => l.variance !== 0);
   const shrinkageValue = lines.filter((l) => l.variance < 0).reduce((n, l) => n - l.value, 0); // positive £ lost
@@ -71,30 +75,52 @@ export function useStocktake() {
   }, []);
 
   const start = useCallback((name) => {
-    const s = { id: newId(), name: name || 'Stock count', startedAt: Date.now(), counts: {} };
+    const s = { id: newId(), name: name || 'Stock count', startedAt: Date.now(), counts: {}, expected: {}, reasons: {} };
     persist(S_KEY, s); setSession(s); return s;
   }, []);
 
-  /** Set an item's counted qty. qty '' / null clears it from the count. */
-  const countItem = useCallback((productId, qty) => {
+  // Snapshot the system qty the FIRST time an item is touched in this count, so later edits keep
+  // the original count-time expected (concurrency-safe apply).
+  function withExpected(prev, productId, expectedAt) {
+    const expected = { ...(prev.expected || {}) };
+    if (expected[productId] == null && expectedAt != null) expected[productId] = Math.max(0, Number(expectedAt) || 0);
+    return expected;
+  }
+
+  /** Set an item's counted qty. qty '' / null clears it. Pass expectedAt (current system qty). */
+  const countItem = useCallback((productId, qty, expectedAt) => {
     setSession((prev) => {
       if (!prev) return prev;
       const counts = { ...prev.counts };
+      const expected = withExpected(prev, productId, expectedAt);
       if (qty === '' || qty == null) delete counts[productId];
       else counts[productId] = Math.max(0, Number(qty) || 0);
-      const next = { ...prev, counts };
+      const next = { ...prev, counts, expected };
       persist(S_KEY, next);
       return next;
     });
   }, []);
 
-  /** Add n to an item's count (used by scan-to-count). */
-  const bumpItem = useCallback((productId, n = 1) => {
+  /** Add n to an item's count (scan-to-count). Pass expectedAt (current system qty). */
+  const bumpItem = useCallback((productId, n = 1, expectedAt) => {
     setSession((prev) => {
       if (!prev) return prev;
       const counts = { ...prev.counts };
+      const expected = withExpected(prev, productId, expectedAt);
       counts[productId] = Math.max(0, (Number(counts[productId]) || 0) + n);
-      const next = { ...prev, counts };
+      const next = { ...prev, counts, expected };
+      persist(S_KEY, next);
+      return next;
+    });
+  }, []);
+
+  /** Record a reason for a discrepancy on a counted item. */
+  const setReason = useCallback((productId, text) => {
+    setSession((prev) => {
+      if (!prev) return prev;
+      const reasons = { ...(prev.reasons || {}) };
+      reasons[productId] = text || '';
+      const next = { ...prev, reasons };
       persist(S_KEY, next);
       return next;
     });
@@ -125,5 +151,5 @@ export function useStocktake() {
     return entry;
   }, []);
 
-  return { session, history, start, countItem, bumpItem, cancel, saveSummary };
+  return { session, history, start, countItem, bumpItem, setReason, cancel, saveSummary };
 }

@@ -13,8 +13,8 @@ const dateLabel = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric
 
 // Stocktake / audit — count the shop, catch shrinkage. Local-first, no backend.
 export default function StocktakeView({ onBack }) {
-  const { products, setCounts } = useInventory();
-  const { session, history, start, countItem, bumpItem, cancel, saveSummary } = useStocktake();
+  const { products, applyCounts } = useInventory();
+  const { session, history, start, countItem, bumpItem, setReason, cancel, saveSummary } = useStocktake();
   const [query, setQuery] = useState('');
   const [scanning, setScanning] = useState(false);
   const [reviewing, setReviewing] = useState(false);
@@ -42,14 +42,21 @@ export default function StocktakeView({ onBack }) {
     setScanning(false);
     const p = products.find((x) => x.barcode && x.barcode === String(code).trim());
     if (!p) { toast.error('Not in your stock list'); return; }
-    bumpItem(p.id, 1);
+    bumpItem(p.id, 1, Number(p.qty) || 0); // snapshot expected-at-count
     toast.success(`${p.name}: ${(Number(session?.counts[p.id]) || 0) + 1}`);
   }
 
   function applyAndFinish() {
     if (!summary) return;
-    const applyMap = { ...session.counts };
-    setCounts(applyMap);                 // corrections — not sales
+    // Snapshot-safe: apply the count's correction (counted − expectedAt) to CURRENT stock, so a
+    // sale/delivery that happened during the count isn't overwritten by a stale total.
+    const items = Object.keys(session.counts).map((id) => ({
+      id,
+      counted: session.counts[id],
+      expectedAt: session.expected?.[id],
+      reason: session.reasons?.[id],
+    }));
+    applyCounts(items);
     saveSummary(summary, { name: session.name, startedAt: session.startedAt });
     setReviewing(false);
     const net = summary.netValue;
@@ -143,8 +150,14 @@ export default function StocktakeView({ onBack }) {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{l.name}</span>
                   <span className="block text-[11px] text-gray-500">Expected {l.expected} · counted {l.counted}</span>
+                  <input
+                    value={session.reasons?.[l.productId] || ''}
+                    onChange={(e) => setReason(l.productId, e.target.value)}
+                    placeholder="Reason (optional) — e.g. damaged, miscount, theft"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-900 focus:border-primary focus:outline-none"
+                  />
                 </span>
-                <span className={`shrink-0 text-sm font-bold tabular-nums ${l.variance < 0 ? 'text-danger' : 'text-success'}`}>
+                <span className={`shrink-0 self-start text-sm font-bold tabular-nums ${l.variance < 0 ? 'text-danger' : 'text-success'}`}>
                   {l.variance > 0 ? '+' : ''}{l.variance}
                 </span>
               </li>
@@ -159,7 +172,7 @@ export default function StocktakeView({ onBack }) {
         <button type="button" onClick={applyAndFinish} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-bold text-white shadow-sm active:scale-[0.99]">
           <Check className="h-4 w-4" /> Apply counts to stock
         </button>
-        <p className="mt-2 text-center text-[11px] text-gray-400">Sets your stock to the counted numbers and saves this count.</p>
+        <p className="mt-2 text-center text-[11px] text-gray-400">Applies each count as a correction (safe if stock moved mid-count) and saves it. Count only the items you check — a shelf at a time is fine.</p>
       </div>
     );
   }
@@ -209,7 +222,8 @@ export default function StocktakeView({ onBack }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
                 <span className="block text-[11px] text-gray-500">
-                  Expected {expected}
+                  {p.countedAt ? 'Counted' : 'Recorded'} {expected}
+                  {p.countedAt && <span className="text-gray-400"> · last {dateLabel(p.countedAt)}</span>}
                   {isCounted && variance !== 0 && (
                     <span className={`ml-1 font-semibold ${variance < 0 ? 'text-danger' : 'text-success'}`}>
                       · {variance > 0 ? '+' : ''}{variance}
@@ -223,14 +237,14 @@ export default function StocktakeView({ onBack }) {
                 inputMode="numeric"
                 min="0"
                 value={counted ?? ''}
-                onChange={(e) => countItem(p.id, e.target.value)}
+                onChange={(e) => countItem(p.id, e.target.value, expected)}
                 placeholder="—"
                 aria-label={`Counted quantity for ${p.name}`}
                 className="w-16 rounded-xl border border-gray-200 py-2 text-center text-sm font-bold tabular-nums focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
               <button
                 type="button"
-                onClick={() => countItem(p.id, expected)}
+                onClick={() => countItem(p.id, expected, expected)}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 active:scale-95"
                 aria-label={`Mark ${p.name} as matching expected`}
                 title="Counts match expected"
