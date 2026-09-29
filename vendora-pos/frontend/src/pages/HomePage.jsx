@@ -5,7 +5,7 @@ import {
   ListChecks, ScanLine, Package2, ShoppingCart, MoreHorizontal,
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
-  Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, UserRound,
+  Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -27,6 +27,8 @@ import ClaimsView from '../components/claims/ClaimsView';
 import PriceAlertsView from '../components/pricealerts/PriceAlertsView';
 import TasksView from '../components/tasks/TasksView';
 import ImportView from '../components/import/ImportView';
+import RequestsView from '../components/requests/RequestsView';
+import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
@@ -125,6 +127,8 @@ export default function HomePage() {
         {screen === 'suppliers' && <SuppliersView onBack={() => setScreen(null)} familyId={saved.familyId} />}
         {screen === 'takings' && <TakingsView onBack={() => setScreen(null)} />}
         {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
+        {screen === 'requests' && <RequestsView onBack={() => setScreen(null)} />}
+        {screen === 'outcomes' && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
         {screen === 'overview' && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -200,6 +204,7 @@ export default function HomePage() {
             <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />
             <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />
             <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />
+            <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
           </Hub>
         )}
 
@@ -209,6 +214,7 @@ export default function HomePage() {
             <MoreGroup title="Money">
               <Row icon={Coins} label="Takings & cash-up" onClick={() => setScreen('takings')} />
               <Row icon={LayoutDashboard} label="Owner glance" onClick={() => setScreen('overview')} />
+              <Row icon={CalendarClock} label="This month" sub="Actual credits, tasks & coverage" onClick={() => setScreen('outcomes')} />
             </MoreGroup>
             <MoreGroup title="Team">
               <Row icon={ClipboardList} label="Team tasks" onClick={() => setScreen('tasks')} badge={taskExceptions} />

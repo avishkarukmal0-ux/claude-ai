@@ -39,6 +39,7 @@ export const STORE_NAMES = [
   'price_alerts_v1',
   'tasks_v1',
   'handovers_v1',
+  'requests_v1',
 ];
 
 export const WORKSPACE_EVENT = 'vendora:workspace';
