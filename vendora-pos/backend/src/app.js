@@ -3,19 +3,22 @@
 require('dotenv').config();
 
 // ── Startup security checks ───────────────────────────────────────────────────
-// Warn about weak secrets but never exit — Railway injects env vars at runtime
-// and process.exit(1) here would kill the dyno before env vars are available.
-const WEAK_SECRETS = ['vendora-dev-secret-fallback', 'vendora-refresh-secret-fallback', 'change-me', 'secret'];
-const jwtSecret        = process.env.JWT_SECRET || '';
-const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || '';
-
-if (!jwtSecret || jwtSecret.length < 32 || WEAK_SECRETS.some(w => jwtSecret.includes(w))) {
-  console.warn('\n⚠  WARNING: JWT_SECRET is missing or weak — auth tokens will be insecure');
-  console.warn('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
-  console.warn('   Set it as JWT_SECRET in Railway dashboard (Variables)\n');
-}
-if (!jwtRefreshSecret || jwtRefreshSecret.length < 32 || WEAK_SECRETS.some(w => jwtRefreshSecret.includes(w))) {
-  console.warn('⚠  WARNING: JWT_REFRESH_SECRET is missing or weak\n');
+// In PRODUCTION, refuse to start with missing/weak JWT secrets — issuing forgeable tokens is
+// worse than being down. Outside production, warn (keeps local/test explicit and unblocked).
+// Secret VALUES are never printed. Env is available here (dotenv + platform inject before start).
+const { checkSecrets } = require('./config/validateSecrets');
+const secretCheck = checkSecrets({
+  jwtSecret: process.env.JWT_SECRET,
+  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET,
+  isProd: process.env.NODE_ENV === 'production',
+});
+if (secretCheck.fatal) {
+  console.error(`\n✗ FATAL: insecure or missing secret(s): ${secretCheck.problems.join(', ')}`);
+  console.error('   Set strong 32+ char secrets in your host env (Railway → Variables).');
+  console.error('   Generate: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"\n');
+  throw new Error(`Refusing to start in production with insecure secrets: ${secretCheck.problems.join(', ')}`);
+} else if (!secretCheck.ok) {
+  console.warn(`\n⚠  WARNING: insecure/missing secret(s): ${secretCheck.problems.join(', ')} — allowed in ${process.env.NODE_ENV || 'development'} only.\n`);
 }
 
 const express = require('express');
@@ -24,7 +27,6 @@ const helmet = require('helmet');
 const requestLogger = require('./middleware/requestLogger');
 const auditLog = require('./middleware/auditLog');
 const errorHandler = require('./middleware/errorHandler');
-const storeContext = require('./middleware/storeContext');
 const { generalLimiter } = require('./middleware/rateLimit');
 const routes = require('./routes');
 const path = require('path');
@@ -145,10 +147,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Store context (loads store doc for authenticated requests)
-app.use('/api', storeContext);
-
-// API routes
+// API routes. NOTE: storeContext (loads req.store) runs INSIDE the router, immediately
+// after authenticate — see routes/index.js. Mounting it here (before auth) meant req.storeId
+// wasn't set yet, so req.store was never populated (and PIN/permission gates that depend on
+// it silently no-op'd).
 app.use('/api', routes);
 
 // 404 handler

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
+const storeContext = require('../middleware/storeContext');
 
 const { publicRouter: receiptPublicRouter } = require('./receiptRoutes');
 const authRoutes           = require('./authRoutes');
@@ -42,8 +43,10 @@ router.use('/receipt', receiptPublicRouter);
 // Public subscription webhook (no auth required)
 router.use('/subscriptions', subscriptionPublicRouter);
 
-// All routes below require a valid JWT
+// All routes below require a valid JWT, THEN load the authorised shop context.
+// Order matters: authenticate sets req.storeId; storeContext uses it to load req.store.
 router.use(authenticate);
+router.use(storeContext);
 
 router.use('/sales',            saleRoutes);
 router.use('/products',         productRoutes);

@@ -15,9 +15,11 @@ module.exports = {
   },
 
   jwt: {
-    secret: process.env.JWT_SECRET || 'vendora-dev-secret-fallback',
+    // Dev/test fallbacks are convenience ONLY and never apply in production (app.js refuses to
+    // start there if a real secret is absent). This keeps insecure defaults out of prod entirely.
+    secret: process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? undefined : 'vendora-dev-secret-fallback'),
     expiresIn: process.env.JWT_EXPIRES_IN || '15m',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'vendora-refresh-secret-fallback',
+    refreshSecret: process.env.JWT_REFRESH_SECRET || (process.env.NODE_ENV === 'production' ? undefined : 'vendora-refresh-secret-fallback'),
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
 

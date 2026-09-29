@@ -25,16 +25,23 @@ async function tryConnect() {
     return;
   }
 
-  // Try MongoMemoryServer (needs binary download on first run)
+  // Try MongoMemoryServer (needs a binary; downloads on first run). Bounded so a sandbox
+  // without a binary or network FAILS FAST (→ suites skip) instead of hanging the run.
   try {
     const { MongoMemoryServer } = require('mongodb-memory-server');
-    const mongod = await MongoMemoryServer.create();
+    const timeout = new Promise((_, reject) => setTimeout(
+      () => reject(new Error('mongodb-memory-server unavailable (no binary / offline)')), 20000,
+    ));
+    const mongod = await Promise.race([MongoMemoryServer.create(), timeout]);
     global.__MONGOD__ = mongod;
     await mongoose.connect(mongod.getUri());
     dbReady = true;
   } catch (err) {
     dbError = err.message;
     dbReady = false;
+    // eslint-disable-next-line no-console
+    console.warn(`\n⚠  Integration DB unavailable — DB-backed suites will be skipped: ${dbError}`);
+    console.warn('   To run them, start MongoDB and set VENDORA_TEST_URI, or run "npm run test:unit" for DB-free tests.\n');
   }
 }
 
