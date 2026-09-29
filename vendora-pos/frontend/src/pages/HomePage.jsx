@@ -1,11 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Home as HomeIcon, ScanLine, Package2, MoreHorizontal, Settings, LogIn, ChevronRight, X, Download, Upload } from 'lucide-react';
-import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import {
-  getSavedShopType, getFamily, getMember, getModulesForFamily,
-} from '../config/shopTypes';
+  ListChecks, ScanLine, Package2, ShoppingCart, MoreHorizontal,
+  Settings, LogIn, ChevronRight, X, Download, Upload,
+  PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
+  Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, UserRound,
+} from 'lucide-react';
+import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
+import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
 import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
@@ -27,18 +30,30 @@ import ImportView from '../components/import/ImportView';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
+import { getOpenExceptionCount } from '../lib/taskStore';
+
+const ONBOARDED_KEY = 'vendora:onboarded';
+function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return true; } }
 
 /**
- * HomePage — the mobile app-home (M0). Public shell reflecting the chosen shop type:
- * a tailored module grid (the shopType dial, visible) + a bottom-nav shell.
- * Live data arrives once the backend is wired; tiles show a "Soon" badge until then.
+ * HomePage — the phone app shell. Five tabs (Today / Scan / Stock / Buy / More) group the workflows
+ * so the shop floor has one obvious place for each job. Reuses the workflow screens built in earlier
+ * stages. The shop type tailors quick tools + the morning glance.
  */
 export default function HomePage() {
   const saved = getSavedShopType();
-  const [tab, setTab] = useState('home');
-  const [screen, setScreen] = useState(null); // full-page module screen (e.g. 'waste')
+  const [tab, setTab] = useState('today');
+  const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
+  const [showPromises, setShowPromises] = useState(() => !isOnboarded());
   const restoreInputRef = useRef(null);
+
+  function go(target) {
+    if (!target) return;
+    if (target.tab) { setScreen(null); setTab(target.tab); }
+    else if (target.screen) setScreen(target.screen);
+  }
+  function dismissPromises() { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* ignore */ } setShowPromises(false); }
 
   async function onExport() {
     const shared = await shareBackup();
@@ -46,59 +61,40 @@ export default function HomePage() {
     const ok = downloadBackup();
     toast[ok ? 'success' : 'error'](ok ? 'Backup downloaded' : 'Couldn’t create the backup');
   }
-
   function onRestoreFile(e) {
     const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-selecting the same file later
+    e.target.value = '';
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       const parsed = readBackup(String(reader.result || ''));
       if (!parsed.ok) { toast.error(parsed.error || 'That file isn’t a valid backup'); return; }
-
-      // Preview + explicit confirmation (this REPLACES current data).
       const lines = Object.entries(parsed.summary).map(([k, n]) => `• ${k.replace(/_v1$/, '')}: ${n}`).join('\n');
       const when = parsed.meta.exportedAt ? new Date(parsed.meta.exportedAt).toLocaleString('en-GB') : 'unknown date';
-      const ok = window.confirm(
-        `Restore this backup (from ${when})?\n\n${lines}\n\n` +
-        'This REPLACES the data in your current view. A recovery copy of your current data will be downloaded first so you can undo.',
-      );
-      if (!ok) return;
-
-      // Recovery backup of current data before overwriting.
+      if (!window.confirm(`Restore this backup (from ${when})?\n\n${lines}\n\nThis REPLACES the data in your current view. A recovery copy of your current data will be downloaded first so you can undo.`)) return;
       downloadBackup(undefined, 'vendora-recovery');
-
       const res = restoreBackup(parsed.data, { mode: 'replace' });
-      if (res.ok) {
-        toast.success(`Restored ${res.restored} item groups — reloading…`);
-        setTimeout(() => window.location.reload(), 900);
-      } else {
-        toast.error(res.error || 'Restore failed — your data was left unchanged');
-      }
+      if (res.ok) { toast.success(`Restored ${res.restored} item groups — reloading…`); setTimeout(() => window.location.reload(), 900); }
+      else toast.error(res.error || 'Restore failed — your data was left unchanged');
     };
     reader.onerror = () => toast.error('Couldn’t read that file');
     reader.readAsText(file);
   }
 
-  // No shop type picked yet → send them to the front door.
   if (!saved) return <Navigate to="/" replace />;
 
   const family = getFamily(saved.familyId);
   const member = saved.memberId ? getMember(saved.familyId, saved.memberId) : null;
   const shopLabel = member?.label || family.label;
-  const modules = getModulesForFamily(saved.familyId);
   const tools = getQuickToolsForFamily(saved.familyId);
   const accent = family.accent;
   const suggestionCount = getOpenSuggestionCount();
+  const taskExceptions = getOpenExceptionCount();
   const ToolComponent = activeTool?.component || null;
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
-      {/* Top bar */}
-      <header
-        className="sticky top-0 z-10 flex items-center gap-3 bg-white px-4 py-3 shadow-sm"
-        style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}
-      >
+      <header className="sticky top-0 z-10 flex items-center gap-3 bg-white px-4 py-3 shadow-sm" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary">
           <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">
             <path d="M13 15 L24 35 L35 15" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -112,74 +108,49 @@ export default function HomePage() {
         <Link to="/" className="text-xs font-medium text-primary hover:underline">Change</Link>
       </header>
 
-      {/* Scrollable content */}
       <main className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+        {/* Full-page workflow screens */}
+        {screen === 'receive' && <DeliveryReceivingView />}
         {screen === 'waste' && <WasteView onBack={() => setScreen(null)} />}
-
         {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
-
         {screen === 'deadstock' && <DeadStockView onBack={() => setScreen(null)} />}
-
         {screen === 'stocktake' && <StocktakeView onBack={() => setScreen(null)} />}
-
         {screen === 'refill' && <RefillView onBack={() => setScreen(null)} />}
-
         {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
-
         {screen === 'claims' && <ClaimsView onBack={() => setScreen(null)} />}
-
         {screen === 'price-alerts' && <PriceAlertsView onBack={() => setScreen(null)} />}
-
         {screen === 'tasks' && <TasksView onBack={() => setScreen(null)} />}
-
         {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
-
         {screen === 'suggestions' && <SuggestionsInbox onBack={() => setScreen(null)} />}
-
         {screen === 'suppliers' && <SuppliersView onBack={() => setScreen(null)} familyId={saved.familyId} />}
-
         {screen === 'takings' && <TakingsView onBack={() => setScreen(null)} />}
-
+        {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
         {screen === 'overview' && (
-          <OverviewView
-            onBack={() => setScreen(null)}
-            onOpen={(target) => {
-              if (target === 'stock') { setScreen(null); setTab('stock'); }
-              else setScreen(target); // 'takings' | 'waste'
-            }}
-          />
+          <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
 
-        {!screen && tab === 'home' && (
+        {/* ── TODAY ── */}
+        {!screen && tab === 'today' && (
           <>
-            {/* Do this today — the brain's prioritised action list from live data */}
-            <TodayActions
-              onGo={(go) => {
-                if (!go) return;
-                if (go.tab) { setScreen(null); setTab(go.tab); }
-                else if (go.screen) setScreen(go.screen);
-              }}
-            />
-
-            {/* Today at the shop — the morning glance, tailored to this family */}
+            <TodayActions onGo={go} />
             <TodayAtShop familyId={saved.familyId} />
 
-            {/* What Vendora does — burden-first promises for this family */}
-            {family.promises?.length > 0 && (
+            {showPromises && family.promises?.length > 0 && (
               <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">What Vendora does for you</h2>
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">What Vendora helps with</h2>
+                  <button type="button" onClick={dismissPromises} className="text-[11px] font-semibold text-primary">Got it</button>
+                </div>
                 <ul className="space-y-1.5">
                   {family.promises.map((p) => (
                     <li key={p} className="flex items-start gap-2 text-sm text-gray-700">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-                      {p}
+                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accent }} />{p}
                     </li>
                   ))}
                 </ul>
               </section>
             )}
 
-            {/* Quick tools — glance-and-go helpers that work right now (no login, no backend) */}
             {tools.length > 0 && (
               <section className="mb-5">
                 <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Quick tools</h2>
@@ -187,18 +158,8 @@ export default function HomePage() {
                   {tools.map((t) => {
                     const Icon = t.icon;
                     return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setActiveTool(t)}
-                        className="flex w-32 shrink-0 flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                      >
-                        <span
-                          className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg"
-                          style={{ backgroundColor: `${accent}1A`, color: accent }}
-                        >
-                          <Icon className="h-5 w-5" strokeWidth={1.75} />
-                        </span>
+                      <button key={t.id} type="button" onClick={() => setActiveTool(t)} className="flex w-32 shrink-0 flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                        <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}1A`, color: accent }}><Icon className="h-5 w-5" strokeWidth={1.75} /></span>
                         <span className="text-sm font-semibold leading-tight text-gray-900">{t.label}</span>
                         <span className="mt-0.5 text-[11px] leading-snug text-gray-500">{t.tagline}</span>
                       </button>
@@ -207,132 +168,83 @@ export default function HomePage() {
                 </div>
               </section>
             )}
-
-            {/* Module grid — tailored to this shop type */}
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Your tools</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {modules.map((m) => {
-                const Icon = m.icon;
-                const clickable = m.live && (m.tab || m.screen);
-                const Tag = clickable ? 'button' : 'div';
-                const open = () => { if (m.tab) setTab(m.tab); else if (m.screen) setScreen(m.screen); };
-                return (
-                  <Tag
-                    key={m.id}
-                    type={clickable ? 'button' : undefined}
-                    onClick={clickable ? open : undefined}
-                    className={`relative flex flex-col rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm ${
-                      clickable ? 'transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2' : ''
-                    }`}
-                  >
-                    {m.id === 'suggestions' && suggestionCount > 0 ? (
-                      <span className="absolute right-2 top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
-                        {suggestionCount}
-                      </span>
-                    ) : (
-                      <span className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${m.live ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-400'}`}>
-                        {m.live ? 'Ready' : 'Soon'}
-                      </span>
-                    )}
-                    <span
-                      className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: `${accent}1A`, color: accent }}
-                    >
-                      <Icon className="h-6 w-6" strokeWidth={1.75} />
-                    </span>
-                    <span className="text-sm font-semibold leading-tight text-gray-900">{m.label}</span>
-                    <span className="mt-1 text-[11px] leading-snug text-gray-500">{m.desc}</span>
-                  </Tag>
-                );
-              })}
-            </div>
           </>
         )}
 
-        {!screen && tab === 'scan' && <DeliveryReceivingView />}
+        {/* ── SCAN (hub) ── */}
+        {!screen && tab === 'scan' && (
+          <Hub title="Scan & check" subtitle="Book in, count, or record waste — camera or type.">
+            <HubTile icon={PackageCheck} accent={accent} label="Receive a delivery" desc="Cases/units, discrepancies, drafts" onClick={() => setScreen('receive')} />
+            <HubTile icon={ClipboardCheck} accent={accent} label="Count stock" desc="Quick counts, catch shrinkage" onClick={() => setScreen('stocktake')} />
+            <HubTile icon={CalendarClock} accent={accent} label="Expiry & waste" desc="Sell-first, bin the right batch" onClick={() => setScreen('waste')} />
+          </Hub>
+        )}
 
-        {!screen && tab === 'stock' && <InventoryView onOpenSuppliers={() => setScreen('suppliers')} onOpenImport={() => setScreen('import')} />}
+        {/* ── STOCK ── */}
+        {!screen && tab === 'stock' && (
+          <>
+            <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+              <Chip icon={ClipboardCheck} label="Count" onClick={() => setScreen('stocktake')} />
+              <Chip icon={PackageOpen} label="Refill" onClick={() => setScreen('refill')} />
+              <Chip icon={Hourglass} label="Slow stock" onClick={() => setScreen('deadstock')} />
+            </div>
+            <InventoryView onOpenSuppliers={() => setScreen('suppliers')} onOpenImport={() => setScreen('import')} />
+          </>
+        )}
 
-        {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
+        {/* ── BUY (hub) ── */}
+        {!screen && tab === 'buy' && (
+          <Hub title="Buy & suppliers" subtitle="What to order, track orders, and recover credit.">
+            <HubTile icon={ShoppingCart} accent={accent} label="Buy list" desc="Low stock → cash-&-carry list" onClick={() => setScreen('reorder')} />
+            <HubTile icon={Truck} accent={accent} label="Orders" desc="Track what you’ve ordered" onClick={() => setScreen('orders')} />
+            <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />
+            <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />
+            <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />
+          </Hub>
+        )}
 
+        {/* ── MORE ── */}
         {!screen && tab === 'more' && (
-          <section className="space-y-2">
-            <Link to="/" className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-              <Settings className="h-5 w-5 text-gray-400" />
-              <span className="flex-1 text-sm font-medium text-gray-900">Change shop type</span>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
-            </Link>
-            <Link to="/login" className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-              <LogIn className="h-5 w-5 text-gray-400" />
-              <span className="flex-1 text-sm font-medium text-gray-900">Log in to your shop</span>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
-            </Link>
-
-            <div className="pt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Backup</div>
-            <button type="button" onClick={onExport} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
-              <Download className="h-5 w-5 text-gray-400" />
-              <span className="flex-1">
-                <span className="block text-sm font-medium text-gray-900">Export backup</span>
-                <span className="block text-[11px] text-gray-400">Save your data to a file (or share it)</span>
-              </span>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
-            </button>
-            <button type="button" onClick={() => restoreInputRef.current?.click()} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
-              <Upload className="h-5 w-5 text-gray-400" />
-              <span className="flex-1">
-                <span className="block text-sm font-medium text-gray-900">Restore from backup</span>
-                <span className="block text-[11px] text-gray-400">Load a backup file — replaces current data</span>
-              </span>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
-            </button>
-            <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
-
-            <p className="px-1 pt-2 text-center text-xs text-gray-400">
-              Set up as {shopLabel} · Vendora
-            </p>
-          </section>
+          <div className="space-y-5">
+            <MoreGroup title="Money">
+              <Row icon={Coins} label="Takings & cash-up" onClick={() => setScreen('takings')} />
+              <Row icon={LayoutDashboard} label="Owner glance" onClick={() => setScreen('overview')} />
+            </MoreGroup>
+            <MoreGroup title="Team">
+              <Row icon={ClipboardList} label="Team tasks" onClick={() => setScreen('tasks')} badge={taskExceptions} />
+              <Row icon={Users} label="Staff view" onClick={() => setScreen('worker')} />
+              <Row icon={Inbox} label="From the team" onClick={() => setScreen('suggestions')} badge={suggestionCount} />
+            </MoreGroup>
+            <MoreGroup title="Data">
+              <Row icon={Download} label="Export backup" sub="Save your data to a file (or share it)" onClick={onExport} />
+              <Row icon={Upload} label="Restore from backup" sub="Load a backup file — replaces current data" onClick={() => restoreInputRef.current?.click()} />
+              <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
+            </MoreGroup>
+            <MoreGroup title="Settings">
+              <RowLink to="/" icon={Settings} label="Change shop type" />
+              <RowLink to="/login" icon={LogIn} label="Log in to your shop" />
+            </MoreGroup>
+            <p className="px-1 text-center text-xs text-gray-400">Set up as {shopLabel} · Vendora</p>
+          </div>
         )}
       </main>
 
-      {/* Bottom nav shell */}
-      <nav
-        className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      >
-        <NavTab label="Home"  icon={HomeIcon} active={!screen && tab === 'home'}  onClick={() => { setScreen(null); setTab('home'); }} accent={accent} />
-        <NavTab label="Scan"  icon={ScanLine} active={!screen && tab === 'scan'}  onClick={() => { setScreen(null); setTab('scan'); }} accent={accent} />
-        <NavTab label="Stock" icon={Package2} active={!screen && tab === 'stock'} onClick={() => { setScreen(null); setTab('stock'); }} accent={accent} />
-        <NavTab label="More"  icon={MoreHorizontal} active={!screen && tab === 'more'} onClick={() => { setScreen(null); setTab('more'); }} accent={accent} />
+      <nav className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <NavTab label="Today" icon={ListChecks} active={!screen && tab === 'today'} onClick={() => go({ tab: 'today' })} accent={accent} />
+        <NavTab label="Scan" icon={ScanLine} active={!screen && tab === 'scan'} onClick={() => go({ tab: 'scan' })} accent={accent} />
+        <NavTab label="Stock" icon={Package2} active={!screen && tab === 'stock'} onClick={() => go({ tab: 'stock' })} accent={accent} />
+        <NavTab label="Buy" icon={ShoppingCart} active={!screen && tab === 'buy'} onClick={() => go({ tab: 'buy' })} accent={accent} />
+        <NavTab label="More" icon={MoreHorizontal} active={!screen && tab === 'more'} onClick={() => go({ tab: 'more' })} accent={accent} badge={taskExceptions + suggestionCount} />
       </nav>
 
-      {/* Quick-tool modal */}
       {activeTool && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-          onClick={() => setActiveTool(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label={activeTool.label}
-        >
-          <div
-            className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setActiveTool(null)} role="dialog" aria-modal="true" aria-label={activeTool.label}>
+          <div className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <h3 className="text-base font-bold text-gray-900">{activeTool.label}</h3>
-              <button
-                type="button"
-                onClick={() => setActiveTool(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <button type="button" onClick={() => setActiveTool(null)} className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100" aria-label="Close"><X className="h-5 w-5" /></button>
             </div>
-            <div
-              className="overflow-y-auto px-5 pt-5"
-              style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
-            >
+            <div className="overflow-y-auto px-5 pt-5" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
               {ToolComponent && <ToolComponent />}
             </div>
           </div>
@@ -342,18 +254,76 @@ export default function HomePage() {
   );
 }
 
-function NavTab({ label, icon: Icon, active, onClick, accent }) {
+function Hub({ title, subtitle, children }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium focus:outline-none"
-      style={{ color: active ? accent : '#9CA3AF' }}
-      aria-current={active ? 'page' : undefined}
-    >
+    <div>
+      <h2 className="mb-1 text-base font-bold text-gray-900">{title}</h2>
+      <p className="mb-4 text-xs text-gray-400">{subtitle}</p>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function HubTile({ icon: Icon, label, desc, onClick, accent }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${accent}1A`, color: accent }}><Icon className="h-6 w-6" strokeWidth={1.75} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-gray-900">{label}</span>
+        <span className="block text-[11px] text-gray-500">{desc}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+    </button>
+  );
+}
+
+function Chip({ icon: Icon, label, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 active:scale-95">
+      <Icon className="h-3.5 w-3.5 text-gray-400" /> {label}
+    </button>
+  );
+}
+
+function MoreGroup({ title, children }) {
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function Row({ icon: Icon, label, sub, onClick, badge = 0 }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
+      <Icon className="h-5 w-5 text-gray-400" />
+      <span className="flex-1">
+        <span className="block text-sm font-medium text-gray-900">{label}</span>
+        {sub && <span className="block text-[11px] text-gray-400">{sub}</span>}
+      </span>
+      {badge > 0 && <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">{badge}</span>}
+      <ChevronRight className="h-4 w-4 text-gray-300" />
+    </button>
+  );
+}
+
+function RowLink({ to, icon: Icon, label }) {
+  return (
+    <Link to={to} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <Icon className="h-5 w-5 text-gray-400" />
+      <span className="flex-1 text-sm font-medium text-gray-900">{label}</span>
+      <ChevronRight className="h-4 w-4 text-gray-300" />
+    </Link>
+  );
+}
+
+function NavTab({ label, icon: Icon, active, onClick, accent, badge = 0 }) {
+  return (
+    <button type="button" onClick={onClick} className="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium focus:outline-none" style={{ color: active ? accent : '#9CA3AF' }} aria-current={active ? 'page' : undefined}>
+      {badge > 0 && <span className="absolute right-1/2 top-1 translate-x-3 rounded-full bg-danger px-1 text-[9px] font-bold text-white">{badge > 9 ? '9+' : badge}</span>}
       <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} />
       {label}
     </button>
   );
 }
-

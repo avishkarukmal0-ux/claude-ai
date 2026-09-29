@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { AlertOctagon, TrendingDown, ShoppingCart, Hourglass, Coins, ChevronRight, CheckCircle2, ListChecks, ClipboardList } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { AlertOctagon, TrendingDown, ShoppingCart, Hourglass, Coins, ChevronRight, CheckCircle2, ListChecks, ClipboardList, X } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
 import { useMovements } from '../../lib/movementStore';
 import { useTakings } from '../../lib/takingsStore';
@@ -33,10 +33,25 @@ export default function TodayActions({ onGo }) {
   const { todayEntry } = useTakings();
   const { tasks } = useTasks();
 
+  // Per-day "snooze": hides a reminder for today only. It NEVER changes the underlying records —
+  // the action returns tomorrow if the condition still holds.
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('vendora:today_dismissed') || '{}');
+      return raw.date === todayKey && Array.isArray(raw.ids) ? new Set(raw.ids) : new Set();
+    } catch { return new Set(); }
+  });
+  function snooze(id) {
+    const next = new Set(dismissed); next.add(id);
+    setDismissed(next);
+    try { localStorage.setItem('vendora:today_dismissed', JSON.stringify({ date: todayKey, ids: [...next] })); } catch { /* ignore */ }
+  }
+
   const taskExceptions = useMemo(() => exceptionCount(tasks), [tasks]);
   const actions = useMemo(
-    () => buildActions({ products, records, todayEntry, taskExceptions, now: new Date() }),
-    [products, records, todayEntry, taskExceptions],
+    () => buildActions({ products, records, todayEntry, taskExceptions, now: new Date() }).filter((a) => !dismissed.has(a.id)),
+    [products, records, todayEntry, taskExceptions, dismissed],
   );
 
   // Nothing to do — but only celebrate once there's actually stock to reason about.
@@ -63,11 +78,11 @@ export default function TodayActions({ onGo }) {
           const Icon = KIND_ICON[a.kind] || ShoppingCart;
           const s = SEVERITY[a.severity] || SEVERITY.info;
           return (
-            <li key={a.id}>
+            <li className={`flex items-stretch gap-1 rounded-2xl border border-gray-100 border-l-4 ${s.rail} bg-white shadow-sm`}>
               <button
                 type="button"
                 onClick={() => onGo?.(a.go)}
-                className={`flex w-full items-center gap-3 rounded-2xl border border-gray-100 border-l-4 ${s.rail} bg-white p-3 text-left shadow-sm transition hover:shadow-md active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2`}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-l-2xl p-3 text-left transition hover:bg-gray-50 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
               >
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${s.iconWrap}`}>
                   <Icon className="h-5 w-5" strokeWidth={1.9} />
@@ -84,6 +99,15 @@ export default function TodayActions({ onGo }) {
                 <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-primary">
                   {a.cta} <ChevronRight className="h-3.5 w-3.5" />
                 </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => snooze(a.id)}
+                className="flex w-9 shrink-0 items-center justify-center rounded-r-2xl text-gray-300 hover:text-gray-500"
+                aria-label="Snooze until tomorrow"
+                title="Snooze until tomorrow (doesn’t change your records)"
+              >
+                <X className="h-4 w-4" />
               </button>
             </li>
           );

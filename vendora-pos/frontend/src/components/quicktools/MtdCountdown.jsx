@@ -51,7 +51,7 @@ export default function MtdCountdown() {
       </div>
 
       <div className="mt-4 rounded-xl bg-primary-50 p-3 text-sm text-primary-700">
-        With Vendora, your figures are captured as you go — the filing just happens.
+        Vendora tracks your key dates so you’re never caught out. You still file with HMRC or your accountant.
       </div>
 
       <p className="mt-3 text-[11px] leading-snug text-gray-400">

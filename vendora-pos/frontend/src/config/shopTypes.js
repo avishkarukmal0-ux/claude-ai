@@ -26,7 +26,7 @@ export const SHOP_FAMILIES = [
     // Shared: barcode grocery + goods-in + margins + age-verification + PMP.
     // Burden-first value promises shown when this family is picked.
     promises: [
-      'Your HMRC (MTD) filing just happens',
+      'Never miss an MTD or licence deadline',
       'Scan the cash-&-carry trolley — stock’s done',
       'Age checks logged for you',
     ],
@@ -120,7 +120,7 @@ export const MODULES = {
   worker:      { id: 'worker',      label: 'Staff view',     icon: Users,           desc: 'For staff on shift', live: true, screen: 'worker' },
   tasks:       { id: 'tasks',       label: 'Team tasks',     icon: ClipboardList,   desc: 'Jobs, checklists & handover', live: true, screen: 'tasks' },
   suggestions: { id: 'suggestions', label: 'From the team',  icon: Inbox,           desc: 'Staff flags & notes', live: true, screen: 'suggestions' },
-  mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
+  mtd:         { id: 'mtd',         label: 'MTD deadlines',  icon: FileText,        desc: 'Key dates tracked (figures soon)', live: false },
   'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
   'scale-labels': { id: 'scale-labels', label: 'Scale & labels', icon: ClipboardList, desc: 'Weigh, price & PPDS', live: false },
   'festival':  { id: 'festival',    label: 'Festival planner', icon: CalendarHeart, desc: 'Order ahead for peak weeks', live: false },
