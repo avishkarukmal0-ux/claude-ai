@@ -6,6 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -29,6 +30,7 @@ import TasksView from '../components/tasks/TasksView';
 import ImportView from '../components/import/ImportView';
 import RequestsView from '../components/requests/RequestsView';
 import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
+import SalesImportView from '../components/salesimport/SalesImportView';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
@@ -129,6 +131,7 @@ export default function HomePage() {
         {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
         {screen === 'requests' && <RequestsView onBack={() => setScreen(null)} />}
         {screen === 'outcomes' && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
+        {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
         {screen === 'overview' && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -222,6 +225,7 @@ export default function HomePage() {
               <Row icon={Inbox} label="From the team" onClick={() => setScreen('suggestions')} badge={suggestionCount} />
             </MoreGroup>
             <MoreGroup title="Data">
+              <Row icon={FileSpreadsheet} label="Import till sales" sub="Turn estimates into confirmed sales (optional)" onClick={() => setScreen('sales-import')} />
               <Row icon={Download} label="Export backup" sub="Save your data to a file (or share it)" onClick={onExport} />
               <Row icon={Upload} label="Restore from backup" sub="Load a backup file — replaces current data" onClick={() => restoreInputRef.current?.click()} />
               <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
