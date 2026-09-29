@@ -8,6 +8,7 @@ import {
 } from '../config/shopTypes';
 import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
+import TodayActions from '../components/home/TodayActions';
 import InventoryView from '../components/inventory/InventoryView';
 import GoodsInView from '../components/inventory/GoodsInView';
 import WasteView from '../components/waste/WasteView';
@@ -118,6 +119,15 @@ export default function HomePage() {
 
         {!screen && tab === 'home' && (
           <>
+            {/* Do this today — the brain's prioritised action list from live data */}
+            <TodayActions
+              onGo={(go) => {
+                if (!go) return;
+                if (go.tab) { setScreen(null); setTab(go.tab); }
+                else if (go.screen) setScreen(go.screen);
+              }}
+            />
+
             {/* Today at the shop — the morning glance, tailored to this family */}
             <TodayAtShop familyId={saved.familyId} />
 

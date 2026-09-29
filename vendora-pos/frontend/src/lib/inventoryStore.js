@@ -2,6 +2,7 @@
 // No backend yet: persists to localStorage so it survives reloads and works offline.
 // When the backend lands, this same shape syncs up. Every mutation re-persists.
 import { useCallback, useEffect, useState } from 'react';
+import { recordSale } from './movementStore';
 
 const KEY = 'vendora_inventory_v1';
 
@@ -117,16 +118,21 @@ export function useInventory() {
   }, []);
 
   const updateProduct = useCallback((id, patch) => {
+    let soldUnits = 0;
     setProducts((prev) => {
       const next = prev.map((p) => {
         if (p.id !== id) return p;
-        // A qty drop is a "sale/movement" — stamp lastSoldAt so slow-stock ageing works.
+        // A qty drop is a "sale/movement" — stamp lastSoldAt so slow-stock ageing
+        // works, and capture the units so velocity/reorder can reason about it.
         const soldNow = patch.qty != null && Number(patch.qty) < (Number(p.qty) || 0);
+        if (soldNow) soldUnits = (Number(p.qty) || 0) - Number(patch.qty);
         return { ...p, ...patch, ...(soldNow ? { lastSoldAt: Date.now() } : {}), updatedAt: Date.now() };
       });
       persist(next);
       return next;
     });
+    // Log the sale after the state update (keeps the updater pure).
+    if (soldUnits > 0) recordSale(id, soldUnits);
   }, []);
 
   const removeProduct = useCallback((id) => {

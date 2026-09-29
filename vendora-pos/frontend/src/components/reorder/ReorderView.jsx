@@ -1,9 +1,15 @@
 import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2, Share2 } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2, Share2, Flame } from 'lucide-react';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
+import { useMovements, velocityPerDay, daysOfCover } from '../../lib/movementStore';
+
+// How far ahead we want stock to cover, and how few days left flags a fast mover
+// for reorder before it hits the low-stock floor.
+const TARGET_COVER_DAYS = 14;
+const LOW_COVER_DAYS = 10;
 
 // Share/copy a supplier's outstanding list so the shop can send it to that
 // wholesaler or rep (WhatsApp, text, paste into the supplier's own app).
@@ -22,25 +28,55 @@ async function shareGroup(supplier, groupItems) {
   toast('Couldn’t copy automatically', { icon: 'ℹ️' });
 }
 
-// Suggested restock quantity to bring a low item back to a sensible "par" level.
-// Honest heuristic (no sales history yet — that's the later forecasting feature):
-// par = min level ×2, or 6 by default; suggest enough to reach it.
-function suggestQty(p) {
+// Suggested restock quantity. If we know how fast it sells, order enough to cover
+// the next TARGET_COVER_DAYS at that rate. Otherwise fall back to the honest par
+// heuristic (min ×2, or 6) so it still works on day one with no history.
+function suggestQty(p, vpd) {
   const qty = Number(p.qty) || 0;
+  if (vpd && vpd > 0) {
+    return Math.max(1, Math.ceil(vpd * TARGET_COVER_DAYS) - qty);
+  }
   const par = (Number(p.min) || 0) > 0 ? Number(p.min) * 2 : 6;
   return Math.max(1, par - qty);
+}
+
+// Human weekly rate, e.g. 4.6 → "~5/wk", 0.4 → "<1/wk".
+function weeklyLabel(vpd) {
+  const perWeek = vpd * 7;
+  if (perWeek < 1) return '<1/wk';
+  return `~${Math.round(perWeek)}/wk`;
+}
+
+// Days-of-cover → short label.
+function coverLabel(cover, qty) {
+  if ((Number(qty) || 0) <= 0) return 'out of stock';
+  if (!Number.isFinite(cover)) return 'not moving';
+  if (cover < 1) return 'gone today';
+  return `~${Math.round(cover)}d left`;
 }
 
 // Buy list — low stock turns into a tickable cash-&-carry list. Local-first.
 export default function ReorderView({ onBack }) {
   const { products } = useInventory();
   const { suppliers } = useSuppliers();
+  const { records } = useMovements();
   const { items, addItem, setQty, toggleBought, removeItem, clearBought, hasProduct } = useBuyList();
 
   const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
 
-  // Suggestions = low-stock products not already on the list.
-  const suggestions = products.filter((p) => isLowStock(p) && !hasProduct(p.id));
+  // Suggestions = things running out — either below the low-stock floor OR a fast
+  // mover with under ~10 days of cover left. Sorted most-urgent (fewest days) first,
+  // so what's about to sell out sits at the top of the list.
+  const suggestions = useMemo(() => {
+    return products
+      .filter((p) => !hasProduct(p.id))
+      .map((p) => {
+        const vpd = velocityPerDay(records, p.id);
+        return { p, vpd, cover: daysOfCover(p.qty, vpd) };
+      })
+      .filter(({ p, cover }) => isLowStock(p) || (Number.isFinite(cover) && cover <= LOW_COVER_DAYS))
+      .sort((a, b) => a.cover - b.cover);
+  }, [products, records, hasProduct]);
   const boughtCount = items.filter((i) => i.bought).length;
   const totalUnits = items.reduce((n, i) => n + (Number(i.qty) || 0), 0);
 
@@ -68,23 +104,38 @@ export default function ReorderView({ onBack }) {
       {/* Suggestions */}
       {suggestions.length > 0 && (
         <section className="mb-5">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Running low — suggested</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Running low — most urgent first</h3>
           <ul className="space-y-2">
-            {suggestions.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                  <span className="block text-[11px] text-gray-500">In stock: {Number(p.qty) || 0} · suggest +{suggestQty(p)}</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: suggestQty(p), supplierId: p.supplierId, supplierName: supplierNameById[p.supplierId] })}
-                  className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95"
-                >
-                  <Plus className="h-4 w-4" /> Add
-                </button>
-              </li>
-            ))}
+            {suggestions.map(({ p, vpd, cover }) => {
+              const sq = suggestQty(p, vpd);
+              const fast = vpd && Number.isFinite(cover) && cover <= 3;
+              return (
+                <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="min-w-0 truncate text-sm font-semibold text-gray-900">{p.name}</span>
+                      {fast ? (
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">
+                          <Flame className="h-3 w-3" /> Fast
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="block text-[11px] text-gray-500">
+                      {vpd
+                        ? <>Sells {weeklyLabel(vpd)} · <span className={fast ? 'font-semibold text-danger' : ''}>{coverLabel(cover, p.qty)}</span> · suggest +{sq}</>
+                        : <>In stock: {Number(p.qty) || 0} · suggest +{sq}</>}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: sq, supplierId: p.supplierId, supplierName: supplierNameById[p.supplierId] })}
+                    className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" /> Add
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
