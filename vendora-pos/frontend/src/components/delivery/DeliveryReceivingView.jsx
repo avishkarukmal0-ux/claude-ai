@@ -2,10 +2,11 @@ import React, { useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   Camera, Plus, Minus, Trash2, PackageCheck, Keyboard, Building2, Repeat,
-  ChevronLeft, ImagePlus, AlertTriangle, FileText, Check,
+  ChevronLeft, ImagePlus, AlertTriangle, FileText, Check, ShoppingCart,
 } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
+import { useOrders, statusFor, OPEN_STATUSES } from '../../lib/orderStore';
 import {
   useDeliveries, blankLine, DELIVERY_ISSUES,
   deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, packSize, deliveryTotals,
@@ -37,7 +38,10 @@ const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
 export default function DeliveryReceivingView() {
   const { findByBarcode, applyDelivery } = useInventory();
   const { suppliers } = useSuppliers();
+  const { orders, receiveAgainst } = useOrders();
   const { deliveries, createDraft, updateDraft, removeDelivery, markReceived, repeatFrom } = useDeliveries();
+
+  const openOrders = orders.filter((o) => OPEN_STATUSES.includes(statusFor(o)));
 
   const [draftId, setDraftId] = useState(null);
   const [draft, setDraft] = useState(null); // working copy (persisted on every change)
@@ -91,6 +95,13 @@ export default function DeliveryReceivingView() {
     const res = applyDelivery(draft);
     if (!res.ok) { toast.error(res.error || 'Couldn’t receive'); return; }
     markReceived(draft.id);
+    // If this delivery fulfils an order, record the accepted units against it.
+    if (draft.orderId) {
+      const receipts = (draft.lines || [])
+        .map((l) => ({ productId: l.productId, barcode: l.barcode, qty: acceptedUnits(l) }))
+        .filter((r) => r.qty > 0);
+      if (receipts.length) receiveAgainst(draft.orderId, receipts);
+    }
     toast.success(`Received ${res.applied} units into stock`);
     setDraft(null); setDraftId(null);
   }
@@ -180,6 +191,19 @@ export default function DeliveryReceivingView() {
             className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
           />
         </label>
+        {openOrders.length > 0 && (
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-500">
+            <ShoppingCart className="h-4 w-4 text-gray-400" />
+            <select
+              value={draft.orderId || ''}
+              onChange={(e) => commit({ ...draft, orderId: e.target.value || null })}
+              className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
+            >
+              <option value="">Not against an order</option>
+              {openOrders.map((o) => <option key={o.id} value={o.id}>{o.supplierName || 'Order'} · {(o.lines || []).length} lines</option>)}
+            </select>
+          </label>
+        )}
       </div>
 
       {/* Add line */}

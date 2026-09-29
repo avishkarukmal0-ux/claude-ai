@@ -19,6 +19,7 @@ import OverviewView from '../components/overview/OverviewView';
 import DeadStockView from '../components/deadstock/DeadStockView';
 import StocktakeView from '../components/stocktake/StocktakeView';
 import RefillView from '../components/refill/RefillView';
+import OrdersView from '../components/orders/OrdersView';
 import ImportView from '../components/import/ImportView';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -119,6 +120,8 @@ export default function HomePage() {
         {screen === 'stocktake' && <StocktakeView onBack={() => setScreen(null)} />}
 
         {screen === 'refill' && <RefillView onBack={() => setScreen(null)} />}
+
+        {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
 
         {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
 

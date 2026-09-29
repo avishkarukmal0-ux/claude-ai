@@ -5,6 +5,7 @@ import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useMovements, velocity, daysOfCover } from '../../lib/movementStore';
+import { useOrders, incomingFor } from '../../lib/orderStore';
 
 // How far ahead we want stock to cover, and how few days left flags a fast mover
 // for reorder before it hits the low-stock floor.
@@ -60,23 +61,28 @@ export default function ReorderView({ onBack }) {
   const { products } = useInventory();
   const { suppliers } = useSuppliers();
   const { records } = useMovements();
+  const { orders, createOrder } = useOrders();
   const { items, addItem, setQty, toggleBought, removeItem, clearBought, hasProduct } = useBuyList();
 
   const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
 
-  // Suggestions = things running out — either below the low-stock floor OR a fast
-  // mover with under ~10 days of cover left. Sorted most-urgent (fewest days) first,
-  // so what's about to sell out sits at the top of the list.
+  // Suggestions = things running out — either below the low-stock floor OR a fast mover with under
+  // ~10 days of cover. We SUBTRACT stock already on order ("incoming") so we don't re-suggest
+  // what you've already ordered; fully-covered items drop off (shown as "on order").
   const suggestions = useMemo(() => {
     return products
       .filter((p) => !hasProduct(p.id))
       .map((p) => {
         const { vpd, basis } = velocity(records, p.id);
-        return { p, vpd, basis, cover: daysOfCover(p.qty, vpd) };
+        const incoming = incomingFor(orders, p);
+        const need = suggestQty(p, vpd);                 // units to reach target from current qty
+        const sq = Math.max(0, need - incoming);         // net of what's already on order
+        const cover = daysOfCover((Number(p.qty) || 0) + incoming, vpd);
+        return { p, vpd, basis, incoming, sq, cover };
       })
-      .filter(({ p, cover }) => isLowStock(p) || (Number.isFinite(cover) && cover <= LOW_COVER_DAYS))
+      .filter(({ p, cover, sq }) => sq > 0 && (isLowStock(p) || (Number.isFinite(cover) && cover <= LOW_COVER_DAYS)))
       .sort((a, b) => a.cover - b.cover);
-  }, [products, records, hasProduct]);
+  }, [products, records, hasProduct, orders]);
   const boughtCount = items.filter((i) => i.bought).length;
   const totalUnits = items.reduce((n, i) => n + (Number(i.qty) || 0), 0);
 
@@ -92,6 +98,15 @@ export default function ReorderView({ onBack }) {
     return [...map.entries()].sort((a, b) => (a[0] === 'No supplier yet' ? 1 : b[0] === 'No supplier yet' ? -1 : a[0].localeCompare(b[0])));
   }, [items, supplierNameById]);
 
+  // Turn a supplier group into a tracked order (draft→ordered) and clear those buy-list items.
+  function placeOrder(supplier, groupItems) {
+    const lines = groupItems.filter((i) => !i.bought).map((i) => ({ productId: i.productId, barcode: i.barcode, name: i.name, qty: i.qty, unitCost: null }));
+    if (lines.length === 0) { toast('Nothing to order here'); return; }
+    createOrder({ supplierId: groupItems[0]?.supplierId || null, supplierName: supplier === 'No supplier yet' ? '' : supplier, lines });
+    groupItems.forEach((i) => removeItem(i.id));
+    toast.success('Order placed — track it in Orders');
+  }
+
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -106,8 +121,7 @@ export default function ReorderView({ onBack }) {
         <section className="mb-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Running low — most urgent first</h3>
           <ul className="space-y-2">
-            {suggestions.map(({ p, vpd, basis, cover }) => {
-              const sq = suggestQty(p, vpd);
+            {suggestions.map(({ p, vpd, basis, cover, sq, incoming }) => {
               const fast = vpd && Number.isFinite(cover) && cover <= 3;
               return (
                 <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
@@ -124,6 +138,7 @@ export default function ReorderView({ onBack }) {
                       {vpd
                         ? <>{basis === 'estimated' ? 'Est. sells' : 'Sells'} {weeklyLabel(vpd)} · <span className={fast ? 'font-semibold text-danger' : ''}>{coverLabel(cover, p.qty)}</span> · suggest +{sq}</>
                         : <>In stock: {Number(p.qty) || 0} · low · suggest +{sq}</>}
+                      {incoming > 0 && <span className="text-primary"> · {incoming} on order</span>}
                     </span>
                   </span>
                   <button
@@ -170,9 +185,16 @@ export default function ReorderView({ onBack }) {
                 <button
                   type="button"
                   onClick={() => shareGroup(supplier, groupItems)}
-                  className="ml-auto flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary active:scale-95"
+                  className="ml-auto flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600 active:scale-95"
                 >
                   <Share2 className="h-3.5 w-3.5" /> Share
+                </button>
+                <button
+                  type="button"
+                  onClick={() => placeOrder(supplier, groupItems)}
+                  className="flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary active:scale-95"
+                >
+                  <ShoppingCart className="h-3.5 w-3.5" /> Place order
                 </button>
               </div>
               <ul className="space-y-2">
