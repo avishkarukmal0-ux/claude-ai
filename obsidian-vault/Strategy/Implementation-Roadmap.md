@@ -4,6 +4,8 @@ Back to [[Home]] · Reads with [[The-Whole-Story]] · [[App-Kickoff]] · [[Featu
 
 > **The execution plan (2026-09-14).** Strategy is done — this is *what we build, in what order, and how we know each piece is finished.* Milestones are small on purpose so a real shop can use something early. Decisions that were "open" are **locked below with recommendations** so nothing stalls; override any of them by saying so.
 
+> ⚠️ **PIVOT (2026-09-29): PWA-only.** The founder called it — **forget the till system; the PWA is the product.** Phase 2 (till foundation + Stripe Connect payment margin) is **shelved indefinitely**. All effort goes into making the phone app 10x. The 10x work order: **① Smarter brain ✅ → ② New flagship → ③ Real-app feel → ④ PWA superpowers.** See [[2026-09-29-Smarter-Brain]].
+
 ---
 
 ## 🔒 Decisions locked (veto any of these)
@@ -54,7 +56,7 @@ Complete the Core's money-savers + the switching wedge.
 - ✅ **Reorder suggestions** (lite forecast: low-stock → buy list) *([[2026-09-16-Reorder-Buy-List]])*.
 - ✅ **Dynamic markdown / FEFO** — expiry "sell first" list *([[2026-09-16-Gap-Fills-1-4]])*.
 - ✅ **Migration/onboarding CSV import** (old EPOS/spreadsheet → products in minutes) — the switching wedge *(2026-09-16)*.
-- ⬜ **Demand forecasting** (proper forecast-to-order) — not built; **needs real sales history → after the backend**.
+- 🟢 **Velocity forecasting (lite)** — sell-through logged locally (`movementStore`); reorder now suggests qty from days-of-cover and flags fast sellers; owner glance projects weekly sales *([[2026-09-29-Smarter-Brain]])*. A fuller forecast-to-order still wants longer history.
 
 ### M5 — First vertical + FIELD VALIDATION *(weeks 11–12)* — ❌ not started
 Prove it in a real shop before widening.
@@ -62,8 +64,9 @@ Prove it in a real shop before widening.
 - ⬜ **Get it into 1–3 real shops** — *the key remaining step; needs a shop.*
 - **Done when:** a real shop uses the app on its own wholesaler run and you have their feedback.
 
-### Phase 2 (later, only once shops are hooked)
-Till-foundation fixes (atomic + idempotent sales, the known bugs) → **Stripe Connect Express + Terminal** for the payment margin. Not now.
+### Phase 2 — ❌ SHELVED (2026-09-29)
+~~Till-foundation fixes → **Stripe Connect Express + Terminal** for the payment margin.~~
+**Dropped:** the PWA is the product now. Kept here only as history; do not build against it.
 
 ---
 
