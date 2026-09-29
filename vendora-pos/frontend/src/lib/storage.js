@@ -1,4 +1,4 @@
-// Storage foundation for the PWA — the one place that talks to localStorage.
+// Storage foundation for the PWA — the one place that talks to on-device storage.
 //
 // Why this exists (see obsidian-vault Work-Log 2026-09-30):
 //  1. WORKSPACE SCOPING. Every key is namespaced to a workspace so guest/demo data
@@ -11,8 +11,17 @@
 //     workspace, non-destructively (the originals are kept as a safety net). We never
 //     silently attach on-device data to whichever shop account logs in next — moving
 //     guest data into a shop is an explicit, user-controlled action (copyWorkspace).
+//  4. DURABILITY (infra Stage 1, 2026-09-30). localStorage has a ~5MB cap, no transactions,
+//     and is evicted first under storage pressure. We keep the fast SYNCHRONOUS API the whole
+//     app relies on, backed by an in-memory cache (MEM), and mirror every write to IndexedDB
+//     (large, transactional, resilient). On boot, initStorage() restores anything missing from
+//     localStorage out of IndexedDB — so data survives eviction and can exceed the 5MB cap.
+//     If IndexedDB is unavailable, everything degrades to exactly the previous localStorage-only
+//     behaviour.
 //
 // Framework-free on purpose so it is unit-testable without React.
+
+import * as idb from './idb';
 
 const NS = 'vendora';
 const ACTIVE_KEY = `${NS}:active_workspace`;
@@ -53,6 +62,40 @@ function dispatch(name, detail) {
 function legacyKey(name) { return `${NS}_${name}`; }
 export function keyFor(name, ws) { return `${NS}:${ws}:${name}`; }
 
+// --- in-memory cache + durable (IndexedDB) backing ------------------------
+// MEM is the synchronous working copy keyed by FULL storage key. It is seeded lazily from
+// localStorage and restored from IndexedDB on boot (initStorage). The public read/write API
+// below operates through MEM so it stays synchronous and deterministic (read-after-write is
+// always correct), while durability is mirrored to localStorage AND IndexedDB.
+const MEM = new Map();
+let _durable = idb;            // pluggable so unit tests can inject a fake backend
+
+function durableOn() {
+  try { return !!(_durable && _durable.available && _durable.available()); }
+  catch { return false; }
+}
+function durableSet(fullKey, value) {
+  if (!durableOn()) return;
+  try { _durable.set(fullKey, value).catch(() => {}); } catch { /* ignore */ }
+}
+function durableDel(fullKey) {
+  if (!durableOn()) return;
+  try { _durable.del(fullKey).catch(() => {}); } catch { /* ignore */ }
+}
+/** Synchronous read of a full key: MEM first, else lazily hydrate from localStorage. */
+function memGet(fullKey) {
+  if (MEM.has(fullKey)) return MEM.get(fullKey);
+  let ls = null;
+  try { ls = localStorage.getItem(fullKey); } catch { ls = null; }
+  if (ls != null) MEM.set(fullKey, ls);
+  return ls;
+}
+
+/** Inject a durable backend (tests). Pass nothing to restore the real IndexedDB one. */
+export function __setDurableBackend(backend) { _durable = backend || idb; }
+/** Clear the in-memory cache (tests). */
+export function __resetMemForTest() { MEM.clear(); }
+
 // --- workspace -------------------------------------------------------------
 let _active = null;
 
@@ -85,12 +128,8 @@ function describeError(e) {
 
 /** Raw string read for the active (or given) workspace. */
 export function read(name, fallback = null, ws = getActiveWorkspace()) {
-  try {
-    const raw = localStorage.getItem(keyFor(name, ws));
-    return raw == null ? fallback : raw;
-  } catch {
-    return fallback;
-  }
+  const raw = memGet(keyFor(name, ws));
+  return raw == null ? fallback : raw;
 }
 
 export function readJSON(name, fallback = null, ws = getActiveWorkspace()) {
@@ -104,16 +143,33 @@ export function readJSON(name, fallback = null, ws = getActiveWorkspace()) {
   }
 }
 
-/** Write a raw string. Returns { ok, error? } and emits STORAGE_ERROR_EVENT on failure. */
+/**
+ * Write a raw string. Returns { ok, error? } and emits STORAGE_ERROR_EVENT on failure.
+ * Durability: commits to MEM (sync), localStorage (best-effort sync), and IndexedDB (async).
+ * If localStorage is full BUT IndexedDB is available, the write still succeeds (durable via
+ * IndexedDB, and marked `overflow`) instead of being lost.
+ */
 export function write(name, value, ws = getActiveWorkspace()) {
-  try {
-    localStorage.setItem(keyFor(name, ws), value);
+  const fullKey = keyFor(name, ws);
+  let lsOk = true;
+  let lsErr = null;
+  try { localStorage.setItem(fullKey, value); }
+  catch (e) { lsOk = false; lsErr = e; }
+
+  if (lsOk) {
+    MEM.set(fullKey, value);
+    durableSet(fullKey, value);
     return { ok: true };
-  } catch (e) {
-    const error = describeError(e);
-    dispatch(STORAGE_ERROR_EVENT, { name, error });
-    return { ok: false, error };
   }
+  if (durableOn()) {
+    // localStorage rejected it (usually quota) but IndexedDB can hold it — not a data loss.
+    MEM.set(fullKey, value);
+    durableSet(fullKey, value);
+    return { ok: true, overflow: true };
+  }
+  const error = describeError(lsErr);
+  dispatch(STORAGE_ERROR_EVENT, { name, error });
+  return { ok: false, error };
 }
 
 export function writeJSON(name, value, ws = getActiveWorkspace()) {
@@ -124,7 +180,10 @@ export function writeJSON(name, value, ws = getActiveWorkspace()) {
 }
 
 export function removeKey(name, ws = getActiveWorkspace()) {
-  try { localStorage.removeItem(keyFor(name, ws)); return { ok: true }; }
+  const fullKey = keyFor(name, ws);
+  MEM.delete(fullKey);
+  durableDel(fullKey);
+  try { localStorage.removeItem(fullKey); return { ok: true }; }
   catch (e) { return { ok: false, error: describeError(e) }; }
 }
 
@@ -150,13 +209,30 @@ export function migrateLegacyToLocalOnce() {
       const scoped = keyFor(name, LOCAL_WORKSPACE);
       if (localStorage.getItem(scoped) != null) continue; // don't clobber scoped data
       const legacy = localStorage.getItem(legacyKey(name));
-      if (legacy != null) { localStorage.setItem(scoped, legacy); migrated++; }
+      if (legacy != null) {
+        localStorage.setItem(scoped, legacy);
+        MEM.set(scoped, legacy);
+        durableSet(scoped, legacy);
+        migrated++;
+      }
     }
     localStorage.setItem(MIGRATED_FLAG, '1');
     return { migrated, ran: true };
   } catch (e) {
     return { migrated: 0, ran: false, error: describeError(e) };
   }
+}
+
+/** True if ANY of our data is already present in localStorage (used to decide whether boot must
+ *  wait for IndexedDB recovery). Fast + synchronous. */
+export function hasAnyLocalData() {
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(`${NS}:`) === 0 && k !== ACTIVE_KEY && k !== MIGRATED_FLAG) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
 }
 
 /** True if any legacy unscoped data still exists on the device. */
@@ -166,10 +242,9 @@ export function hasLegacyData() {
   } catch { return false; }
 }
 
-/** True if a workspace holds any of our data. */
+/** True if a workspace holds any of our data (checks MEM + localStorage, so overflow counts). */
 export function workspaceHasData(ws) {
-  try { return STORE_NAMES.some((name) => localStorage.getItem(keyFor(name, ws)) != null); }
-  catch { return false; }
+  return STORE_NAMES.some((name) => memGet(keyFor(name, ws)) != null);
 }
 
 /**
@@ -183,12 +258,12 @@ export function copyWorkspace(from, to, { overwrite = false } = {}) {
   if (!from || !to || from === to) return { ...report, error: 'Invalid workspaces' };
   try {
     for (const name of STORE_NAMES) {
-      const src = localStorage.getItem(keyFor(name, from));
+      const src = memGet(keyFor(name, from));
       if (src == null) continue;
-      const destKey = keyFor(name, to);
-      if (!overwrite && localStorage.getItem(destKey) != null) { report.skipped++; continue; }
-      localStorage.setItem(destKey, src);
-      report.copied++;
+      if (!overwrite && memGet(keyFor(name, to)) != null) { report.skipped++; continue; }
+      const res = write(name, src, to);
+      if (res.ok) report.copied++;
+      else return { ...report, error: res.error };
     }
     return report;
   } catch (e) {
@@ -202,3 +277,60 @@ export function onWorkspaceChange(cb) {
   window.addEventListener(WORKSPACE_EVENT, handler);
   return () => window.removeEventListener(WORKSPACE_EVENT, handler);
 }
+
+// --- durable init / recovery ----------------------------------------------
+let _initPromise = null;
+
+/**
+ * Boot-time durability sync (safe to call once at startup; idempotent). If IndexedDB is available:
+ *  1) SEED — copy any existing on-device (localStorage) `vendora:` keys into IndexedDB it doesn't
+ *     already have, so IndexedDB becomes a durable mirror for existing users (the migration).
+ *  2) RESTORE — for any key present in IndexedDB but missing from localStorage (evicted, or too big
+ *     to fit), load it back into the in-memory cache (and localStorage where it fits), then fire a
+ *     workspace event so live hooks re-read. localStorage stays authoritative when it has the key,
+ *     so this only ever fills gaps — it never overwrites newer on-device data.
+ * Non-destructive throughout. Returns { ran, seeded, restored }.
+ */
+export function initStorage() {
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
+    if (!durableOn()) return { ran: false, seeded: 0, restored: 0 };
+    let snapshot;
+    try { snapshot = await _durable.getAll(); }
+    catch { return { ran: false, seeded: 0, restored: 0 }; }
+    const idbKeys = new Set(snapshot.map((r) => r.key));
+
+    // 1) Seed IndexedDB from existing localStorage keys it lacks.
+    let seeded = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const k = localStorage.key(i);
+        if (!k || k.indexOf(`${NS}:`) !== 0 || idbKeys.has(k)) continue;
+        const v = localStorage.getItem(k);
+        if (v != null) { durableSet(k, v); seeded += 1; }
+      }
+    } catch { /* ignore */ }
+
+    // 2) Restore IndexedDB keys missing from localStorage (recovery of evicted/overflow data).
+    let restored = 0;
+    for (const { key, value } of snapshot) {
+      if (typeof key !== 'string' || key.indexOf(`${NS}:`) !== 0) continue;
+      let ls = null;
+      try { ls = localStorage.getItem(key); } catch { ls = null; }
+      if (ls == null && !MEM.has(key)) {
+        MEM.set(key, value);
+        try { localStorage.setItem(key, value); } catch { /* overflow: keep in MEM only */ }
+        restored += 1;
+      }
+    }
+    if (restored) {
+      _active = null; // active-workspace key may have been restored — re-read it lazily
+      dispatch(WORKSPACE_EVENT, { restored });
+    }
+    return { ran: true, seeded, restored };
+  })();
+  return _initPromise;
+}
+
+/** Test hook: allow initStorage to run again. */
+export function __resetInitForTest() { _initPromise = null; }
