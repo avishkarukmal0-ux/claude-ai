@@ -20,8 +20,12 @@ House style observed across the codebase — follow these when adding code.
 - Response shape: `{ success: true, ...data }` or `{ success:false, error:{ code, message } }`.
 
 ## PWA local-first patterns (2026-09-30, see [[ADR-002-App-Till-Separation]])
-- **All localStorage goes through `lib/storage.js`** — never `localStorage.getItem/setItem` directly in a
-  store. It scopes keys to the active workspace and surfaces write failures (don't swallow them).
+- **All on-device storage goes through `lib/storage.js`** — never `localStorage.getItem/setItem` directly
+  in a store. It scopes keys to the active workspace, surfaces write failures (don't swallow them), and
+  since 2026-09-30 (infra Stage 1, [[2026-09-30-IndexedDB-Durability]]) keeps a synchronous in-memory
+  cache mirrored to **IndexedDB** (`lib/idb.js`): writes overflow past localStorage's ~5MB cap and
+  `initStorage()` (called in `main.jsx`) restores data localStorage lost. localStorage stays
+  authoritative; IndexedDB recovery only fills gaps. Keep the storage API synchronous — don't make stores async.
 - Stock only changes via a **typed movement** (`movementStore`): a manual qty edit is `stock_adjustment`,
   a sale is `sale` (`sellUnits`), binning is `waste` (`recordWaste`). Never infer a sale from any decrease.
 - **Unknown ≠ zero.** `margin()` and valuations return null / exclude unknown-cost items; show coverage.
