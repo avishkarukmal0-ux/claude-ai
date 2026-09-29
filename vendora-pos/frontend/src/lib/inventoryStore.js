@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, getActiveWorkspace } from './storage';
 import { recordMovement, removeByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
 import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
+import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
 
 const NAME = 'inventory_v1';
 
@@ -422,6 +423,7 @@ export function useInventory() {
     const prev = load();
     const next = [...prev];
     const toLog = [];
+    const costChanges = [];
     let applied = 0;
 
     for (const line of (delivery.lines || [])) {
@@ -433,13 +435,18 @@ export function useInventory() {
       if (idx < 0 && line.barcode) idx = next.findIndex((p) => p.barcode && p.barcode === String(line.barcode).trim());
 
       if (idx >= 0) {
+        const prevCost = next[idx].cost;
+        const material = cost != null && isMaterialCostChange(prevCost, cost);
         next[idx] = {
           ...next[idx],
           qty: (Number(next[idx].qty) || 0) + units,
           // Update purchase cost only when we have a real one; NEVER touch retail price.
           cost: cost != null ? cost : next[idx].cost,
+          // Preserve purchase-cost history for price alerts + audit.
+          ...(material ? { costHistory: [...(next[idx].costHistory || []), { cost, at: Date.now() }] } : {}),
           updatedAt: Date.now(),
         };
+        if (material) costChanges.push({ productId: next[idx].id, name: next[idx].name, prevCost, newCost: cost, price: next[idx].price });
         toLog.push({ id: next[idx].id, units, cost });
       } else {
         const created = normaliseNew({ barcode: line.barcode, name: line.name || 'New item', cost, price: null, qty: units });
@@ -462,6 +469,8 @@ export function useInventory() {
         operationId: delivery.id,
       });
     }
+    // Queue price-change alerts (retail is never auto-changed — owner approves in the queue).
+    for (const c of costChanges) recordCostChange(c);
     return { ok: true, applied };
   }, []);
 
