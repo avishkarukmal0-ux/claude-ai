@@ -17,6 +17,7 @@ import SuppliersView from '../components/suppliers/SuppliersView';
 import TakingsView from '../components/takings/TakingsView';
 import OverviewView from '../components/overview/OverviewView';
 import DeadStockView from '../components/deadstock/DeadStockView';
+import StocktakeView from '../components/stocktake/StocktakeView';
 import ImportView from '../components/import/ImportView';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -98,6 +99,8 @@ export default function HomePage() {
         {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
 
         {screen === 'deadstock' && <DeadStockView onBack={() => setScreen(null)} />}
+
+        {screen === 'stocktake' && <StocktakeView onBack={() => setScreen(null)} />}
 
         {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
 

@@ -139,6 +139,18 @@ export function useInventory() {
     setProducts((prev) => { const next = prev.filter((p) => p.id !== id); persist(next); return next; });
   }, []);
 
+  /** Apply stocktake counts: set exact qty for each id. A count is a CORRECTION,
+   *  not a sale — so this never records a movement or stamps lastSoldAt. */
+  const setCounts = useCallback((counts) => {
+    setProducts((prev) => {
+      const next = prev.map((p) => (
+        counts[p.id] != null ? { ...p, qty: Math.max(0, Number(counts[p.id]) || 0), updatedAt: Date.now() } : p
+      ));
+      persist(next);
+      return next;
+    });
+  }, []);
+
   /** Bulk import products (from CSV). Skips rows whose barcode already exists.
    *  Persists synchronously (the import screen may unmount right after), then
    *  updates state. Returns { added, skipped }. */
@@ -218,5 +230,5 @@ export function useInventory() {
     });
   }, []);
 
-  return { products, addProduct, updateProduct, removeProduct, findByBarcode, receiveLines, importProducts, commit };
+  return { products, addProduct, updateProduct, removeProduct, setCounts, findByBarcode, receiveLines, importProducts, commit };
 }
