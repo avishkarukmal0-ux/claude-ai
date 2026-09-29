@@ -22,6 +22,7 @@ import RefillView from '../components/refill/RefillView';
 import OrdersView from '../components/orders/OrdersView';
 import ClaimsView from '../components/claims/ClaimsView';
 import PriceAlertsView from '../components/pricealerts/PriceAlertsView';
+import TasksView from '../components/tasks/TasksView';
 import ImportView from '../components/import/ImportView';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -128,6 +129,8 @@ export default function HomePage() {
         {screen === 'claims' && <ClaimsView onBack={() => setScreen(null)} />}
 
         {screen === 'price-alerts' && <PriceAlertsView onBack={() => setScreen(null)} />}
+
+        {screen === 'tasks' && <TasksView onBack={() => setScreen(null)} />}
 
         {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
 

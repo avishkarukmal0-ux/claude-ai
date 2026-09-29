@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { AlertOctagon, TrendingDown, ShoppingCart, Hourglass, Coins, ChevronRight, CheckCircle2, ListChecks } from 'lucide-react';
+import { AlertOctagon, TrendingDown, ShoppingCart, Hourglass, Coins, ChevronRight, CheckCircle2, ListChecks, ClipboardList } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
 import { useMovements } from '../../lib/movementStore';
 import { useTakings } from '../../lib/takingsStore';
+import { useTasks, exceptionCount } from '../../lib/taskStore';
 import { buildActions } from '../../lib/actionEngine';
 
 const KIND_ICON = {
@@ -11,6 +12,7 @@ const KIND_ICON = {
   reorder: ShoppingCart,
   deadstock: Hourglass,
   cashup: Coins,
+  tasks: ClipboardList,
 };
 
 // Per-severity styling: the row's left rail, icon tint, and money-chip colour.
@@ -29,10 +31,12 @@ export default function TodayActions({ onGo }) {
   const { products } = useInventory();
   const { records } = useMovements();
   const { todayEntry } = useTakings();
+  const { tasks } = useTasks();
 
+  const taskExceptions = useMemo(() => exceptionCount(tasks), [tasks]);
   const actions = useMemo(
-    () => buildActions({ products, records, todayEntry, now: new Date() }),
-    [products, records, todayEntry],
+    () => buildActions({ products, records, todayEntry, taskExceptions, now: new Date() }),
+    [products, records, todayEntry, taskExceptions],
   );
 
   // Nothing to do — but only celebrate once there's actually stock to reason about.

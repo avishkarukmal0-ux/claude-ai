@@ -118,6 +118,7 @@ export const MODULES = {
   takings:     { id: 'takings',     label: 'Takings & cash-up', icon: Coins,        desc: 'Day takings + drawer count', live: true, screen: 'takings' },
   overview:    { id: 'overview',    label: 'Owner glance',   icon: LayoutDashboard, desc: 'Takings, waste & margin', live: true, screen: 'overview' },
   worker:      { id: 'worker',      label: 'Staff view',     icon: Users,           desc: 'For staff on shift', live: true, screen: 'worker' },
+  tasks:       { id: 'tasks',       label: 'Team tasks',     icon: ClipboardList,   desc: 'Jobs, checklists & handover', live: true, screen: 'tasks' },
   suggestions: { id: 'suggestions', label: 'From the team',  icon: Inbox,           desc: 'Staff flags & notes', live: true, screen: 'suggestions' },
   mtd:         { id: 'mtd',         label: 'MTD books',      icon: FileText,        desc: 'HMRC filing, sorted', live: false },
   'age-check': { id: 'age-check',   label: 'Age checks',     icon: ShieldCheck,     desc: 'Logged & audit-ready', live: false },
@@ -128,7 +129,7 @@ export const MODULES = {
 };
 
 // Core modules every shop gets, in display order.
-export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'stocktake', 'refill', 'reorder', 'orders', 'deadstock', 'expiry', 'suppliers', 'claims', 'price-alerts', 'takings', 'overview', 'worker', 'suggestions', 'mtd'];
+export const CORE_MODULE_IDS = ['goods-in', 'inventory', 'stocktake', 'refill', 'reorder', 'orders', 'deadstock', 'expiry', 'suppliers', 'claims', 'price-alerts', 'takings', 'overview', 'worker', 'tasks', 'suggestions', 'mtd'];
 
 /** All modules for a family, in display order: core + that family's extras. */
 export function getModulesForFamily(familyId) {

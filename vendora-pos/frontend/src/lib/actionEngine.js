@@ -23,9 +23,23 @@ const andMore = (list) => (list.length > 1 ? ` +${list.length - 1} more` : '');
  * Build the prioritised action list.
  * @returns Array<{ id, severity, kind, title, detail, money?, go, cta }>
  */
-export function buildActions({ products = [], records = [], todayEntry = null, now = new Date() } = {}) {
+export function buildActions({ products = [], records = [], todayEntry = null, taskExceptions = 0, now = new Date() } = {}) {
   const actions = [];
   const inStock = products.filter((p) => qtyOf(p) > 0);
+
+  // 0) WARN — team tasks that need attention (overdue / high priority). Exceptions only, not
+  //    a stream of every task (that lives in Team tasks).
+  if (taskExceptions > 0) {
+    actions.push({
+      id: 'tasks',
+      severity: 'warn',
+      kind: 'tasks',
+      title: taskExceptions === 1 ? '1 team task needs attention' : `${taskExceptions} team tasks need attention`,
+      detail: 'Overdue or high-priority jobs on the shop floor.',
+      go: { screen: 'tasks' },
+      cta: 'Open tasks',
+    });
+  }
 
   // 1) CRITICAL — hard-stop dates passed (use-by / medicine). Illegal to sell.
   const mustPull = inStock.filter((p) => { const e = expiryInfo(p, now); return e && e.mustPull; });
