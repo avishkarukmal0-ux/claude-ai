@@ -61,7 +61,7 @@ function newId() {
  *  - batchId     links a batch (Stage 4) / a waste undo group
  */
 export function recordMovement({
-  productId = null, type, delta, valuation, reason, batchId,
+  productId = null, type, delta, valuation, reason, batchId, productBatchId,
   unit, location, actor, operationId, at = Date.now(),
 }) {
   if (!VALID_TYPES.has(type)) return null;
@@ -74,7 +74,8 @@ export function recordMovement({
     delta: d,
     ...(valuation != null && Number.isFinite(Number(valuation)) ? { valuation: Number(valuation) } : {}),
     ...(reason ? { reason: String(reason) } : {}),
-    ...(batchId ? { batchId } : {}),
+    ...(batchId ? { batchId } : {}),                     // waste-undo group id
+    ...(productBatchId ? { productBatchId: String(productBatchId) } : {}), // the dated batch wasted
     ...(unit ? { unit: String(unit) } : {}),
     ...(location ? { location: String(location) } : {}),
     ...(actor ? { actor: String(actor) } : {}),

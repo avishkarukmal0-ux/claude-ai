@@ -105,6 +105,43 @@ export function needsRefill(p) {
   return shelfTracked(p) && shelfQtyOf(p) <= 0 && (Number(p.qty) || 0) > 0;
 }
 
+// ---- optional expiry batches ----------------------------------------------
+// A product's `qty` stays TOTAL. `batches` is an optional breakdown by expiry date; the part of
+// stock not yet date-coded is the "undated" remainder. Date-coding allocates from undated (it
+// describes stock you already have — it never changes the total).
+export function batchesOf(p) { return Array.isArray(p?.batches) ? p.batches : []; }
+export function datedQty(p) { return batchesOf(p).reduce((n, b) => n + (Number(b.qty) || 0), 0); }
+export function undatedQty(p) { return Math.max(0, (Number(p.qty) || 0) - datedQty(p)); }
+export function batchExpiryInfo(batch, from = new Date()) {
+  return expiryInfo({ expiry: batch.expiry, dateType: batch.dateType }, from);
+}
+
+/**
+ * Earliest-expiry-first review rows across all products. Batched products contribute one row per
+ * near/expired batch; unbatched products fall back to their single product-level date. Sorted
+ * soonest first. Each row: { product, batchId|null, qty, expiry, dateType, info }.
+ */
+export function fefo(products, from = new Date()) {
+  const rows = [];
+  for (const p of products) {
+    const batches = batchesOf(p);
+    if (batches.length) {
+      for (const b of batches) {
+        const info = batchExpiryInfo(b, from);
+        if (info && (info.status === 'expired' || info.status === 'soon')) {
+          rows.push({ product: p, batchId: b.id, qty: Number(b.qty) || 0, expiry: b.expiry, dateType: b.dateType, info });
+        }
+      }
+    } else if (p.expiry) {
+      const info = expiryInfo(p, from);
+      if (info && (info.status === 'expired' || info.status === 'soon')) {
+        rows.push({ product: p, batchId: null, qty: Number(p.qty) || 0, expiry: p.expiry, dateType: p.dateType, info });
+      }
+    }
+  }
+  return rows.sort((a, b) => a.info.daysLeft - b.info.daysLeft);
+}
+
 /**
  * How trustworthy a product's on-hand number is, for honest labelling:
  *  - 'counted'    : physically counted (has countedAt); most trustworthy.
@@ -233,6 +270,76 @@ export function useInventory() {
       batchId,
     });
     return { ok: true, applied };
+  }, []);
+
+  /**
+   * Date-code stock: allocate `qty` of a product's UNDATED stock into a dated batch. Total stock
+   * is unchanged (this describes stock you already have). Won't allocate more than is undated.
+   */
+  const addBatch = useCallback((id, { qty, expiry, dateType }) => {
+    const want = Math.max(0, Number(qty) || 0);
+    if (want <= 0) return { ok: false, error: 'Quantity must be positive' };
+    if (!expiry) return { ok: false, error: 'Pick an expiry date' };
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    const alloc = Math.min(want, undatedQty(p));
+    if (alloc <= 0) return { ok: false, error: 'No undated stock left to date-code' };
+    const batch = { id: newId(), qty: alloc, expiry, dateType: DATE_TYPES[dateType] ? dateType : 'best-before', createdAt: Date.now() };
+    const next = prev.map((x) => (x.id === id ? { ...x, batches: [...batchesOf(x), batch], updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    return { ok: true, allocated: alloc, batchId: batch.id };
+  }, []);
+
+  /**
+   * Bin a specific dated batch: reduce that batch and the product total, log a WASTE movement
+   * carrying the batch id and valuation. `opGroupId` links the ledger entry for undo. Guards
+   * against binning more than the batch holds.
+   */
+  const wasteBatch = useCallback(({ id, batchId, qty, valuation, reason, opGroupId }) => {
+    const want = Math.max(0, Number(qty) || 0);
+    if (want <= 0) return { ok: false, error: 'Quantity must be positive' };
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    const b = batchesOf(p).find((x) => x.id === batchId);
+    if (!b) return { ok: false, error: 'Batch not found' };
+    const applied = Math.min(want, Number(b.qty) || 0);
+    if (applied <= 0) return { ok: false, error: 'Batch is empty' };
+    const newBatches = batchesOf(p)
+      .map((x) => (x.id === batchId ? { ...x, qty: (Number(x.qty) || 0) - applied } : x))
+      .filter((x) => (Number(x.qty) || 0) > 0);
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: Math.max(0, (Number(x.qty) || 0) - applied), batches: newBatches, updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    recordMovement({
+      productId: id, type: MOVEMENT_TYPES.WASTE, delta: -applied,
+      valuation: valuation != null ? Number(valuation) : (Number(p.cost) || 0) * applied,
+      reason: reason || 'expired batch', batchId: opGroupId, productBatchId: batchId,
+    });
+    return { ok: true, applied, batch: { expiry: b.expiry, dateType: b.dateType } };
+  }, []);
+
+  /** Undo a batch waste: restore the total and top up (or recreate) the batch; drop its movement. */
+  const reverseBatchWaste = useCallback(({ id, qty, opGroupId, batch }) => {
+    const restore = Math.max(0, Number(qty) || 0);
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    let toppedUp = false;
+    const newBatches = batchesOf(p).map((x) => {
+      if (!toppedUp && batch && x.expiry === batch.expiry && x.dateType === batch.dateType) {
+        toppedUp = true; return { ...x, qty: (Number(x.qty) || 0) + restore };
+      }
+      return x;
+    });
+    if (!toppedUp && batch) newBatches.unshift({ id: newId(), qty: restore, expiry: batch.expiry, dateType: batch.dateType, createdAt: Date.now() });
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, batches: batch ? newBatches : batchesOf(x), updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    if (opGroupId) removeByBatch(opGroupId);
+    return { ok: true };
   }, []);
 
   /** Reverse a waste event (undo): restore stock and drop its movement(s). */
@@ -464,6 +571,7 @@ export function useInventory() {
     workspace: getActiveWorkspace(),
     addProduct, updateProduct, removeProduct,
     sellUnits, recordWaste, reverseWaste,
+    addBatch, wasteBatch, reverseBatchWaste,
     setCounts, applyCounts, setShelfQty, transferStock,
     findByBarcode, receiveLines, applyDelivery, importProducts, commit,
   };

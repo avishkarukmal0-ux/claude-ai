@@ -42,7 +42,7 @@ export function useWaste() {
     };
   }, []);
 
-  const addEntry = useCallback(({ type, name, value, qty, reason, productId, batchId }) => {
+  const addEntry = useCallback(({ type, name, value, qty, reason, productId, batchId, productBatchId, batchInfo }) => {
     const entry = {
       id: newId(),
       type: type === 'saved' ? 'saved' : 'wasted',
@@ -51,7 +51,9 @@ export function useWaste() {
       qty: Number(qty) || 1,
       reason: (reason || '').trim(),
       productId: productId || null,
-      batchId: batchId || null,
+      batchId: batchId || null,             // waste-undo group id
+      productBatchId: productBatchId || null, // dated batch (for batch-aware undo)
+      batchInfo: batchInfo || null,          // { expiry, dateType } snapshot for recreating on undo
       ts: Date.now(),
     };
     const next = [entry, ...load()];
