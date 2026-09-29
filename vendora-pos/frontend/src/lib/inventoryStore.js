@@ -11,7 +11,8 @@
 //    log the movement. Nothing depends on a deferred React updater running.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, getActiveWorkspace } from './storage';
-import { recordMovement, removeByBatch, MOVEMENT_TYPES } from './movementStore';
+import { recordMovement, removeByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
+import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
 
 const NAME = 'inventory_v1';
 
@@ -271,6 +272,63 @@ export function useInventory() {
   }, []);
 
   /**
+   * Apply a received delivery to stock. Idempotent by delivery id (operationId): a
+   * re-submitted delivery can't double-count. For each line it adds the ACCEPTED units
+   * (delivered minus missing/damaged), updates the PURCHASE cost (never the retail price),
+   * and logs a goods_received movement carrying the operationId. Unknown barcodes are created.
+   * @returns { ok, applied, duplicate?, error? }
+   */
+  const applyDelivery = useCallback((delivery) => {
+    if (!delivery || !delivery.id) return { ok: false, error: 'Invalid delivery' };
+    if (hasOperation(delivery.id)) return { ok: false, duplicate: true, error: 'This delivery was already received' };
+
+    const prev = load();
+    const next = [...prev];
+    const toLog = [];
+    let applied = 0;
+
+    for (const line of (delivery.lines || [])) {
+      const units = lineAcceptedUnits(line);
+      if (units <= 0) continue;
+      const cost = linePerUnitCost(line) || null;
+      let idx = -1;
+      if (line.productId) idx = next.findIndex((p) => p.id === line.productId);
+      if (idx < 0 && line.barcode) idx = next.findIndex((p) => p.barcode && p.barcode === String(line.barcode).trim());
+
+      if (idx >= 0) {
+        next[idx] = {
+          ...next[idx],
+          qty: (Number(next[idx].qty) || 0) + units,
+          // Update purchase cost only when we have a real one; NEVER touch retail price.
+          cost: cost != null ? cost : next[idx].cost,
+          updatedAt: Date.now(),
+        };
+        toLog.push({ id: next[idx].id, units, cost });
+      } else {
+        const created = normaliseNew({ barcode: line.barcode, name: line.name || 'New item', cost, price: null, qty: units });
+        next.unshift(created);
+        toLog.push({ id: created.id, units, cost });
+      }
+      applied += units;
+    }
+
+    persist(next);
+    setProducts(next);
+    for (const r of toLog) {
+      recordMovement({
+        productId: r.id,
+        type: MOVEMENT_TYPES.GOODS_RECEIVED,
+        delta: r.units,
+        valuation: r.cost != null ? r.cost * r.units : undefined,
+        unit: 'unit',
+        reason: `Delivery ${delivery.reference || ''}`.trim(),
+        operationId: delivery.id,
+      });
+    }
+    return { ok: true, applied };
+  }, []);
+
+  /**
    * Apply stocktake counts: set exact qty for each id. A count is a CORRECTION, logged as a
    * STOCK_ADJUSTMENT (never a sale), so velocity stays clean after a stocktake.
    */
@@ -301,6 +359,6 @@ export function useInventory() {
     workspace: getActiveWorkspace(),
     addProduct, updateProduct, removeProduct,
     sellUnits, recordWaste, reverseWaste,
-    setCounts, findByBarcode, receiveLines, importProducts, commit,
+    setCounts, findByBarcode, receiveLines, applyDelivery, importProducts, commit,
   };
 }

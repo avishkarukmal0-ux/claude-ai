@@ -33,6 +33,7 @@ export const STORE_NAMES = [
   'suggestions_v1',
   'stocktake_v1',
   'stocktake_history_v1',
+  'deliveries_v1',
 ];
 
 export const WORKSPACE_EVENT = 'vendora:workspace';

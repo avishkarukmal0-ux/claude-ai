@@ -10,7 +10,7 @@ import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
 import InventoryView from '../components/inventory/InventoryView';
-import GoodsInView from '../components/inventory/GoodsInView';
+import DeliveryReceivingView from '../components/delivery/DeliveryReceivingView';
 import WasteView from '../components/waste/WasteView';
 import ReorderView from '../components/reorder/ReorderView';
 import SuppliersView from '../components/suppliers/SuppliersView';
@@ -234,7 +234,7 @@ export default function HomePage() {
           </>
         )}
 
-        {!screen && tab === 'scan' && <GoodsInView />}
+        {!screen && tab === 'scan' && <DeliveryReceivingView />}
 
         {!screen && tab === 'stock' && <InventoryView onOpenSuppliers={() => setScreen('suppliers')} onOpenImport={() => setScreen('import')} />}
 

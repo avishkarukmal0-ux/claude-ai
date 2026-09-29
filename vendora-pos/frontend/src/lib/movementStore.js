@@ -23,6 +23,7 @@ export const MOVEMENT_TYPES = Object.freeze({
   WASTE: 'waste',
   CUSTOMER_RETURN: 'customer_return',
   SUPPLIER_RETURN: 'supplier_return',
+  TRANSFER: 'transfer',            // location→location; nets to zero for total shop stock
   STOCK_ADJUSTMENT: 'stock_adjustment',
 });
 const VALID_TYPES = new Set(Object.values(MOVEMENT_TYPES));
@@ -50,8 +51,19 @@ function newId() {
 /**
  * Append a typed movement. Deterministic: reads current, writes synchronously, returns
  * the created record (or null on bad input). NOT dependent on any React update running.
+ *
+ * Optional fields (recorded when applicable, per the review spec):
+ *  - unit        e.g. 'unit' | 'case' | 'kg'
+ *  - location    e.g. 'shelf' | 'back' (for transfers / located stock)
+ *  - actor       who did it (staff id/name) — null for single-user guest use
+ *  - operationId groups movements from one business operation (a delivery, a transfer) and
+ *                makes re-applying idempotent (see hasOperation()).
+ *  - batchId     links a batch (Stage 4) / a waste undo group
  */
-export function recordMovement({ productId = null, type, delta, valuation, reason, batchId, at = Date.now() }) {
+export function recordMovement({
+  productId = null, type, delta, valuation, reason, batchId,
+  unit, location, actor, operationId, at = Date.now(),
+}) {
   if (!VALID_TYPES.has(type)) return null;
   const d = Number(delta);
   if (!Number.isFinite(d) || d === 0) return null;
@@ -63,11 +75,22 @@ export function recordMovement({ productId = null, type, delta, valuation, reaso
     ...(valuation != null && Number.isFinite(Number(valuation)) ? { valuation: Number(valuation) } : {}),
     ...(reason ? { reason: String(reason) } : {}),
     ...(batchId ? { batchId } : {}),
+    ...(unit ? { unit: String(unit) } : {}),
+    ...(location ? { location: String(location) } : {}),
+    ...(actor ? { actor: String(actor) } : {}),
+    ...(operationId ? { operationId: String(operationId) } : {}),
     at,
   };
   const res = persist(prune([...load(), rec], at));
   try { window.dispatchEvent(new CustomEvent(MOVEMENT_EVENT)); } catch { /* ignore */ }
   return res.ok ? rec : null;
+}
+
+/** True if any movement with this operationId already exists — the idempotency guard so a
+ *  re-submitted delivery/transfer can't be applied to stock twice. */
+export function hasOperation(operationId) {
+  if (!operationId) return false;
+  return load().some((r) => r.operationId === operationId);
 }
 
 /** Remove movements by batchId (used to reverse a waste/undo). Returns count removed. */
