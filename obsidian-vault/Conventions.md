@@ -43,6 +43,7 @@ House style observed across the codebase — follow these when adding code.
 ## UK domain rules (important!)
 - **Tax year 2025/26** constants live in `backend/src/services/payrollService.js` and are mirrored client-side in payroll components. Keep them in sync. See [[Accounting]].
 - VAT, NI thresholds, NMW, PAYE bands are UK-specific — don't "simplify" without checking HMRC figures.
+- **Dates are UK dd/mm/yyyy.** When parsing user/CSV dates, handle `dd/mm/yyyy` explicitly before falling back to `Date.parse` — JS reads `02/03/2026` as mm/dd (US). See `lib/salesImportStore.js` `parseDate`.
 
 ## Naming
 - Models: PascalCase singular (`PayrollRun`, `VatReturn`).
