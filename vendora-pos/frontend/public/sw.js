@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v2';
+const CACHE_VERSION = 'vendora-v3';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -21,10 +21,13 @@ const SHELL_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Precache the shell, then WAIT. We deliberately do NOT skipWaiting here (audit F10): a new build
+  // must not activate and reload the page out from under a shopkeeper who's mid-form. The new worker
+  // sits in "waiting" until the user taps Refresh (client posts SKIP_WAITING) — or until the app is
+  // next fully reopened, which activates it naturally. So updates are prompt-driven, never disruptive,
+  // and the app can't get stuck on a stale build.
   event.waitUntil(
-    caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_ASSETS))
-      .then(() => self.skipWaiting())
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
   );
 });
 
