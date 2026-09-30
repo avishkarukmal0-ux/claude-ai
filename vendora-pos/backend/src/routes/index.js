@@ -37,6 +37,10 @@ const challenge25Routes    = require('./challenge25Routes');
 // Public routes
 router.use('/auth', authRoutes);
 
+// PWA shop-owner accounts — public, separate from the till's Staff auth (ADR-002).
+const pwaAuthRoutes = require('./pwaAuthRoutes');
+router.use('/pwa-auth', pwaAuthRoutes);
+
 // Public receipt viewer (no auth required)
 router.use('/receipt', receiptPublicRouter);
 

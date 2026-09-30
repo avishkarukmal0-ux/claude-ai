@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "test": "jest --forceExit --detectOpenHandles",
     "test:unit": "jest --forceExit --testPathPattern=\"(utils|validateSecrets|refundService)\\.test\\.js$\"",
+    "test:pwa-auth": "jest --forceExit --testPathPattern=\"pwaAuth\\.integration\\.test\\.js$\"",
     "seed": "node src/utils/seedData.js",
     "lint": "eslint src/"
   },

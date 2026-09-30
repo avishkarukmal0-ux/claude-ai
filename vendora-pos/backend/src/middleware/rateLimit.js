@@ -1,8 +1,12 @@
 const rateLimit = require('express-rate-limit');
 
+// Under the test runner, lift the caps so integration suites (which fire many auth calls from one IP)
+// aren't throttled. Real limits always apply outside NODE_ENV=test.
+const isTest = process.env.NODE_ENV === 'test';
+
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: isTest ? 100000 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -13,7 +17,7 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: isTest ? 100000 : 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -24,7 +28,7 @@ const authLimiter = rateLimit({
 
 const strictLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: isTest ? 100000 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
