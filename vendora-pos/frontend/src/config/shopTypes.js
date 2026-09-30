@@ -8,7 +8,7 @@
 
 import {
   Store, Scale, Globe, Tag,
-  Wine, Newspaper, Cloud, ShoppingBasket,
+  Wine, Cloud, ShoppingBasket,
   Carrot, Beef, Croissant,
   Leaf, Truck, BadgePercent, PawPrint,
   LayoutDashboard, ScanLine, Package, CalendarClock, FileText,
@@ -33,9 +33,12 @@ export const SHOP_FAMILIES = [
     moduleIds: ['age-check'],
     supplierIdeas: ['Cash & carry (Booker / Bestway)', 'Soft-drinks wholesaler', 'Tobacco / vape supplier', 'Newspaper distributor', 'Bread & milk roundsman'],
     members: [
-      { id: 'convenience', label: 'Convenience / Mini-mart', icon: ShoppingBasket, extra: 'Everyday grocery & chilled' },
+      // Convenience covers mini-marts AND newsagents/CTNs (most "newsagents" are convenience shops
+      // that also sell news/tobacco). Newsagent was merged in 2026-09-30 — see MEMBER_ALIASES below
+      // and obsidian-vault/Niche-Market-Assessment-2026-09: shrinking category, claims already served
+      // free by SNapp, so no dedicated roadmap.
+      { id: 'convenience', label: 'Convenience / Newsagent', icon: ShoppingBasket, extra: 'Everyday grocery, chilled, news & tobacco' },
       { id: 'off-licence', label: 'Off-licence', icon: Wine, extra: 'Alcohol duty & MUP' },
-      { id: 'newsagent', label: 'Newsagent / CTN', icon: Newspaper, extra: 'News sale-or-return & tobacco' },
       { id: 'vape-cbd', label: 'Vape & CBD', icon: Cloud, extra: 'Nicotine strength & compliance' },
     ],
   },
@@ -140,21 +143,35 @@ export function getModulesForFamily(familyId) {
 
 export const SHOP_TYPE_NAME = 'shop_type'; // logical store name; value "familyId" or "familyId:memberId"
 
+// Retired shop-type members mapped to their replacement, so existing setups still resolve after a
+// merge (never strand a shop that already picked a now-removed type). Newsagent → Convenience (2026-09-30).
+export const MEMBER_ALIASES = {
+  'grocery-age': { newsagent: 'convenience' },
+};
+function resolveMemberId(familyId, memberId) {
+  if (!memberId) return memberId;
+  return MEMBER_ALIASES[familyId]?.[memberId] || memberId;
+}
+
 export function getFamily(familyId) {
   return SHOP_FAMILIES.find((f) => f.id === familyId) || null;
 }
 
 export function getMember(familyId, memberId) {
   const fam = getFamily(familyId);
-  return fam ? fam.members.find((m) => m.id === memberId) || null : null;
+  if (!fam) return null;
+  const id = resolveMemberId(familyId, memberId);
+  return fam.members.find((m) => m.id === id) || null;
 }
 
-/** Read the shop type last picked for the active workspace: { familyId, memberId } or null. */
+/** Read the shop type last picked for the active workspace: { familyId, memberId } or null.
+ *  Retired members (e.g. newsagent) are transparently mapped to their replacement. */
 export function getSavedShopType() {
   const raw = storageRead(SHOP_TYPE_NAME, null);
   if (!raw) return null;
-  const [familyId, memberId = null] = raw.split(':');
-  return getFamily(familyId) ? { familyId, memberId } : null;
+  const [familyId, rawMemberId = null] = raw.split(':');
+  if (!getFamily(familyId)) return null;
+  return { familyId, memberId: resolveMemberId(familyId, rawMemberId) };
 }
 
 /** Remember the picked shop type for the active workspace. memberId is optional. */

@@ -39,6 +39,12 @@ require value ≥3× fee. Folded these into the pilot kit:
 - Tracker: added current-tool/EPOS + gap columns and the 3× value gate.
 - Plan: sharper ICP, added international grocers, competitor-scan in Week 0, 3× success gate.
 
+## Applied
+- **Newsagent merged into Convenience** in `config/shopTypes.js` (2026-09-30): removed the standalone
+  newsagent tile, relabelled Convenience → "Convenience / Newsagent", and added `MEMBER_ALIASES`
+  (`grocery-age:newsagent → convenience`) so any shop already on that type resolves cleanly (no
+  stranded data). 4 new tests; FE 99/99; build clean.
+
 ## Follow-ups
 - Founder to run Week-0 conversations (target 3 booked pilots from ~6 chats), **demoing each shop's current tool first**.
 - Optional: polish the one-pager into a shareable/printable page; add a landing page for cold walk-ins.
