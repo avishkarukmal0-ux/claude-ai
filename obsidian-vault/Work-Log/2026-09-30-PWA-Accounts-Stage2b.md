@@ -25,10 +25,11 @@ Staff/PIN auth (ADR-002); reuses the hardened JWT config.
 ## Verification
 - **Verified in this sandbox:** app boots with the routes wired (`node -e "require('./src/app.js')"`);
   DB-free unit suite **50/50**; the pwa-auth suite **skips cleanly (6 skipped)** with no URI.
-- **NOT verified here:** the actual register/login/refresh/me behaviour against MongoDB — this sandbox
-  has no DB and (almost certainly) can't reach Atlas. The founder runs `npm run test:pwa-auth` on their
-  PC with `VENDORA_TEST_URI` set (real DB = the throwaway `vendora_test` Atlas cluster). No result is
-  claimed as passing until that test output exists.
+- **NOW VERIFIED against a live DB (2026-09-30):** founder ran `npm run test:pwa-auth` on their Windows
+  PC against the throwaway `vendora_test` Atlas cluster (with `VENDORA_DNS_PUBLIC=1` for the hotspot SRV
+  DNS issue). **6/6 passing** — register (+tokens+shop), duplicate-email 409, login correct/wrong/unknown
+  (generic 401), refresh + /me, validation 422 (short password/bad email), /me rejects bad token 401.
+  One assertion was corrected during the run (validation is 422, not 400 — AppError.validation's contract).
 
 ## Guardrails held
 - Accounts stay OFF for users: `ACCOUNTS_ENABLED = false` (Stage 2a) — the login entry is hidden until
