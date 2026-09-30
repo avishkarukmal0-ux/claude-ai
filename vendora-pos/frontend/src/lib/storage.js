@@ -80,13 +80,41 @@ function durableOn() {
   try { return !!(_durable && _durable.available && _durable.available()); }
   catch { return false; }
 }
-function durableSet(fullKey, value) {
+
+// In-flight durable (IndexedDB) operations. IndexedDB commits asynchronously, so a tab that closes
+// immediately after a write can drop the not-yet-committed transaction (audit F3). We track every
+// pending op here and flush (await) them when the page is hidden/unloaded — see flushDurable() and
+// the pagehide/visibilitychange listeners at the bottom of this file.
+const _inflight = new Set();
+function trackDurable(promise, { critical = false, name = null } = {}) {
+  const p = Promise.resolve(promise)
+    .catch((err) => {
+      // A `critical` op is one whose ONLY durable home is IndexedDB (localStorage rejected it, usually
+      // quota). If that fails, the change really is at risk of loss, so surface it (audit F3/F4).
+      if (critical) dispatch(STORAGE_ERROR_EVENT, { name, error: describeError(err) });
+    })
+    .finally(() => { _inflight.delete(p); });
+  _inflight.add(p);
+  return p;
+}
+function durableSet(fullKey, value, opts = {}) {
   if (!durableOn() || NEVER_DURABLE.has(fullKey)) return;
-  try { _durable.set(fullKey, value).catch(() => {}); } catch { /* ignore */ }
+  try { trackDurable(_durable.set(fullKey, value), opts); } catch { /* ignore */ }
 }
 function durableDel(fullKey) {
   if (!durableOn()) return;
-  try { _durable.del(fullKey).catch(() => {}); } catch { /* ignore */ }
+  try { trackDurable(_durable.del(fullKey)); } catch { /* ignore */ }
+}
+
+/**
+ * Await all in-flight durable (IndexedDB) writes/deletes. Called automatically when the page is
+ * hidden or unloaded so the last change reaches durable storage before the tab goes away. Safe to
+ * call anytime; resolves immediately when nothing is pending. Exposed for tests and callers that
+ * want a hard durability barrier (e.g. before signalling "backup complete").
+ */
+export async function flushDurable() {
+  if (_inflight.size === 0) return;
+  await Promise.allSettled([..._inflight]);
 }
 /** Synchronous read of a full key: MEM first, else lazily hydrate from localStorage. */
 function memGet(fullKey) {
@@ -169,8 +197,10 @@ export function write(name, value, ws = getActiveWorkspace()) {
   }
   if (durableOn()) {
     // localStorage rejected it (usually quota) but IndexedDB can hold it — not a data loss.
+    // IndexedDB is now this value's ONLY durable home, so mark the mirror `critical`: if that commit
+    // fails, surface it (otherwise an over-quota change could be lost silently — audit F3/F4).
     MEM.set(fullKey, value);
-    durableSet(fullKey, value);
+    durableSet(fullKey, value, { critical: true, name });
     return { ok: true, overflow: true };
   }
   const error = describeError(lsErr);
@@ -344,3 +374,56 @@ export function initStorage() {
 
 /** Test hook: allow initStorage to run again. */
 export function __resetInitForTest() { _initPromise = null; }
+
+// --- cross-tab coherence (audit F5) ----------------------------------------
+// The native `storage` event fires in OTHER tabs when localStorage changes. Every store hook already
+// listens to it and re-reads — but reads go through MEM (the in-memory cache added for durability),
+// and a second tab's MEM can hold a STALE value, so it would shadow the fresh localStorage value the
+// event just announced. We install ONE listener at module load (before any hook mounts, so it runs
+// first for each event) that keeps MEM coherent with the incoming change. The per-store handlers then
+// re-read fresh data. Note: a change that only overflowed to IndexedDB in the other tab fires no
+// `storage` event (localStorage.setItem failed there), so overflow-only data can't sync live across
+// tabs — an accepted limitation; it is still recovered on the next boot via initStorage().
+export function __applyCrossTabStorage(e) {
+  if (!e) return;
+  const k = e.key;
+  if (k == null) {
+    // localStorage.clear() in another tab — drop all of our cached keys and re-read active workspace.
+    for (const mk of [...MEM.keys()]) if (mk.indexOf(`${NS}:`) === 0) MEM.delete(mk);
+    _active = null;
+    dispatch(WORKSPACE_EVENT, { crossTab: true });
+    return;
+  }
+  if (typeof k !== 'string' || k.indexOf(`${NS}:`) !== 0) return;
+  if (e.newValue == null) MEM.delete(k); else MEM.set(k, e.newValue);
+  if (k === ACTIVE_KEY) { _active = null; dispatch(WORKSPACE_EVENT, { crossTab: true }); }
+}
+
+// --- durability on unload (audit F3) ---------------------------------------
+// IndexedDB commits async and our mirror is fire-and-forget, so the last write (and, for a change
+// that also logged a movement, the pair of writes) could be lost if the tab closes mid-commit. On the
+// page being hidden/unloaded we flush in-flight durable ops. `visibilitychange → hidden` is the
+// reliable signal on mobile (pagehide/beforeunload are unreliable there); we cover both.
+function _onHide() { flushDurable(); }
+try {
+  window.addEventListener('storage', __applyCrossTabStorage);
+  window.addEventListener('pagehide', _onHide);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _onHide();
+  });
+} catch { /* non-browser (unit tests import this module without a full DOM) */ }
+
+// --- NOTE on audit F2 (IndexedDB authoritative) & F5 (atomic co-writes) -----
+// F2 asked to make IndexedDB the authoritative store. We deliberately keep localStorage as the
+// SYNCHRONOUS authority and IndexedDB as a durable, now-flushed mirror + recovery source. Flipping
+// authority to an async store would force every synchronous read/write in the app (and every store
+// hook) through an async hydration layer — a large, risky rewrite to run during a live pilot, for a
+// single-device PWA where localStorage is already correct and durable-enough once the mirror is
+// reliable. The durability gains F2 was really after (survive eviction / exceed the 5MB cap) are
+// delivered by the mirror + initStorage() recovery + this unload flush.
+//
+// F5 atomic inventory+movement: each stock method writes inventory then the movement with two
+// ADJACENT SYNCHRONOUS localStorage writes (no await between), so they cannot tear on-device short of
+// a hard process kill between two back-to-back calls. The durable (IndexedDB) copies could tear if the
+// tab closed between their async commits — that window is closed by the unload flush above. A heavier
+// synchronous multi-key transaction API would add complexity without closing a real gap here.

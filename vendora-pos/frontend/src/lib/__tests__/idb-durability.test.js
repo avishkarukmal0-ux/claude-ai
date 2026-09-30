@@ -139,6 +139,74 @@ describe('durability — overflow past the localStorage cap', () => {
   });
 });
 
+describe('cross-tab coherence (audit F5) — MEM must not shadow a fresh localStorage value', () => {
+  it('a change from another tab updates the cache so the next read is fresh', () => {
+    storage.writeJSON('inventory_v1', [{ id: 'old' }]);       // this tab: MEM + localStorage = old
+    const ws = storage.getActiveWorkspace();
+    const key = storage.keyFor('inventory_v1', ws);
+    // Another tab writes shared localStorage and the browser fires a `storage` event to us:
+    const next = JSON.stringify([{ id: 'new' }]);
+    localStorage.setItem(key, next);
+    storage.__applyCrossTabStorage({ key, newValue: next });
+    expect(storage.readJSON('inventory_v1', null)).toEqual([{ id: 'new' }]); // not the stale MEM value
+  });
+
+  it('a delete from another tab clears the cached value', () => {
+    storage.writeJSON('inventory_v1', [{ id: 'x' }]);
+    const ws = storage.getActiveWorkspace();
+    const key = storage.keyFor('inventory_v1', ws);
+    localStorage.removeItem(key);
+    storage.__applyCrossTabStorage({ key, newValue: null });
+    expect(storage.readJSON('inventory_v1', null)).toBeNull();
+  });
+});
+
+describe('durability on unload (audit F3) — flushDurable awaits in-flight commits', () => {
+  it('flushDurable resolves only after a slow durable write has committed', async () => {
+    const map = new Map();
+    storage.__setDurableBackend({
+      available: () => true,
+      getAll: async () => [...map.entries()].map(([key, value]) => ({ key, value })),
+      set: (k, v) => new Promise((r) => setTimeout(() => { map.set(k, v); r(true); }, 20)),
+      del: async (k) => { map.delete(k); return true; },
+    });
+    storage.setActiveWorkspace(`shop:flush${wsN++}`);
+    storage.writeJSON('inventory_v1', [{ id: 'pending' }]);
+    const ws = storage.getActiveWorkspace();
+    const key = storage.keyFor('inventory_v1', ws);
+    expect(map.has(key)).toBe(false);        // async commit not done yet
+    await storage.flushDurable();
+    expect(map.has(key)).toBe(true);         // flush waited for it
+  });
+});
+
+describe('overflow durable write (audit F3/F4) — a failed sole-copy commit is surfaced', () => {
+  it('when localStorage is full AND the IndexedDB commit rejects, a visible error fires', async () => {
+    storage.__setDurableBackend({
+      available: () => true,
+      getAll: async () => [],
+      set: async () => { throw new Error('idb-write-failed'); },
+      del: async () => true,
+    });
+    storage.setActiveWorkspace(`shop:crit${wsN++}`);
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e;
+    });
+    const errors = [];
+    const handler = (e) => errors.push(e.detail);
+    window.addEventListener(storage.STORAGE_ERROR_EVENT, handler);
+
+    const res = storage.writeJSON('inventory_v1', [{ id: 'big' }]);
+    await storage.flushDurable();
+
+    window.removeEventListener(storage.STORAGE_ERROR_EVENT, handler);
+    spy.mockRestore();
+
+    expect(res.overflow).toBe(true);         // optimistic sync return (IDB was available)
+    expect(errors.length).toBe(1);           // …but the async commit failed, so it's surfaced
+  });
+});
+
 describe('durability — graceful degradation without IndexedDB', () => {
   it('behaves exactly like localStorage-only when the backend is unavailable', async () => {
     storage.__setDurableBackend({ available: () => false });
