@@ -6,6 +6,11 @@
 // ids that collide on a persistent Atlas DB). It connects to VENDORA_TEST_URI itself, uses only the
 // database named in that URI (vendora_test), and cleans up only the accounts it creates. When
 // VENDORA_TEST_URI is unset the whole suite is SKIPPED (not silently passed).
+// Opt-in DNS fix for mongodb+srv SRV lookups on networks that refuse them (VENDORA_DNS_PUBLIC=1).
+if (process.env.VENDORA_DNS_PUBLIC === '1') {
+  try { require('dns').setServers(['8.8.8.8', '1.1.1.1']); } catch { /* keep default resolver */ }
+}
+
 const mongoose = require('mongoose');
 const request = require('supertest');
 

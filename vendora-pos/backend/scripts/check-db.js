@@ -1,5 +1,12 @@
 'use strict';
 
+// Opt-in DNS fix: some networks (mobile hotspots, captive Wi-Fi) refuse the SRV lookups that
+// mongodb+srv needs (querySrv ECONNREFUSED). Set VENDORA_DNS_PUBLIC=1 to route Node's DNS via public
+// resolvers. No path/NODE_OPTIONS needed. Harmless when the network is already fine.
+if (process.env.VENDORA_DNS_PUBLIC === '1') {
+  try { require('dns').setServers(['8.8.8.8', '1.1.1.1']); } catch { /* keep default resolver */ }
+}
+
 // Standalone MongoDB connectivity check — verifies the environment can actually reach and
 // authenticate to a MongoDB before we rely on it (e.g. before PWA-auth Stage 2b).
 //
