@@ -4,6 +4,17 @@ Back to [[Home]] · Related: [[Backend-Overview]] · [[Services]] · [[Data-Mode
 
 All mounted under `/api` in `src/routes/index.js`. Public routes first, then `authenticate` gates the rest.
 
+> **App/Till split (ADR-002).** The PWA routes below are ALWAYS mounted (the live product). Everything
+> under "Public (no JWT)" and "Authenticated" is the **till**, mounted only when `TILL_ENABLED=true`
+> (off in the pilot) — see [[2026-09-30-Till-Disabled-Pilot]]. PWA routes use their own `typ:'pwa'`
+> tokens and never touch the till's Staff/Store models.
+
+## PWA (always mounted — the live product)
+| Mount | File | Gate | Purpose |
+|---|---|---|---|
+| `/pwa-auth` | `pwaAuthRoutes.js` | public | owner accounts: `register`, `login`, `refresh`, `GET /me` — `typ:'pwa'` JWTs |
+| `/pwa-sync` | `pwaSyncRoutes.js` | PWA access token | cross-device sync: `GET /pull`, `POST /push` — per-store `{value,rev,mtime}` blobs, scoped to the account (infra Stage 3). See [[2026-09-30-Cross-Device-Sync]] |
+
 ## Public (no JWT)
 | Mount | File | Purpose |
 |---|---|---|

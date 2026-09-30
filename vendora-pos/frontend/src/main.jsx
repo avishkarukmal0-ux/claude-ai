@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import App from './App.jsx';
 import { registerServiceWorker } from './pwa.js';
 import { migrateLegacyToLocalOnce, initStorage, hasAnyLocalData } from './lib/storage.js';
+import { startSync } from './lib/sync.js';
 import './index.css';
 
 function renderApp() {
@@ -39,6 +40,10 @@ async function boot() {
     try { await init; } catch { /* fall through to render regardless */ }
   }
   renderApp();
+
+  // Cross-device sync (infra Stage 3). No-ops unless accounts are enabled AND a shop is signed in;
+  // runs entirely in the background so it never delays first paint. Local data stays authoritative.
+  try { startSync(); } catch { /* sync is best-effort */ }
 }
 
 boot();

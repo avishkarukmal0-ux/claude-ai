@@ -8,6 +8,10 @@ const storeContext = require('../middleware/storeContext');
 const pwaAuthRoutes = require('./pwaAuthRoutes');
 router.use('/pwa-auth', pwaAuthRoutes);
 
+// ── PWA cross-device sync (infra Stage 3). Always mounted; each route requires a PWA access token. ──
+const pwaSyncRoutes = require('./pwaSyncRoutes');
+router.use('/pwa-sync', pwaSyncRoutes);
+
 // ── Till / back-office API (DEFERRED). Mounted only when TILL_ENABLED=true. In the PWA-only pilot the
 //    whole till surface — auth, sales, refunds, self-checkout, staff, customers, stocktake, billing,
 //    sockets — is simply not mounted, so every till/financial/auth route returns 404 and none of the

@@ -54,6 +54,9 @@ export const STORE_NAMES = [
 
 export const WORKSPACE_EVENT = 'vendora:workspace';
 export const STORAGE_ERROR_EVENT = 'vendora:storage-error';
+// Fired after a successful local write/remove of a scoped store, so the sync engine (lib/sync.js) can
+// mark that store dirty and schedule a push. detail = { name, ws }. Local-only (not cross-tab).
+export const STORAGE_WRITE_EVENT = 'vendora:storage-write';
 
 function dispatch(name, detail) {
   try { window.dispatchEvent(new CustomEvent(name, { detail })); } catch { /* non-browser */ }
@@ -193,6 +196,7 @@ export function write(name, value, ws = getActiveWorkspace()) {
   if (lsOk) {
     MEM.set(fullKey, value);
     durableSet(fullKey, value);
+    dispatch(STORAGE_WRITE_EVENT, { name, ws });
     return { ok: true };
   }
   if (durableOn()) {
@@ -201,6 +205,7 @@ export function write(name, value, ws = getActiveWorkspace()) {
     // fails, surface it (otherwise an over-quota change could be lost silently — audit F3/F4).
     MEM.set(fullKey, value);
     durableSet(fullKey, value, { critical: true, name });
+    dispatch(STORAGE_WRITE_EVENT, { name, ws });
     return { ok: true, overflow: true };
   }
   const error = describeError(lsErr);
@@ -219,8 +224,11 @@ export function removeKey(name, ws = getActiveWorkspace()) {
   const fullKey = keyFor(name, ws);
   MEM.delete(fullKey);
   durableDel(fullKey);
-  try { localStorage.removeItem(fullKey); return { ok: true }; }
-  catch (e) { return { ok: false, error: describeError(e) }; }
+  try {
+    localStorage.removeItem(fullKey);
+    dispatch(STORAGE_WRITE_EVENT, { name, ws });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: describeError(e) }; }
 }
 
 /** The concrete localStorage key names for a workspace (used by backup). */

@@ -9,6 +9,7 @@
     "test": "jest --forceExit --detectOpenHandles",
     "test:unit": "jest --forceExit --testPathPattern=\"(utils|validateSecrets|refundService)\\.test\\.js$\"",
     "test:pwa-auth": "jest --forceExit --testPathPattern=\"pwaAuth\\.integration\\.test\\.js$\"",
+    "test:pwa-sync": "jest --forceExit --testPathPattern=\"pwaSync\\.integration\\.test\\.js$\"",
     "seed": "node src/utils/seedData.js",
     "lint": "eslint src/"
   },

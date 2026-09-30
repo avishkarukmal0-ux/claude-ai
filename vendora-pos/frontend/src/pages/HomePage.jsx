@@ -31,7 +31,8 @@ import ImportView from '../components/import/ImportView';
 import RequestsView from '../components/requests/RequestsView';
 import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
 import SalesImportView from '../components/salesimport/SalesImportView';
-import { ACCOUNTS_ENABLED } from '../lib/account';
+import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
+import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
@@ -234,6 +235,7 @@ export default function HomePage() {
             <MoreGroup title="Settings">
               <RowLink to="/" icon={Settings} label="Change shop type" />
               {ACCOUNTS_ENABLED && <RowLink to="/account" icon={LogIn} label="Your shop account" />}
+              {ACCOUNTS_ENABLED && isLoggedIn() && <SyncStatus />}
             </MoreGroup>
             <p className="px-1 text-center text-xs text-gray-400">Set up as {shopLabel} · Vendora</p>
           </div>

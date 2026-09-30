@@ -84,7 +84,7 @@ export default function AccountView({ onDone, onBack }) {
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Store className="h-5 w-5" /></span>
         <div>
           <h2 className="text-base font-bold text-gray-900">{mode === 'login' ? 'Log in to your shop' : 'Create your shop account'}</h2>
-          <p className="text-xs text-gray-400">Your shop data is saved on this device. Cross-device sync is coming soon.</p>
+          <p className="text-xs text-gray-400">Log in to back up your shop and pick up where you left off on another device.</p>
         </div>
       </div>
 
