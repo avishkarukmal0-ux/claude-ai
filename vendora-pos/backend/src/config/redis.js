@@ -32,8 +32,11 @@ const connectRedis = () => {
   if (connectionAttempted) return redisClient;
   connectionAttempted = true;
 
-  // Skip if explicitly disabled
-  if (!process.env.REDIS_URL && process.env.NODE_ENV !== 'production') {
+  // No REDIS_URL → run without Redis in ANY environment (caching + token blacklisting disabled).
+  // This lets a pilot deploy (e.g. Render free tier) run cleanly without provisioning Redis, instead
+  // of trying to reach localhost:6379 in production and spamming connection errors. Add REDIS_URL later
+  // to switch it back on.
+  if (!process.env.REDIS_URL) {
     logger.warn('Redis: REDIS_URL not set — running without Redis (caching and token blacklisting disabled)');
     return null;
   }

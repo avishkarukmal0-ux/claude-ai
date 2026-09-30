@@ -20,13 +20,22 @@ import {
 } from './storage';
 
 const AUTH_KEY = 'vendora:auth';        // device-level session (NOT workspace-scoped, NOT backed up)
-const BASE = '/api/pwa-auth';
+// API base: set VITE_API_BASE (e.g. https://vendora-api.onrender.com) when the backend runs on a
+// different host from the frontend. Empty = same-origin (relative), for local/all-in-one setups.
+const API_BASE = (() => {
+  try { return (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, ''); }
+  catch { return ''; }
+})();
+const BASE = `${API_BASE}/api/pwa-auth`;
 const SESSION_EVENT = 'vendora:session';
 
-// Accounts need the backend (/api/pwa-auth) deployed to actually work. Until that's live, keep the
-// login entry point hidden from real users so nobody taps a login that can't reach a server. The UI
-// and this whole module are built + tested regardless; flip this to true once the backend is deployed.
-export const ACCOUNTS_ENABLED = false;
+// Accounts need the backend (/api/pwa-auth) deployed to actually work. The login entry stays hidden
+// until BOTH the backend is live AND this is turned on — so nobody taps a login with no server behind
+// it. Turn it on WITHOUT a code change: set VITE_ACCOUNTS_ENABLED=true in the hosting env and redeploy.
+export const ACCOUNTS_ENABLED = (() => {
+  try { return String(import.meta.env.VITE_ACCOUNTS_ENABLED) === 'true'; }
+  catch { return false; }
+})();
 
 // --- pluggable transport (real fetch by default; injectable for tests) --------------------
 async function fetchTransport(path, body, token) {
