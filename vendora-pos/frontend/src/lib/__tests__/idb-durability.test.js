@@ -90,6 +90,31 @@ describe('durability — recovery on boot', () => {
   });
 });
 
+describe('durability — auth/session keys are never mirrored to IndexedDB (audit F1)', () => {
+  it('does not seed vendora:auth into IDB, and purges + never restores a stale IDB copy', async () => {
+    // Simulate an earlier build that leaked the session into IDB, plus a logged-out localStorage.
+    fake._map.set('vendora:auth', JSON.stringify({ token: 'stale-secret' }));
+    try { localStorage.removeItem('vendora:auth'); } catch { /* ignore */ }
+
+    const res = await storage.initStorage();
+    // token must NOT come back into localStorage…
+    let ls = null; try { ls = localStorage.getItem('vendora:auth'); } catch { /* ignore */ }
+    expect(ls).toBeNull();                       // not restored to localStorage
+    // …and the stale IDB copy is purged.
+    await tick();
+    expect(fake._map.has('vendora:auth')).toBe(false);
+    expect(res.ran).toBe(true);
+  });
+
+  it('a normal write of vendora:auth is not copied to IDB', async () => {
+    try { localStorage.setItem('vendora:auth', JSON.stringify({ token: 't' })); } catch { /* ignore */ }
+    // seeding pass must skip it
+    await storage.initStorage();
+    await tick();
+    expect(fake._map.has('vendora:auth')).toBe(false);
+  });
+});
+
 describe('durability — overflow past the localStorage cap', () => {
   it('when localStorage rejects (quota) but IndexedDB is available, the write still succeeds', async () => {
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {

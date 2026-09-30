@@ -28,7 +28,7 @@ export const SHOP_FAMILIES = [
     promises: [
       'Never miss an MTD or licence deadline',
       'Scan the cash-&-carry trolley — stock’s done',
-      'Age checks logged for you',
+      'Age-check & minimum-price tools at a tap',
     ],
     moduleIds: ['age-check'],
     supplierIdeas: ['Cash & carry (Booker / Bestway)', 'Soft-drinks wholesaler', 'Tobacco / vape supplier', 'Newspaper distributor', 'Bread & milk roundsman'],

@@ -70,12 +70,18 @@ export function keyFor(name, ws) { return `${NS}:${ws}:${name}`; }
 const MEM = new Map();
 let _durable = idb;            // pluggable so unit tests can inject a fake backend
 
+// Device-level session/credential keys that must NEVER be mirrored to IndexedDB. Auth is stored in
+// localStorage only (see account.js); mirroring it to IDB meant a logout that cleared localStorage was
+// silently restored from IDB on the next boot (audit F1). These keys are never seeded, never restored,
+// and are purged from IDB on init.
+const NEVER_DURABLE = new Set([`${NS}:auth`]);
+
 function durableOn() {
   try { return !!(_durable && _durable.available && _durable.available()); }
   catch { return false; }
 }
 function durableSet(fullKey, value) {
-  if (!durableOn()) return;
+  if (!durableOn() || NEVER_DURABLE.has(fullKey)) return;
   try { _durable.set(fullKey, value).catch(() => {}); } catch { /* ignore */ }
 }
 function durableDel(fullKey) {
@@ -300,12 +306,16 @@ export function initStorage() {
     catch { return { ran: false, seeded: 0, restored: 0 }; }
     const idbKeys = new Set(snapshot.map((r) => r.key));
 
-    // 1) Seed IndexedDB from existing localStorage keys it lacks.
+    // 0) Purge any credential/session keys that were mirrored to IndexedDB by earlier builds — they
+    //    must live in localStorage only, so a logout can't be undone by a durable restore (audit F1).
+    for (const k of NEVER_DURABLE) { if (idbKeys.has(k)) { durableDel(k); } }
+
+    // 1) Seed IndexedDB from existing localStorage keys it lacks (never session/credential keys).
     let seeded = 0;
     try {
       for (let i = 0; i < localStorage.length; i += 1) {
         const k = localStorage.key(i);
-        if (!k || k.indexOf(`${NS}:`) !== 0 || idbKeys.has(k)) continue;
+        if (!k || k.indexOf(`${NS}:`) !== 0 || idbKeys.has(k) || NEVER_DURABLE.has(k)) continue;
         const v = localStorage.getItem(k);
         if (v != null) { durableSet(k, v); seeded += 1; }
       }
@@ -314,7 +324,7 @@ export function initStorage() {
     // 2) Restore IndexedDB keys missing from localStorage (recovery of evicted/overflow data).
     let restored = 0;
     for (const { key, value } of snapshot) {
-      if (typeof key !== 'string' || key.indexOf(`${NS}:`) !== 0) continue;
+      if (typeof key !== 'string' || key.indexOf(`${NS}:`) !== 0 || NEVER_DURABLE.has(key)) continue;
       let ls = null;
       try { ls = localStorage.getItem(key); } catch { ls = null; }
       if (ls == null && !MEM.has(key)) {

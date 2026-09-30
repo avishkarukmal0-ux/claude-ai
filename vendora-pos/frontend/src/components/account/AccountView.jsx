@@ -84,7 +84,7 @@ export default function AccountView({ onDone, onBack }) {
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Store className="h-5 w-5" /></span>
         <div>
           <h2 className="text-base font-bold text-gray-900">{mode === 'login' ? 'Log in to your shop' : 'Create your shop account'}</h2>
-          <p className="text-xs text-gray-400">Ties your data to you — so it’s safe if you change phones.</p>
+          <p className="text-xs text-gray-400">Your shop data is saved on this device. Cross-device sync is coming soon.</p>
         </div>
       </div>
 
@@ -95,12 +95,12 @@ export default function AccountView({ onDone, onBack }) {
 
       <form onSubmit={submit} className="space-y-2">
         {mode === 'register' && (
-          <input value={form.shopName} onChange={set('shopName')} placeholder="Shop name" autoComplete="organization" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+          <input value={form.shopName} onChange={set('shopName')} placeholder="Shop name" aria-label="Shop name" autoComplete="organization" aria-invalid={!!error} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         )}
-        <input value={form.email} onChange={set('email')} type="email" placeholder="Email" autoComplete="email" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={form.password} onChange={set('password')} type="password" placeholder="Password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={form.email} onChange={set('email')} type="email" placeholder="Email" aria-label="Email" autoComplete="email" aria-invalid={!!error} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={form.password} onChange={set('password')} type="password" placeholder="Password" aria-label="Password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} aria-invalid={!!error} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
 
-        {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+        {error && <p role="alert" aria-live="assertive" className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
 
         <button type="submit" data-testid="submit" disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] disabled:opacity-60">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (mode === 'login' ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />)}
