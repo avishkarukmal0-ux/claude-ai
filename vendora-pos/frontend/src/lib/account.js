@@ -23,6 +23,11 @@ const AUTH_KEY = 'vendora:auth';        // device-level session (NOT workspace-s
 const BASE = '/api/pwa-auth';
 const SESSION_EVENT = 'vendora:session';
 
+// Accounts need the backend (/api/pwa-auth) deployed to actually work. Until that's live, keep the
+// login entry point hidden from real users so nobody taps a login that can't reach a server. The UI
+// and this whole module are built + tested regardless; flip this to true once the backend is deployed.
+export const ACCOUNTS_ENABLED = false;
+
 // --- pluggable transport (real fetch by default; injectable for tests) --------------------
 async function fetchTransport(path, body, token) {
   const res = await fetch(`${BASE}${path}`, {

@@ -33,11 +33,23 @@ and its own account record, **reusing the already-hardened JWT signing + secret-
 - New `Account` model (email unique, bcrypt password, shopId, shopName); reuse `config.jwt` +
   `validateSecrets`; rate-limit login; never leak whether an email exists.
 
+## Also shipped: the login UI (still client-only, verifiable, feature-flagged OFF)
+- `components/account/AccountView.jsx` — log-in / create-account toggle, and the **guest→shop
+  migration prompt** ("move your data into your shop?" → Move / Keep separate) shown only when there's
+  on-device data and the shop is empty. Friendly failure if the backend isn't reachable yet.
+- `pages/AccountPage.jsx` + route `/account` (kept separate from the till's `/login`, ADR-002).
+- `ACCOUNTS_ENABLED` flag in `lib/account.js` (default **false**) gates the "Your shop account" entry in
+  More → Settings, so pilot users aren't shown a login that can't reach a server until the backend is
+  deployed. Flip to true when Stage 2b is live.
+- 3 component tests (register → migration prompt → data moved into the shop + onDone; bad credentials
+  show an error and don't sign in; no on-device data → straight through, no migration step).
+
 ## Verification (actual)
-- Vitest: **6 new** (register/login persist + workspace switch; refresh updates only access token;
-  failed login leaves no session; logout returns to guest without deleting data; guest→shop migration
-  copies into an empty shop; never overwrites the shop's existing data). Full FE suite **105/105**.
-  Build clean.
+- Vitest: **6 client-core + 3 UI = 9 new**. Full FE suite **108/108**. Build clean.
+  Client-core: register/login persist + workspace switch; refresh updates only access token; failed
+  login leaves no session; logout returns to guest without deleting data; guest→shop migration copies
+  into an empty shop; never overwrites the shop's existing data. UI: register→migration→data moved;
+  bad-credentials error; no-data→straight through.
 - Backend endpoints **not built yet** (Stage 2b): they can only be verified with MongoDB, which this
   sandbox lacks, and going live needs a deploy — both require the owner's explicit go-ahead.
 

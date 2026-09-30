@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 // ── Standalone PWA (the product) — eager, tiny initial path ───────────────────
 import NichePickerPage from './pages/NichePickerPage';
 import HomePage from './pages/HomePage';
+import AccountPage from './pages/AccountPage';
 
 // ── Till / back-office (deferred product) — lazy so NONE of it is in the PWA's ──
 // initial dependency path. Each page is its own chunk; providers are code-split too.
@@ -80,6 +81,7 @@ export default function App() {
             {/* ── Standalone PWA (the product) ── */}
             <Route path="/" element={<NichePickerPage />} />
             <Route path="/home" element={<HomePage />} />
+            <Route path="/account" element={<AccountPage />} />
             <Route path="/login" element={<LoginPage />} />
 
             {/* ── Till / back-office (deferred) — till providers scoped here only ── */}
