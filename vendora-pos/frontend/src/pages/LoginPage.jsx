@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import Logo from '../components/common/Logo';
 import * as authService from '../services/auth';
+import { ACCOUNTS_ENABLED } from '../lib/account';
 
 const DEFAULT_STORE_ID = import.meta.env.VITE_STORE_ID || '';
 
 export default function LoginPage() {
+  // PWA-only mode: this page is the deferred till's Staff/PIN login (needs a seeded Store + Staff).
+  // When shop accounts are on, send people to the PWA owner login instead of a dead-end.
+  if (ACCOUNTS_ENABLED) return <Navigate to="/account" replace />;
+
   const [mode, setMode] = useState('pin'); // 'pin' | 'password'
   const [storeId, setStoreId] = useState(DEFAULT_STORE_ID);
   const [stores, setStores] = useState([]);
