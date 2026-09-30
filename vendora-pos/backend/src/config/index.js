@@ -6,6 +6,11 @@ module.exports = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 
+  // Deferred till / back-office product. OFF by default so the PWA-only pilot never exposes the till's
+  // routes or sockets (all its financial/auth surface is 404 / rejected). Set TILL_ENABLED=true only
+  // after the till's audit findings are fixed and verified.
+  till: { enabled: process.env.TILL_ENABLED === 'true' },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },

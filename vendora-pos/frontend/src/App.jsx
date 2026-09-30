@@ -65,6 +65,13 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
+// Deferred till/back-office UI. OFF by default so the PWA-only pilot never mounts till routes; the
+// catch-all redirect sends /pos, /self-checkout, /staff etc. back to home. Turn on with
+// VITE_TILL_ENABLED=true only once the till's audit findings are fixed.
+const TILL_ENABLED = (() => {
+  try { return String(import.meta.env.VITE_TILL_ENABLED) === 'true'; } catch { return false; }
+})();
+
 export default function App() {
   // Surface storage-write failures instead of losing data silently (was swallowed before).
   useEffect(() => {
@@ -84,7 +91,10 @@ export default function App() {
             <Route path="/account" element={<AccountPage />} />
             <Route path="/login" element={<LoginPage />} />
 
-            {/* ── Till / back-office (deferred) — till providers scoped here only ── */}
+            {/* ── Till / back-office (DEFERRED) — only mounted when VITE_TILL_ENABLED=true. Off in the
+                   PWA-only pilot, so /pos, /self-checkout, /staff etc. fall through to the catch-all
+                   redirect below instead of loading the till. Reversible via env. ── */}
+            {TILL_ENABLED && (
             <Route element={<TillProviders />}>
               <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="/overview" element={<ProtectedRoute requiredRole="supervisor"><OverviewPage /></ProtectedRoute>} />
@@ -123,6 +133,7 @@ export default function App() {
               <Route path="self-checkout" element={<ProtectedRoute><SelfCheckoutPage /></ProtectedRoute>} />
               <Route path="queue-bust" element={<ProtectedRoute><QueueBustPage /></ProtectedRoute>} />
             </Route>
+            )}
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

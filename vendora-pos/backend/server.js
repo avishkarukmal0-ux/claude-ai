@@ -5,6 +5,7 @@ require('dotenv').config();
 const http = require('http');
 const { Server } = require('socket.io');
 const app = require('./src/app');
+const config = require('./src/config');
 const connectDB = require('./src/config/database');
 const { connectRedis } = require('./src/config/redis');
 const logger = require('./src/utils/logger');
@@ -35,6 +36,14 @@ const io = new Server(server, {
     credentials: true,
   },
   transports: ['websocket', 'polling'],
+});
+
+// Socket auth gate. In the PWA-only pilot the till is off, so reject ALL socket connections — no
+// anonymous client can join a shop room or receive till events (audit S2). When the till is enabled,
+// replace this with a real JWT handshake that derives the allowed store from the authenticated Staff.
+io.use((socket, next) => {
+  if (!config.till.enabled) return next(new Error('unauthorized: till disabled'));
+  return next();
 });
 
 // Attach io instance to app and services

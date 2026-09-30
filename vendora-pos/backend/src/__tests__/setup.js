@@ -1,5 +1,10 @@
 'use strict';
 
+// The DB-backed suites here exercise the till API (auth, sales, refunds, …), so enable the till before
+// app/config load. Production defaults TILL_ENABLED off; self-contained suites (e.g. pwaAuth) that don't
+// require this setup keep the till gated. Must be set before any require that pulls in ../config.
+process.env.TILL_ENABLED = process.env.TILL_ENABLED || 'true';
+
 /**
  * Test Setup
  *
