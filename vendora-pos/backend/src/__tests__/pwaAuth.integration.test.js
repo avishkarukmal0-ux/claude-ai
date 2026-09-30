@@ -83,11 +83,12 @@ describe('PWA auth — /api/pwa-auth', () => {
     expect(me.body.shop).toMatchObject({ name: 'Refresh Shop' });
   });
 
-  dbTest('validation: short password and malformed email are rejected (400)', async () => {
+  dbTest('validation: short password and malformed email are rejected (422)', async () => {
+    // AppError.validation → 422 Unprocessable Entity (the app's consistent validation contract).
     const short = await request(app).post('/api/pwa-auth/register').send({ email: uniqueEmail(), password: '123', shopName: 'X' });
-    expect(short.status).toBe(400);
+    expect(short.status).toBe(422);
     const bad = await request(app).post('/api/pwa-auth/register').send({ email: 'notanemail', password: 'sup3rsecret', shopName: 'X' });
-    expect(bad.status).toBe(400);
+    expect(bad.status).toBe(422);
   });
 
   dbTest('/me rejects a missing or invalid token (401)', async () => {
