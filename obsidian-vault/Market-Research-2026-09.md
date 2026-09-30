@@ -1,6 +1,14 @@
 # Market Research — is there a paying market for Vendora PWA? (2026-09-30)
 
-Back to [[Home]] · Related: [[Work-Log/2026-09-30-Niche-Reassessment]] · pilot kit: `vendora-pos/pilot/`
+Back to [[Home]] · Related: [[Work-Log/2026-09-30-Niche-Reassessment]] · [[Niche-Market-Assessment-2026-09]] · pilot kit: `vendora-pos/pilot/`
+
+> **Cross-check (2026-09-30):** an independent second assessment ([[Niche-Market-Assessment-2026-09]])
+> agrees on direction (keep niche, validate WTP directly) and fills this run's weakest area
+> (competition/lock-in). Key correction: the supplier-credit / delivery-discrepancy wedge is **already
+> a served software category** (sruu, growyze, Stockagile, ShopMate, supplier apps) — so Vendora must
+> differentiate on **cross-supplier follow-up reliability vs the owner's current tool**, not on novelty.
+> Also sharpens the ICP (owner-operated, 1–3 sites, several suppliers, existing till) and adds
+> international grocers. These are folded into the pilot kit.
 
 Decision-grade research run (52 agents, adversarial verification) to test whether Vendora's PWA has a
 viable, reachable, PAYING market before investing in Phase 2 backend.

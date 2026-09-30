@@ -8,11 +8,13 @@ buying the wrong stock — and shows you the £ in your first month. On your pho
 
 ## The 3 leaks every shop has
 
-### 1. Suppliers owe you money you never claim back
-Short deliveries, damaged goods, wrong prices on the invoice. It happens every week — and most
-owners are too busy to chase it, so the credit is just lost.
-**Vendora:** check the delivery on your phone as it lands, flag what's short/damaged/wrong, and it
-builds the supplier claim for you. **Money back that you'd have written off.**
+### 1. Credit that slips through the cracks — across all your suppliers
+Short deliveries, damaged goods, wrong prices. The hard part isn't spotting it once — it's that the
+photo sits in someone's phone, the disputed line dies in a WhatsApp message, and the credit never
+lands. Worse when you're juggling several suppliers at once.
+**Vendora:** check the delivery on your phone as it lands, capture the evidence, and **keep every
+open claim visible in one place until the credit is actually back** — whichever supplier it's with.
+Nothing falls through the cracks.
 
 ### 2. You're paying twice for stock you throw away
 Chilled, fresh, bread, dated lines — binned when they expire. That's cash you already paid for,
@@ -28,7 +30,7 @@ re-ordering what doesn't sell.
 ---
 
 ## What you get
-- Works on your **phone**, works **offline**, sits **alongside your till** — you don't change anything.
+- Works on your **phone**, works **offline**, sits **alongside your till and whatever you already use** — you don't replace anything.
 - A **"this month" page** that shows, in pounds: credit recovered, waste cost, stock checked.
 - Set up in **10 minutes** with your top lines.
 

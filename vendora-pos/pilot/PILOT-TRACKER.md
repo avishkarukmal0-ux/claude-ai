@@ -4,14 +4,14 @@ One row per shop. Fill the baseline at setup, the result at end of Week 4. This 
 willingness-to-pay evidence — keep it honest.
 
 ## Conversations → pilots
-| Shop | Type | Contact warmth | Baseline: £ supplier loss/mo | Baseline: £ waste/wk | Over-orders? | Real "I'd pay"? (yes/soft/no) | Objection if no |
-|------|------|----------------|------------------------------|----------------------|--------------|-------------------------------|-----------------|
-| | | | | | | | |
-| | | | | | | | |
-| | | | | | | | |
-| | | | | | | | |
-| | | | | | | | |
-| | | | | | | | |
+| Shop | Type | Current tool / EPOS | Gap it leaves | Contact warmth | Baseline: £ supplier loss/mo | Baseline: £ waste/wk | Over-orders? | Real "I'd pay"? (yes/soft/no) | Objection if no |
+|------|------|---------------------|---------------|----------------|------------------------------|----------------------|--------------|-------------------------------|-----------------|
+| | | | | | | | | | |
+| | | | | | | | | | |
+| | | | | | | | | | |
+| | | | | | | | | | |
+| | | | | | | | | | |
+| | | | | | | | | | |
 
 ## Pilot results (end of Week 4)
 | Shop | £ credit recovered | £ waste cut (vs baseline) | Over-order avoided (£, est.) | Total money found | Paid £25/mo? | Notes / exact words |
@@ -26,5 +26,6 @@ willingness-to-pay evidence — keep it honest.
 - Conversations had: ___
 - Pilots booked: ___
 - Pilots that converted to paying: ___ / ___
-- Median money found per shop: £___
+- Median money found per shop: £___  (target: **≥ 3× the £25 fee** after the owner's extra effort)
+- Shops whose current tool already covered the gap (i.e. not our customer): ___
 - **Decision:** proven (scale) / not proven (pivot customer) — because: ___

@@ -29,6 +29,20 @@ numbers, not your slides. Never lead them ("wouldn't it be great if…") — ask
 - "How do you decide what to buy at the cash-and-carry / on the van order?"
 - **Baseline:** runs out of top lines? Y/N · cash stuck in slow stock (gut feel £) ___ · how they order now ___
 
+## 4b. "Show me how you handle this now" (the most important question)
+Before you pitch a single thing: **"Can you show me the tool or app you use for this today?"** Then
+watch them actually do it — their EPOS, a supplier app (ShopMate / Bestway / SNapp), a notebook,
+WhatsApp, or nothing.
+- What does their current setup already do well?
+- Where exactly does it *stop* — capturing the evidence, chasing it **across different suppliers**, or the follow-up until the credit actually lands?
+- **Only keep going if a real, recurring gap remains AFTER they've shown you their current tool.**
+
+> Why this matters: invoice-checking / discrepancy / credit-tracking software already exists (sruu,
+> growyze, Stockagile, ShopMate, supplier apps). We are NOT the only ones who "check invoices." Our
+> edge, if it's real, is doing the **cross-supplier follow-up more reliably with less effort** than
+> what they've already got. If their current tool already nails it, this shop isn't your customer —
+> thank them and move on. That's a win: you just saved weeks.
+
 ## 5. The money question (do NOT skip)
 - "If something on your phone clawed back that supplier credit and cut what you bin — and showed you the pounds each month — is that worth £25 a month to you?"
 - *Listen for the difference between polite ("yeah sounds good") and real ("how do I get it").* Push once: "Would you put your card on it after a free month if it proved it saved you money?"
@@ -40,8 +54,10 @@ numbers, not your slides. Never lead them ("wouldn't it be great if…") — ask
 ---
 
 ## After every conversation, log it (one row in PILOT-TRACKER)
-Name · shop type · the 3 baseline numbers · did they give a real "I'd pay"? (yes/soft/no) · their exact objection if no.
+Name · shop type · **current tool/EPOS** · **the gap it leaves** · the 3 baseline numbers · did they give a real "I'd pay"? (yes/soft/no) · their exact objection if no.
 
-**Signal to watch:** you want **3 of your first ~6** conversations to convert to a booked pilot, and
-the baseline numbers to be big enough that £25/month is obviously worth it. If owners *won't* pay even
-after seeing the money — that's the real answer, and we pivot the customer, not keep building.
+**Signal to watch:** you want **3 of your first ~6** conversations to convert to a booked pilot, the
+baseline numbers big enough that £25/month is obviously worth it (aim for value ≥ **3× the fee** after
+their extra effort), **and a genuine gap their current tool doesn't cover.** If owners *won't* pay
+even after seeing the money — or their existing tool already handles it — that's the real answer, and
+we pivot the customer, not keep building.

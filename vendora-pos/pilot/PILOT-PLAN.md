@@ -18,14 +18,22 @@ Full context: `obsidian-vault/Market-Research-2026-09.md`.
 
 ## Who (target 5–6 shops)
 Use your access in this order: **owners you know well → a couple you can ask → local walk-ins.**
-Mix of **convenience + off-licence** (your two confident niches). One-store owners, not symbol-managed
-head-office shops (they can't say yes on their own).
+Mix of **convenience + off-licence** (your two confident niches), and add **1–2 international grocers**
+(fragmented multi-supplier buying + case/unit conversion is a strong gap, reachable via local clusters).
+
+**Sharper customer profile (qualify for this, don't just take any shop):** an **owner-operated**
+food/drink shop with **1–3 locations, several suppliers, an existing till, and a recurring
+delivery/invoice/credit problem their current tools don't handle conveniently.** The owner must
+**personally** check supplier bills and be accountable for the result — staff can capture evidence but
+usually aren't the buyer. Skip symbol-managed head-office shops (they can't say yes on their own).
 
 ---
 
 ## Week 0 — line them up (this week)
 - Have the 15-min conversation (see `INTERVIEW-SCRIPT.md`). Log every one in `PILOT-TRACKER.md`.
-- Book setup with everyone who gives a **real** "I'd pay."
+- **Make each owner demonstrate the tool they use for this today** (EPOS / supplier app / notebook /
+  nothing) and record the gap it leaves. Only pursue shops where a real gap remains after that demo.
+- Book setup with everyone who gives a **real** "I'd pay" AND has a genuine gap their current tool misses.
 - Target: **3 booked pilots** out of ~6 conversations.
 
 ## Week 1 — set up (10–15 min per shop, in person)
@@ -50,7 +58,15 @@ head-office shops (they can't say yes on their own).
 
 ## What "success" looks like (decide the pivot on this, not vibes)
 - **≥3 of 5 pilots convert to paying** at £25/mo, **and**
-- median money-found per shop **comfortably beats £25** (so the value is obvious, not marginal).
+- median money-found per shop is **≥ 3× the fee** after allowing for the owner's extra effort (so the
+  value is obvious, not marginal), **and**
+- the value comes from a **gap their existing tool didn't already cover** (not something Square/ShopMate/
+  a supplier app does for free) — otherwise they'll churn back to what they had.
+
+> Reality check from independent research: invoice-checking, discrepancy detection and supplier-credit
+> tracking are **already existing software categories** (sruu, growyze, Stockagile, ShopMate, supplier
+> apps). Vendora's only defensible wedge is doing the **cross-supplier follow-up until credit lands**
+> more reliably, with less duplicate entry, than the owner's current setup. Prove that, not novelty.
 
 **If yes →** willingness-to-pay is proven. *Then* resume Phase 2 (accounts/sync) and open the B2B2C
 channel to scale — knowing it's a slow burn, with paying-shop proof to show a wholesaler.
