@@ -18,7 +18,8 @@
 // Framework-free core (unit-testable); a thin React hook lives at the bottom.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
-import { recordMovement, hasOperation, removeByBatch, MOVEMENT_TYPES } from './movementStore';
+import { recordMovement, recordMany, hasOperation, removeByBatch, MOVEMENT_TYPES } from './movementStore';
+import { markSold } from './inventoryStore';
 
 const NAME = 'sales_imports_v1';
 const DAY = 86400000;
@@ -237,22 +238,32 @@ export function useSalesImport() {
       return { ok: false, reason: 'empty' };
     }
     if (hasOperation(analysis.importId)) return { ok: false, reason: 'duplicate' };
-    let written = 0;
     // chronological order keeps the retention prune sensible
     const ordered = [...analysis.lines].sort((a, b) => a.day - b.day);
+    // Write ALL the movements in one atomic persist — a partial write would block retry via the
+    // operationId guard yet leave an incomplete sales history (audit W10).
+    const res = recordMany(ordered.map((b) => ({
+      productId: b.productId,
+      type: MOVEMENT_TYPES.SALE,
+      delta: -Math.abs(b.units),
+      valuation: b.hasValue ? b.value : undefined,
+      reason: meta.fileName ? `Till import — ${meta.fileName}` : 'Till import',
+      batchId: analysis.importId,     // lets undoImport reverse via removeByBatch
+      operationId: analysis.importId, // idempotency guard (hasOperation)
+      at: b.day + 12 * 3600 * 1000,   // midday of that day
+    })));
+    if (!res.ok) return { ok: false, reason: 'save-failed', written: 0 };
+    const written = res.written;
+
+    // W12: imported sales are real evidence of selling — update each product's lastSoldAt (no qty change,
+    // no extra movement) so it isn't still flagged "never sold" / slow stock.
+    const latestSold = {};
     for (const b of ordered) {
-      const rec = recordMovement({
-        productId: b.productId,
-        type: MOVEMENT_TYPES.SALE,
-        delta: -Math.abs(b.units),
-        valuation: b.hasValue ? b.value : undefined,
-        reason: meta.fileName ? `Till import — ${meta.fileName}` : 'Till import',
-        batchId: analysis.importId,     // lets undoImport reverse via removeByBatch
-        operationId: analysis.importId, // idempotency guard (hasOperation)
-        at: b.day + 12 * 3600 * 1000,   // midday of that day
-      });
-      if (rec) written += 1;
+      const ts = b.day + 12 * 3600 * 1000;
+      if (!latestSold[b.productId] || ts > latestSold[b.productId]) latestSold[b.productId] = ts;
     }
+    try { markSold(latestSold); } catch { /* lastSoldAt is best-effort; movements already committed */ }
+
     const entry = {
       id: analysis.importId,
       importId: analysis.importId,

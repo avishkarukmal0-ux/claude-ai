@@ -1,13 +1,49 @@
 import React, { StrictMode } from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useInventory, margin, costKnown, normalisePackSize, matchBarcode } from '../inventoryStore';
+import { useInventory, margin, costKnown, normalisePackSize, matchBarcode, reconcileAllocations, markSold } from '../inventoryStore';
 import { salesUnits, inferredDepletionUnits } from '../movementStore';
-import { readJSON, setActiveWorkspace } from '../storage';
+import { readJSON, writeJSON, setActiveWorkspace } from '../storage';
 
 const movements = () => readJSON('movements_v1', []);
 let ws = 0;
 beforeEach(() => { setActiveWorkspace(`shop:inv${ws++}`); });
+
+describe('inventory — allocation reconcile + imported sales (audit W2/W12)', () => {
+  it('reconcileAllocations caps shelfQty and trims dated batches to total (latest-expiry first)', () => {
+    const p = {
+      qty: 7, shelfQty: 10,
+      batches: [{ id: 'early', qty: 5, expiry: '2026-01-01' }, { id: 'late', qty: 5, expiry: '2026-12-31' }],
+    };
+    const out = reconcileAllocations(p);
+    expect(out.shelfQty).toBe(7);                       // shelf capped to total
+    const sum = out.batches.reduce((n, b) => n + b.qty, 0);
+    expect(sum).toBe(7);                                // batches no longer exceed total (was 10)
+    expect(out.batches.find((b) => b.id === 'early').qty).toBe(5); // urgent (earliest) batch preserved
+    expect(out.batches.find((b) => b.id === 'late').qty).toBe(2);  // excess trimmed from latest-expiry
+  });
+
+  it('a product already consistent is returned unchanged', () => {
+    const p = { qty: 10, shelfQty: 4, batches: [{ id: 'a', qty: 3, expiry: '2026-06-01' }] };
+    expect(reconcileAllocations(p)).toEqual(p);
+  });
+
+  it('markSold updates lastSoldAt without changing qty, and never moves it backwards', () => {
+    const ws = storage_setup();
+    writeJSON('inventory_v1', [{ id: 'x', qty: 5, lastSoldAt: 1000 }], ws);
+    markSold({ x: 5000 });
+    expect(readJSON('inventory_v1', [], ws).find((p) => p.id === 'x')).toMatchObject({ qty: 5, lastSoldAt: 5000 });
+    markSold({ x: 2000 }); // older — ignored
+    expect(readJSON('inventory_v1', [], ws).find((p) => p.id === 'x').lastSoldAt).toBe(5000);
+  });
+});
+
+function storage_setup() {
+  const ws = `shop:mark${Math.random().toString(36).slice(2, 6)}`;
+  // eslint-disable-next-line no-undef
+  setActiveWorkspace(ws);
+  return ws;
+}
 
 describe('inventory — pack size + barcode identification', () => {
   it('normalisePackSize keeps whole numbers ≥ 2, else null (sold as singles)', () => {

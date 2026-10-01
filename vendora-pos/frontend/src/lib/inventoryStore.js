@@ -113,6 +113,52 @@ export function needsRefill(p) {
 export function batchesOf(p) { return Array.isArray(p?.batches) ? p.batches : []; }
 export function datedQty(p) { return batchesOf(p).reduce((n, b) => n + (Number(b.qty) || 0), 0); }
 export function undatedQty(p) { return Math.max(0, (Number(p.qty) || 0) - datedQty(p)); }
+
+/** Set lastSoldAt for products from imported sales — NO qty change, NO movement (audit W12): imported
+ *  sales should stop a product reading as "never sold"/slow stock. map = { productId: epochMs }. */
+export function markSold(map) {
+  if (!map || typeof map !== 'object') return { ok: true, updated: 0 };
+  const prev = load();
+  let updated = 0;
+  const next = prev.map((p) => {
+    const ts = map[p.id];
+    if (ts && ts > (Number(p.lastSoldAt) || 0)) { updated += 1; return { ...p, lastSoldAt: ts }; }
+    return p;
+  });
+  if (!updated) return { ok: true, updated: 0 };
+  const res = persist(next);
+  return { ok: !!res.ok, updated };
+}
+
+// Keep allocations consistent with total stock (audit W2): the shelf count and the sum of dated batches
+// can never exceed the total qty. After any decrement (sale/waste/count) we cap shelfQty and trim excess
+// dated units — latest-expiry first, so the most-urgent earliest-expiry batch stays represented — instead
+// of leaving "phantom" dated/shelf units above the real total.
+export function reconcileAllocations(p) {
+  const qty = Math.max(0, Number(p.qty) || 0);
+  let out = p;
+  if (shelfTracked(out) && shelfQtyOf(out) > qty) out = { ...out, shelfQty: qty };
+  const batches = batchesOf(out);
+  const sum = batches.reduce((n, b) => n + (Number(b.qty) || 0), 0);
+  if (sum > qty) {
+    let excess = sum - qty;
+    const order = [...batches].sort((a, b) => String(b.expiry || '').localeCompare(String(a.expiry || '')));
+    const trim = new Map();
+    for (const b of order) {
+      if (excess <= 0) break;
+      const take = Math.min(excess, Number(b.qty) || 0);
+      trim.set(b.id, (Number(b.qty) || 0) - take);
+      excess -= take;
+    }
+    out = {
+      ...out,
+      batches: batches
+        .map((b) => (trim.has(b.id) ? { ...b, qty: trim.get(b.id) } : b))
+        .filter((b) => (Number(b.qty) || 0) > 0),
+    };
+  }
+  return out;
+}
 export function batchExpiryInfo(batch, from = new Date()) {
   return expiryInfo({ expiry: batch.expiry, dateType: batch.dateType }, from);
 }
@@ -240,9 +286,11 @@ export function useInventory() {
     const next = prev.map((p) => {
       if (p.id !== id) return p;
       if (patch.qty != null) delta = (Number(patch.qty) || 0) - (Number(p.qty) || 0);
-      return { ...p, ...patch, updatedAt: Date.now() };
+      const merged = { ...p, ...patch, updatedAt: Date.now() };
+      return delta < 0 ? reconcileAllocations(merged) : merged; // trim phantom allocations on a decrease (W2)
     });
-    persist(next);
+    const res = persist(next);
+    if (!res.ok) return null; // couldn't save — don't log a phantom movement (audit W1)
     setProducts(next);
     if (delta !== 0) {
       recordMovement({ productId: id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta, reason: patch.reason || 'manual adjustment' });
@@ -269,8 +317,9 @@ export function useInventory() {
     if (!p) return { ok: false, error: 'Product not found' };
     const sold = Math.min(u, Number(p.qty) || 0);
     if (sold <= 0) return { ok: false, error: 'Nothing in stock to sell' };
-    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) - sold, lastSoldAt: Date.now(), updatedAt: Date.now() } : x));
-    persist(next);
+    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - sold, lastSoldAt: Date.now(), updatedAt: Date.now() }) : x));
+    const res = persist(next);
+    if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save the sale on this device' }; // don't log a movement we couldn't persist (audit W1)
     setProducts(next);
     recordMovement({ productId: id, type: MOVEMENT_TYPES.SALE, delta: -sold, valuation: (Number(p.price) || 0) * sold });
     return { ok: true, sold };
@@ -289,8 +338,9 @@ export function useInventory() {
     if (!p) return { ok: false, error: 'Product not found' };
     const applied = Math.min(want, Number(p.qty) || 0);
     if (applied <= 0) return { ok: false, error: 'No stock left to bin' };
-    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) - applied, updatedAt: Date.now() } : x));
-    persist(next);
+    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - applied, updatedAt: Date.now() }) : x));
+    const res = persist(next);
+    if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
     setProducts(next);
     recordMovement({
       productId: id,
@@ -422,7 +472,8 @@ export function useInventory() {
     const p = prev.find((x) => x.id === id);
     if (!p) return { ok: false, error: 'Product not found' };
     const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + add, updatedAt: Date.now() } : x));
-    persist(next);
+    const res = persist(next);
+    if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
     setProducts(next);
     recordMovement({ productId: id, type: MOVEMENT_TYPES.GOODS_RECEIVED, delta: add, reason: 'scan-in' });
     return { ok: true, added: add };
@@ -545,8 +596,10 @@ export function useInventory() {
       const expectedAt = it.expectedAt == null ? current : Number(it.expectedAt) || 0;
       const delta = counted - expectedAt;                 // correction implied by the count
       const newQty = Math.max(0, current + delta);        // applied to CURRENT, not blind overwrite
-      if (delta !== 0) changes.push({ id: p.id, delta, reason: it.reason || '' });
-      return { ...p, qty: newQty, countedAt: now, updatedAt: now };
+      const appliedDelta = newQty - current;              // what ACTUALLY changed (audit W6: log this, not the raw variance)
+      if (appliedDelta !== 0) changes.push({ id: p.id, delta: appliedDelta, variance: delta, reason: it.reason || '' });
+      const updated = { ...p, qty: newQty, countedAt: now, updatedAt: now };
+      return appliedDelta < 0 ? reconcileAllocations(updated) : updated;
     });
     persist(next);
     setProducts(next);

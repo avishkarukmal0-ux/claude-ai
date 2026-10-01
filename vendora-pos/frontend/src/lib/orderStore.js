@@ -108,7 +108,10 @@ export function useOrders() {
       const lines = o.lines.map((l) => {
         const r = receipts.find((x) => (x.productId && x.productId === l.productId) || (x.barcode && x.barcode === l.barcode));
         if (!r) return l;
-        return { ...l, receivedQty: num(l.receivedQty) + Math.max(0, num(r.qty)) };
+        // Apply a SIGNED correction (a negative qty "un-receives" a mistaken receipt), clamped to
+        // [0, ordered] so received can't go below zero or above what was ordered (audit W7).
+        const nextReceived = num(l.receivedQty) + num(r.qty);
+        return { ...l, receivedQty: Math.max(0, Math.min(num(l.qty), nextReceived)) };
       });
       const updated = { ...o, lines, updatedAt: Date.now() };
       const st = statusFor(updated);

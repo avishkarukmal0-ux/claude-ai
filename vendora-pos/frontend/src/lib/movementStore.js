@@ -87,6 +87,33 @@ export function recordMovement({
   return res.ok ? rec : null;
 }
 
+/** Append several movements in ONE persist so an import is all-or-nothing (audit W10): a mid-way storage
+ *  failure can't leave half the rows written (which would block retry via the operationId guard). Returns
+ *  { ok, written }. */
+export function recordMany(entries = []) {
+  const recs = [];
+  let maxAt = Date.now();
+  for (const e of entries) {
+    if (!VALID_TYPES.has(e.type)) continue;
+    const d = Number(e.delta);
+    if (!Number.isFinite(d) || d === 0) continue;
+    const at = e.at || Date.now();
+    if (at > maxAt) maxAt = at;
+    recs.push({
+      id: newId(), productId: e.productId || null, type: e.type, delta: d,
+      ...(e.valuation != null && Number.isFinite(Number(e.valuation)) ? { valuation: Number(e.valuation) } : {}),
+      ...(e.reason ? { reason: String(e.reason) } : {}),
+      ...(e.batchId ? { batchId: e.batchId } : {}),
+      ...(e.operationId ? { operationId: String(e.operationId) } : {}),
+      at,
+    });
+  }
+  if (!recs.length) return { ok: true, written: 0 };
+  const res = persist(prune([...load(), ...recs], maxAt));
+  if (res.ok) { try { window.dispatchEvent(new CustomEvent(MOVEMENT_EVENT)); } catch { /* ignore */ } }
+  return { ok: !!res.ok, written: res.ok ? recs.length : 0 };
+}
+
 /** True if any movement with this operationId already exists — the idempotency guard so a
  *  re-submitted delivery/transfer can't be applied to stock twice. */
 export function hasOperation(operationId) {

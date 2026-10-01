@@ -59,3 +59,19 @@ describe('orderStore — incoming stock', () => {
     expect(incomingByProduct(result.current.orders).p1).toBe(6);
   });
 });
+
+describe('orderStore — signed un-receive (audit W7)', () => {
+  it('a negative correction reduces received qty (clamped to [0, ordered])', () => {
+    const { result } = renderHook(() => useOrders());
+    let id;
+    act(() => { id = result.current.createOrder({ supplierName: 'Booker', lines: [line({ qty: 10 })] }).id; });
+    act(() => { result.current.receiveAgainst(id, [{ productId: 'p1', qty: 3 }]); });
+    expect(result.current.orders.find((o) => o.id === id).lines[0].receivedQty).toBe(3);
+
+    act(() => { result.current.receiveAgainst(id, [{ productId: 'p1', qty: -1 }]); }); // un-receive one
+    expect(result.current.orders.find((o) => o.id === id).lines[0].receivedQty).toBe(2);
+
+    act(() => { result.current.receiveAgainst(id, [{ productId: 'p1', qty: -50 }]); }); // can't go below 0
+    expect(result.current.orders.find((o) => o.id === id).lines[0].receivedQty).toBe(0);
+  });
+});
