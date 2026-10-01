@@ -42,12 +42,25 @@ totals = `sumMoney(parts)`. This avoids binary-float drift across many lines. (P
 
 | # | Requirement | Existing evidence | Status | Change (phase) | Acceptance |
 |---|---|---|---|---|---|
-| C1 | Validate file type | client `accept="image/*,application/pdf"` (`InvoiceCaptureView.jsx:96`); server none | 🟡 | server validates dataUrl mime (image/* or pdf); client rejects others (P2) | non-image/pdf upload rejected server-side (422); test asserts |
-| C2 | Validate file size | none | 🔲 | cap dataUrl size (server ~8MB, client pre-check) (P2) | oversize upload rejected (422); test asserts |
-| C3 | Restrict access to documents | files local-only, never leave device except transient OCR send | ✅ | document (P2) | — |
-| C4 | Retention / deletion defined | `removeInvoice` deletes file (`invoiceStore.js:143-148`) | 🟡 | retention policy doc + "delete stored file, keep record" control (P2) | deleting a file leaves the invoice record; policy documented |
-| C5 | OCR text never becomes instructions / triggers tools | OCR = OCR.space (non-LLM), returns raw text; shown in `<pre>` (React-escaped) (`invoiceOcrService.js`, `InvoiceCaptureView.jsx:167`); nothing executed | ✅ | document explicitly; test that text is treated as data (P2) | injected "instructions" in OCR text do nothing; documented |
-| C6 | Human review before data changes records | nothing auto-commits; explicit Commit (`invoiceStore.js:138`, `InvoiceCaptureView.jsx:73,120`) | ✅ | test asserts extracted data needs commit (P2/P3) | extracted/parsed data never alters stock/financials without commit |
+| C1 | Validate file type | client `validateInvoiceFile` + server `validateDataUrl` (image/* or pdf) (`invoiceStore.js`, `invoiceOcrService.js`) | ✅ (P2) | — | `invoiceOcr.test.js`/`invoice-upload.test.js`: non-image/pdf rejected (422 / {ok:false}) |
+| C2 | Validate file size | client `MAX_UPLOAD_BYTES`=8MB + server `MAX_BYTES`=8MB + 10mb body wall | ✅ (P2) | — | oversize rejected server + client; tests assert |
+| C3 | Restrict access to documents | files local-only, never leave device except the transient OCR send (over TLS to the configured provider only) | ✅ (P2) | — | documented in retention policy below |
+| C4 | Retention / deletion defined | `removeInvoice` deletes file; new `deleteFile` deletes the scan but keeps the record (`invoiceStore.js`) + "Delete file" control (`InvoiceCaptureView.jsx`) | ✅ (P2) | — | policy documented below; `deleteFile` leaves the invoice record |
+| C5 | OCR text never becomes instructions / triggers tools | OCR = OCR.space (non-LLM); returns raw text; shown React-escaped; validated-first; never fed to a model/tool | ✅ (P2) | — | `invoice-upload.test.js`: hostile line text stored verbatim as data, no effect |
+| C6 | Human review before data changes records | nothing auto-commits; explicit Commit (`invoiceStore.commitInvoice`) | ✅ (P2) | — | `invoice-upload.test.js`: saved draft stays draft until explicit commit |
+
+### Document retention & OCR safety policy (C3/C4/C5)
+- **Where documents live:** the raw invoice photo/PDF is stored **on the device only**, in the workspace-
+  scoped `invoice_files_v1` key. It is **never synced** (not in `STORE_NAMES`) and **never** included in a
+  backup. It leaves the device only as a one-shot HTTPS request to the configured OCR provider, and only if
+  the owner uploads an image while OCR is switched on.
+- **Retention / deletion:** a stored file is removed when its invoice is deleted (`removeInvoice`), or on
+  demand via **Delete file** (`deleteFile`) which keeps the checked invoice record for price history/claims.
+  Because files are device-local, uninstalling the PWA / clearing site data also removes them.
+- **OCR safety:** the provider is a plain OCR engine (not an LLM). Returned text is treated strictly as
+  **data** — displayed for the owner to read, never fed to a model and never used to trigger a tool, message
+  or financial action. Uploads are type/size validated before anything touches them. **Extracted or typed
+  invoice data only affects stock or money after an explicit human review + Commit.**
 
 ## D. End-to-end scenarios (P3)
 
@@ -75,5 +88,5 @@ totals = `sumMoney(parts)`. This avoids binary-float drift across many lines. (P
 ### Phase gate status
 - **Phase 0** — ✅ **passed** (A1–A8 done/verified). FE 205/205, BE pure 22/22, build clean.
 - **Phase 1** — ✅ **passed** (B1–B5). FE `isolation.test.js` 3/3; BE `pwaIsolation.integration` 7 (DB-gated, run on the founder's Mongo). FE 208/208, build clean.
-- **Phase 2** — in progress next.
-- Phase 3 — pending; starts only after Phase 2's checks pass.
+- **Phase 2** — ✅ **passed** (C1–C6). BE `invoiceOcr.test.js` 8/8; FE `invoice-upload.test.js` 4; retention/OCR-safety policy documented. FE 212/212, build clean.
+- **Phase 3** — in progress next.

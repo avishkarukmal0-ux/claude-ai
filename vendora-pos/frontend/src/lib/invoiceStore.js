@@ -41,6 +41,21 @@ export function lineTotal(line) {
   return r2(lineUnitCost(line) * lineUnits(line));
 }
 
+// --- untrusted upload validation (Phase 2) ---------------------------------
+// A captured invoice file is untrusted input. Validate its type + size on the device before we read or
+// store it (the server re-validates independently). Pure + testable.
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MB
+const ALLOWED_UPLOAD = /^(image\/|application\/pdf$)/i;
+/** @returns {{ok:true,isPdf:boolean}|{ok:false,error:string}} */
+export function validateInvoiceFile(file) {
+  if (!file) return { ok: false, error: 'No file selected' };
+  const type = String(file.type || '');
+  const isPdf = /pdf$/i.test(type) || /\.pdf$/i.test(file.name || '');
+  if (!ALLOWED_UPLOAD.test(type) && !isPdf) return { ok: false, error: 'Upload a photo (JPG/PNG) or a PDF' };
+  if (Number(file.size) > MAX_UPLOAD_BYTES) return { ok: false, error: 'That file is too large — keep it under 8 MB' };
+  return { ok: true, isPdf };
+}
+
 // --- dedupe ----------------------------------------------------------------
 /** A stable fingerprint of an invoice's identity for duplicate detection. */
 export function invoiceFingerprint(inv) {
@@ -152,9 +167,18 @@ export function useInvoices() {
     return loadFiles(getActiveWorkspace())[fileId] || null;
   }, []);
 
+  /** Delete the stored raw file but KEEP the invoice record + its figures (retention control, Phase 2).
+   *  Lets an owner purge a scanned document while keeping the checked invoice for price history/claims. */
+  const deleteFile = useCallback((id) => {
+    const ws = getActiveWorkspace();
+    const inv = load().find((x) => x.id === id);
+    if (inv && inv.fileId) { const map = loadFiles(ws); delete map[inv.fileId]; saveFiles(ws, map); }
+    return commitAll(load().map((x) => (x.id === id ? { ...x, fileId: null, fileType: null, updatedAt: Date.now() } : x)));
+  }, []);
+
   const findDuplicate = useCallback((inv) => findDuplicateInvoice(inv, load()), []);
 
-  return { invoices, saveDraft, commitInvoice, removeInvoice, getFile, findDuplicate };
+  return { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate };
 }
 
 // Test hook: clear invoice files for the active workspace.

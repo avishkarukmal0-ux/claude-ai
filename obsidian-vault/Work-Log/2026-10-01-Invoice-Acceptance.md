@@ -37,9 +37,24 @@ FE **205/205** (+10: money 7, reconcile refs, credit-note dedupe, createClaim re
 - Verification: FE **208/208** (+3), build clean; BE isolation suite parses + skips offline, runs on the
   founder's Mongo via `VENDORA_TEST_URI` (same pattern as the 9/9-verified sync/auth suites).
 
-## Phases 2–3 (pending)
-2 — untrusted upload/OCR hardening. 3 — 8 end-to-end scenarios, anonymised fixtures + extraction harness,
-feature flags, config/migration/disable/recovery docs.
+## Phase 2 — untrusted upload / OCR hardening ✅
+- **Validation:** server `invoiceOcrService.validateDataUrl` (image/* or PDF, ≤8 MB decoded, base64 required)
+  runs BEFORE anything touches the upload — even when OCR is off; client `validateInvoiceFile` mirrors it
+  (type + 8 MB). Express body wall stays 10 mb.
+- **Retention/deletion:** files are device-only (workspace-scoped `invoice_files_v1`, never synced, never
+  backed up). New `deleteFile` + a "Delete file" control purges the scan while keeping the invoice record;
+  `removeInvoice` deletes both. Policy documented in [[Invoice-Acceptance-Coverage]].
+- **OCR safety:** OCR.space is a plain OCR engine (not an LLM); returned text is DATA — React-escaped on
+  display, never fed to a model or used to trigger tools/messages/financial actions. Extracted/typed data
+  only affects stock or money after an explicit human **Commit**.
+- Verification: BE `invoiceOcr.test.js` **8/8** (type/size/base64/empty reject; unconfigured returns
+  `{configured:false}` with no fabricated fields; validation throws before use). FE `invoice-upload.test.js`
+  **4** (type/size validation; hostile line text stored verbatim; draft→commit gate). FE **212/212**, build
+  clean, backend loads.
+
+## Phase 3 (pending)
+8 end-to-end scenarios, anonymised fixtures + `parseInvoiceText` extraction harness (observed results),
+feature flags, config/migration/safe-disable/recovery docs.
 
 ## Commit
 `feat(pwa): decimal-safe money + source refs + credit-note dedupe (acceptance P0)`

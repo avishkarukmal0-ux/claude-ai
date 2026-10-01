@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, FileText, Camera, Plus, Trash2, Check, AlertTriangle, Loader2, ScanText,
 } from 'lucide-react';
-import { useInvoices, matchLines, blankInvoiceLine, lineUnitCost, lineTotal, invoiceTotal } from '../../lib/invoiceStore';
+import { useInvoices, matchLines, blankInvoiceLine, lineUnitCost, lineTotal, invoiceTotal, validateInvoiceFile } from '../../lib/invoiceStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useInventory } from '../../lib/inventoryStore';
 import { useDeliveries } from '../../lib/deliveryStore';
@@ -18,7 +18,7 @@ const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
 const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
 
 export default function InvoiceCaptureView({ onBack, onReconcile }) {
-  const { invoices, saveDraft, commitInvoice, removeInvoice, findDuplicate } = useInvoices();
+  const { invoices, saveDraft, commitInvoice, removeInvoice, deleteFile, findDuplicate } = useInvoices();
   const { suppliers } = useSuppliers();
   const { products } = useInventory();
   const [mode, setMode] = useState('list'); // 'list' | 'review' | 'reconcile'
@@ -38,7 +38,9 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
-    const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+    const check = validateInvoiceFile(f); // untrusted upload — validate type + size before reading (Phase 2)
+    if (!check.ok) { toast.error(check.error); return; }
+    const { isPdf } = check;
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = String(reader.result || '');
@@ -121,6 +123,9 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
                   <button type="button" onClick={() => commitInvoice(inv.id)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95">Commit</button>
                 )}
                 <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
+                {inv.fileId && (
+                  <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 active:scale-95">Delete file</button>
+                )}
               </div>
             </li>
           ))}
