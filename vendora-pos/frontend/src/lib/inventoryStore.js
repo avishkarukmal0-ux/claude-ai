@@ -157,10 +157,22 @@ export function stockStatus(p) {
   };
 }
 
+/** Normalise a units-per-case value: a whole number ≥ 2, else null (sold only as singles). */
+export function normalisePackSize(v) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= 2 ? n : null;
+}
+
 function normaliseNew(p) {
   return {
     id: newId(),
     barcode: (p.barcode || '').trim(),
+    // A product is identified by its barcode. category + packSize + caseBarcode are what turn a bare
+    // code into something the shop can act on: what kind of thing it is, and whether a scan is one unit
+    // or a whole case. None of this lives in the barcode itself — it's the shop's own record.
+    caseBarcode: (p.caseBarcode || '').trim() || null,  // outer/case barcode; scanning it books a full case
+    category: (p.category || '').trim() || null,
+    packSize: normalisePackSize(p.packSize),            // units per case (null = sold only as singles)
     name: (p.name || '').trim() || 'Unnamed item',
     cost: p.cost === '' || p.cost == null ? null : Number(p.cost),
     price: p.price === '' || p.price == null ? null : Number(p.price),
@@ -175,6 +187,24 @@ function normaliseNew(p) {
     lastSoldAt: null,
     updatedAt: Date.now(),
   };
+}
+
+/**
+ * Resolve a scanned code against a product list. Returns the identified product plus whether the code
+ * was the single barcode or the outer CASE barcode, and the unit multiplier (packSize for a case, else 1).
+ * This is how a scan becomes "a product + how many units" — see the Scan tab and delivery receiving.
+ * @returns {{ product, unit:'single'|'case', multiplier:number } | null}
+ */
+export function matchBarcode(products, rawCode) {
+  const code = String(rawCode || '').trim();
+  if (!code) return null;
+  const list = Array.isArray(products) ? products : [];
+  // Prefer a single-barcode match; fall back to a case-barcode match.
+  const bySingle = list.find((p) => (p.barcode || '') === code);
+  if (bySingle) return { product: bySingle, unit: 'single', multiplier: 1 };
+  const byCase = list.find((p) => (p.caseBarcode || '') === code);
+  if (byCase) return { product: byCase, unit: 'case', multiplier: normalisePackSize(byCase.packSize) || 1 };
+  return null;
 }
 
 /** React hook: live inventory + mutators. Components re-render on every change. */
@@ -379,6 +409,10 @@ export function useInventory() {
     return load().find((p) => p.barcode && p.barcode === b) || null;
   }, []);
 
+  // Richer resolve used by the Scan tab: returns { product, unit:'single'|'case', multiplier } or null,
+  // so a scan of the outer case barcode is understood as a full case.
+  const matchByBarcode = useCallback((barcode) => matchBarcode(load(), barcode), []);
+
   /** Apply a goods-in delivery: lines = [{ barcode, name, cost, qty }]. Logs GOODS_RECEIVED. */
   const receiveLines = useCallback((lines) => {
     const prev = load();
@@ -582,6 +616,6 @@ export function useInventory() {
     sellUnits, recordWaste, reverseWaste,
     addBatch, wasteBatch, reverseBatchWaste,
     setCounts, applyCounts, setShelfQty, transferStock,
-    findByBarcode, receiveLines, applyDelivery, importProducts, commit,
+    findByBarcode, matchByBarcode, receiveLines, applyDelivery, importProducts, commit,
   };
 }

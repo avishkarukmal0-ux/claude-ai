@@ -1,13 +1,51 @@
 import React, { StrictMode } from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useInventory, margin, costKnown } from '../inventoryStore';
+import { useInventory, margin, costKnown, normalisePackSize, matchBarcode } from '../inventoryStore';
 import { salesUnits, inferredDepletionUnits } from '../movementStore';
 import { readJSON, setActiveWorkspace } from '../storage';
 
 const movements = () => readJSON('movements_v1', []);
 let ws = 0;
 beforeEach(() => { setActiveWorkspace(`shop:inv${ws++}`); });
+
+describe('inventory — pack size + barcode identification', () => {
+  it('normalisePackSize keeps whole numbers ≥ 2, else null (sold as singles)', () => {
+    expect(normalisePackSize(24)).toBe(24);
+    expect(normalisePackSize('12')).toBe(12);
+    expect(normalisePackSize(1)).toBeNull();   // a "case of 1" is just a single
+    expect(normalisePackSize(0)).toBeNull();
+    expect(normalisePackSize('')).toBeNull();
+    expect(normalisePackSize('abc')).toBeNull();
+    expect(normalisePackSize(23.6)).toBe(24);  // rounded
+  });
+
+  it('matchBarcode identifies a single barcode as 1 unit', () => {
+    const products = [{ id: 'a', barcode: '5000112637922', packSize: 24, caseBarcode: '15000112637929' }];
+    const r = matchBarcode(products, '5000112637922');
+    expect(r).toMatchObject({ unit: 'single', multiplier: 1 });
+    expect(r.product.id).toBe('a');
+  });
+
+  it('matchBarcode identifies a case barcode as a full case (×packSize)', () => {
+    const products = [{ id: 'a', barcode: '5000112637922', packSize: 24, caseBarcode: '15000112637929' }];
+    const r = matchBarcode(products, '15000112637929');
+    expect(r).toMatchObject({ unit: 'case', multiplier: 24 });
+    expect(r.product.id).toBe('a');
+  });
+
+  it('matchBarcode returns null for an unknown code, and is blank-safe', () => {
+    const products = [{ id: 'a', barcode: '111', caseBarcode: null }];
+    expect(matchBarcode(products, '999')).toBeNull();
+    expect(matchBarcode(products, '')).toBeNull();
+    expect(matchBarcode(null, '111')).toBeNull();
+  });
+
+  it('a case with no/invalid packSize falls back to multiplier 1', () => {
+    const products = [{ id: 'a', barcode: '111', caseBarcode: '222', packSize: 1 }];
+    expect(matchBarcode(products, '222')).toMatchObject({ unit: 'case', multiplier: 1 });
+  });
+});
 
 describe('inventory — margin honesty (finding 2E)', () => {
   it('unknown/blank/invalid cost → null (not a fake 100% margin)', () => {

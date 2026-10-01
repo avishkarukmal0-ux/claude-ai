@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload } from 'lucide-react';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2 } from 'lucide-react';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
+import { getSavedShopType, getFamily } from '../../config/shopTypes';
+import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
@@ -16,9 +18,37 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
     const q = query.trim().toLowerCase();
     if (!q) return products;
     return products.filter(
-      (p) => p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q)
+      (p) => p.name.toLowerCase().includes(q)
+        || (p.barcode || '').includes(q)
+        || (p.caseBarcode || '').includes(q)
+        || (p.category || '').toLowerCase().includes(q)
     );
   }, [products, query]);
+
+  // Group the visible products by category (Uncategorised sinks to the bottom) so the list reads like a
+  // shop — confectionery together, tobacco together — instead of one long undifferentiated roll.
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const p of filtered) {
+      const key = p.category || UNCATEGORISED;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === UNCATEGORISED) return 1;
+      if (b === UNCATEGORISED) return -1;
+      return a.localeCompare(b);
+    });
+  }, [filtered]);
+
+  // Category suggestions: shop-family presets, with any the shop already uses pulled to the front.
+  const categorySuggestions = useMemo(() => {
+    const family = getFamily(getSavedShopType());
+    const used = categoriesInUse(products);
+    const presets = categoriesForFamily(family && family.id);
+    const seen = new Set();
+    return [...used, ...presets].filter((c) => (seen.has(c) ? false : seen.add(c)));
+  }, [products]);
 
   const lowCount = products.filter(isLowStock).length;
 
@@ -53,7 +83,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
         </div>
       </div>
 
-      {adding && <AddForm suppliers={suppliers} onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}
+      {adding && <AddForm suppliers={suppliers} categorySuggestions={categorySuggestions} onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}
 
       {products.length > 0 && (
         <div className="relative mb-3">
@@ -70,91 +100,120 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
       {products.length === 0 && !adding ? (
         <EmptyState onAdd={() => setAdding(true)} onImport={onOpenImport} />
       ) : (
-        <ul className="space-y-2">
-          {filtered.map((p) => {
-            const m = margin(p);
-            const low = isLowStock(p);
-            return (
-              <li key={p.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
-                      {p.barcode && <span className="font-mono">{p.barcode}</span>}
-                      {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
-                      {m != null && <span className={m < 0 ? 'text-danger' : 'text-success'}>{(m * 100).toFixed(0)}% margin</span>}
-                    </div>
-                    {suppliers.length > 0 && (
-                      <select
-                        value={p.supplierId || ''}
-                        onChange={(e) => updateProduct(p.id, { supplierId: e.target.value || null })}
-                        className="mt-1 max-w-[12rem] truncate rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
-                        aria-label="Supplier"
-                      >
-                        <option value="">— supplier —</option>
-                        {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    )}
-                    <div className="mt-1 flex items-center gap-1">
-                      <input
-                        type="date"
-                        value={p.expiry || ''}
-                        onChange={(e) => updateProduct(p.id, { expiry: e.target.value || null })}
-                        className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
-                        aria-label="Expiry date"
-                      />
-                      {p.expiry && (
-                        <select
-                          value={p.dateType || 'best-before'}
-                          onChange={(e) => updateProduct(p.id, { dateType: e.target.value })}
-                          className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
-                          aria-label="Date type"
-                        >
-                          {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
-                      )}
-                      {(() => { const ei = expiryInfo(p); if (!ei || ei.status === 'ok') return null; return (
-                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ei.mustPull ? 'bg-danger text-white' : ei.status === 'expired' ? 'bg-warning-light text-warning-dark' : 'bg-warning-light text-warning-dark'}`}>
-                          {ei.daysLeft < 0 ? (ei.mustPull ? 'PULL' : 'expired') : `${ei.daysLeft}d`}
-                        </span>
-                      ); })()}
-                    </div>
-                  </div>
-                  <button type="button" onClick={() => removeProduct(p.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
-                    {low ? 'Low stock' : 'In stock'}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={() => updateProduct(p.id, { qty: Math.max(0, (Number(p.qty) || 0) - 1) })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
-                      <Minus className="h-4 w-4" />
-                    </button>
-                    <span className="w-8 text-center text-base font-bold tabular-nums text-gray-900">{Number(p.qty) || 0}</span>
-                    <button type="button" onClick={() => updateProduct(p.id, { qty: (Number(p.qty) || 0) + 1 })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label="Increase">
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-4">
+          {grouped.map(([cat, items]) => (
+            <div key={cat}>
+              <div className="mb-1.5 flex items-center gap-2 px-1">
+                <h3 className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{cat}</h3>
+                <span className="text-[11px] text-gray-300">{items.length}</span>
+              </div>
+              <ul className="space-y-2">
+                {items.map((p) => (
+                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-function AddForm({ onAdd, onCancel, suppliers = [] }) {
-  const [f, setF] = useState({ name: '', barcode: '', cost: '', price: '', qty: '', supplierId: '' });
+// One product row. Shows category + pack ("Case of N") alongside the existing barcode/price/margin so
+// the shopkeeper can see at a glance what the item is and how it's bought.
+function ProductRow({ p, suppliers, updateProduct, removeProduct }) {
+  const m = margin(p);
+  const low = isLowStock(p);
+  return (
+    <li className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+            {p.barcode && <span className="font-mono">{p.barcode}</span>}
+            {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
+            {m != null && <span className={m < 0 ? 'text-danger' : 'text-success'}>{(m * 100).toFixed(0)}% margin</span>}
+            {p.packSize > 1 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                <Package2 className="h-3 w-3" /> Case of {p.packSize}
+              </span>
+            )}
+          </div>
+          {suppliers.length > 0 && (
+            <select
+              value={p.supplierId || ''}
+              onChange={(e) => updateProduct(p.id, { supplierId: e.target.value || null })}
+              className="mt-1 max-w-[12rem] truncate rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+              aria-label="Supplier"
+            >
+              <option value="">— supplier —</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          <div className="mt-1 flex items-center gap-1">
+            <input
+              type="date"
+              value={p.expiry || ''}
+              onChange={(e) => updateProduct(p.id, { expiry: e.target.value || null })}
+              className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+              aria-label="Expiry date"
+            />
+            {p.expiry && (
+              <select
+                value={p.dateType || 'best-before'}
+                onChange={(e) => updateProduct(p.id, { dateType: e.target.value })}
+                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+                aria-label="Date type"
+              >
+                {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            )}
+            {(() => { const ei = expiryInfo(p); if (!ei || ei.status === 'ok') return null; return (
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ei.mustPull ? 'bg-danger text-white' : 'bg-warning-light text-warning-dark'}`}>
+                {ei.daysLeft < 0 ? (ei.mustPull ? 'PULL' : 'expired') : `${ei.daysLeft}d`}
+              </span>
+            ); })()}
+          </div>
+        </div>
+        <button type="button" onClick={() => removeProduct(p.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
+          {low ? 'Low stock' : 'In stock'}
+        </span>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => updateProduct(p.id, { qty: Math.max(0, (Number(p.qty) || 0) - 1) })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
+            <Minus className="h-4 w-4" />
+          </button>
+          <span className="w-8 text-center text-base font-bold tabular-nums text-gray-900">{Number(p.qty) || 0}</span>
+          <button type="button" onClick={() => updateProduct(p.id, { qty: (Number(p.qty) || 0) + 1 })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label="Increase">
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) {
+  const [f, setF] = useState({ name: '', barcode: '', category: '', cost: '', price: '', qty: '', supplierId: '', packSize: '', caseBarcode: '' });
+  const [showPack, setShowPack] = useState(false);
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
   return (
     <div className="mb-3 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
       <input value={f.name} onChange={set('name')} placeholder="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input
+        value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category (e.g. Confectionery)"
+        className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none"
+      />
+      <datalist id="vendora-category-list">
+        {categorySuggestions.map((c) => <option key={c} value={c} />)}
+      </datalist>
       {suppliers.length > 0 && (
         <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
           <option value="">Supplier (optional)</option>
@@ -166,6 +225,19 @@ function AddForm({ onAdd, onCancel, suppliers = [] }) {
         <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       </div>
+
+      {!showPack ? (
+        <button type="button" onClick={() => setShowPack(true)} className="mb-2 text-xs font-medium text-primary">+ Comes in a case? Add pack size</button>
+      ) : (
+        <div className="mb-2 rounded-xl border border-gray-200 bg-white p-2">
+          <p className="mb-1.5 text-[11px] text-gray-500">If you buy this by the case, set how many singles are in a case. Scanning the case barcode then books in a whole case.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case (e.g. 24)" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+            <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode (optional)" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2">
         <button type="button" disabled={!canSave} onClick={() => onAdd(f)} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save item</button>
         <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
