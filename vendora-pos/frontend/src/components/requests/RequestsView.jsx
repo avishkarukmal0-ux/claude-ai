@@ -11,8 +11,8 @@ export default function RequestsView({ onBack }) {
   const [form, setForm] = useState({ name: '', note: '' });
 
   const sorted = useMemo(() => sortRequests(requests), [requests]);
-  const open = sorted.filter((r) => r.status === 'open');
-  const closed = sorted.filter((r) => r.status !== 'open');
+  const active = sorted.filter((r) => r.status === 'open' || r.status === 'planned');
+  const closed = sorted.filter((r) => r.status === 'stocked' || r.status === 'declined');
 
   function add() {
     if (!form.name.trim()) { toast.error('What did they ask for?'); return; }
@@ -22,27 +22,37 @@ export default function RequestsView({ onBack }) {
     setForm({ name: '', note: '' });
   }
 
+  // Add to the buy list and mark PLANNED — not "stocked". It only becomes stocked once it's actually in
+  // (the owner confirms it), so waiting demand isn't prematurely closed (audit W15).
   function toBuyList(r) {
     addItem({ name: r.name, barcode: r.barcode, qty: 1 });
-    setStatus(r.id, 'stocked');
-    toast.success('Added to buy list & marked stocked');
+    setStatus(r.id, 'planned');
+    toast.success('Added to buy list');
   }
 
   function Card({ r }) {
+    const terminal = r.status === 'stocked' || r.status === 'declined';
     return (
       <li className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <span className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-primary-50 px-2 text-sm font-bold tabular-nums text-primary">{r.count}×</span>
         <span className="min-w-0 flex-1">
-          <span className={`block truncate text-sm font-semibold ${r.status === 'open' ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{r.name}</span>
+          <span className={`block truncate text-sm font-semibold ${terminal ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{r.name}</span>
           {r.note && <span className="block truncate text-[11px] text-gray-500">{r.note}</span>}
           <span className="block text-[10px] text-gray-400">last asked {new Date(r.lastAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
         </span>
-        {r.status === 'open' ? (
+        {r.status === 'open' && (
           <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={() => toBuyList(r)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><ShoppingCart className="h-3.5 w-3.5" /> Stock it</button>
+            <button type="button" onClick={() => toBuyList(r)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><ShoppingCart className="h-3.5 w-3.5" /> Add to list</button>
             <button type="button" onClick={() => setStatus(r.id, 'declined')} className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-500 active:scale-95" aria-label="Won’t stock"><X className="h-3.5 w-3.5" /></button>
           </div>
-        ) : (
+        )}
+        {r.status === 'planned' && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary">On buy list</span>
+            <button type="button" onClick={() => setStatus(r.id, 'stocked')} className="flex items-center gap-1 rounded-lg bg-success px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Got it in</button>
+          </div>
+        )}
+        {terminal && (
           <div className="flex shrink-0 items-center gap-1.5">
             <span className="text-[11px] font-semibold text-gray-400">{r.status === 'stocked' ? 'Stocked' : 'Declined'}</span>
             <button type="button" onClick={() => removeRequest(r.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -68,7 +78,7 @@ export default function RequestsView({ onBack }) {
         </div>
       </div>
 
-      {open.length === 0 && closed.length === 0 ? (
+      {active.length === 0 && closed.length === 0 ? (
         <div className="mt-6 flex flex-col items-center text-center">
           <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary"><MessageSquarePlus className="h-7 w-7" strokeWidth={1.75} /></span>
           <p className="text-sm font-semibold text-gray-900">No requests logged</p>
@@ -76,7 +86,7 @@ export default function RequestsView({ onBack }) {
         </div>
       ) : (
         <>
-          {open.length > 0 && <ul className="mb-5 space-y-2">{open.map((r) => <Card key={r.id} r={r} />)}</ul>}
+          {active.length > 0 && <ul className="mb-5 space-y-2">{active.map((r) => <Card key={r.id} r={r} />)}</ul>}
           {closed.length > 0 && (
             <>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Handled</h3>

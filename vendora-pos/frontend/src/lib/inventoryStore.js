@@ -163,6 +163,19 @@ export function batchExpiryInfo(batch, from = new Date()) {
   return expiryInfo({ expiry: batch.expiry, dateType: batch.dateType }, from);
 }
 
+/** Most-urgent expiry across the product's own date AND every dated batch (audit W3): callers that only
+ *  looked at p.expiry missed an expired batch. Returns an expiryInfo (with mustPull/status) or null. */
+export function worstExpiry(p, from = new Date()) {
+  const candidates = [];
+  if (p && p.expiry) { const ei = expiryInfo(p, from); if (ei) candidates.push(ei); }
+  for (const b of batchesOf(p)) {
+    if (b && b.expiry) { const ei = expiryInfo({ expiry: b.expiry, dateType: b.dateType }, from); if (ei) candidates.push(ei); }
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => (Number(b.mustPull) - Number(a.mustPull)) || (a.daysLeft - b.daysLeft));
+  return candidates[0];
+}
+
 /**
  * Earliest-expiry-first review rows across all products. Batched products contribute one row per
  * near/expired batch; unbatched products fall back to their single product-level date. Sorted

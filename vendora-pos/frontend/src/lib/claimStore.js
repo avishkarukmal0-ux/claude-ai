@@ -52,10 +52,17 @@ export function claimItemsFromDelivery(delivery) {
       if (l.issue === 'damaged') affected = Math.max(0, deliveredUnits(l) - acceptedUnits(l)) || deliveredUnits(l);
       else if (l.issue === 'missing') affected = Math.max(0, orderedUnits(l) - deliveredUnits(l));
       else affected = acceptedUnits(l); // wrong_price
-      return {
+      const base = {
         id: newId('ci'), name: l.name, barcode: l.barcode || '', productId: l.productId || null,
-        qty: affected, reason: l.issue, amount: r2(affected * perUnitCost(l)), photo: l.photo || null,
+        qty: affected, reason: l.issue, photo: l.photo || null,
       };
+      // Missing/damaged: you're owed the full value of those units. Wrong-price: you're only owed the
+      // OVERCHARGE (billed − agreed) per unit, so start at £0 with the billed price captured and prompt
+      // the owner to enter the agreed price in the claim (audit W8).
+      if (l.issue === 'wrong_price') {
+        return { ...base, unitBilled: r2(perUnitCost(l)), unitAgreed: null, amount: 0 };
+      }
+      return { ...base, amount: r2(affected * perUnitCost(l)) };
     });
 }
 
@@ -93,6 +100,26 @@ export function useClaims() {
     persistAll(load().map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c)));
   }, []);
 
+  /** Edit one claim item (e.g. enter the agreed price on a wrong-price line). For wrong_price we recompute
+   *  the claimed amount as the OVERCHARGE: max(0, billed − agreed) × qty (audit W8). */
+  const updateClaimItem = useCallback((claimId, itemId, patch) => {
+    persistAll(load().map((c) => {
+      if (c.id !== claimId) return c;
+      const items = (c.items || []).map((it) => {
+        if (it.id !== itemId) return it;
+        const merged = { ...it, ...patch };
+        if (merged.reason === 'wrong_price') {
+          const billed = Number(merged.unitBilled);
+          const agreed = Number(merged.unitAgreed);
+          merged.amount = (Number.isFinite(billed) && Number.isFinite(agreed))
+            ? r2(Math.max(0, billed - agreed) * (Number(merged.qty) || 0)) : 0;
+        }
+        return merged;
+      });
+      return { ...c, items, updatedAt: Date.now() };
+    }));
+  }, []);
+
   /** Advance the lifecycle, enforcing allowed transitions. */
   const advance = useCallback((id, to) => {
     persistAll(load().map((c) => {
@@ -108,5 +135,5 @@ export function useClaims() {
 
   const removeClaim = useCallback((id) => { persistAll(load().filter((c) => c.id !== id)); }, []);
 
-  return { claims, createFromDelivery, updateClaim, advance, removeClaim };
+  return { claims, createFromDelivery, updateClaim, updateClaimItem, advance, removeClaim };
 }

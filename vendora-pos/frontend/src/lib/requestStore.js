@@ -5,7 +5,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 
 const NAME = 'requests_v1';
-export const REQUEST_STATUSES = ['open', 'stocked', 'declined'];
+// Lifecycle (audit W15): open (waiting demand) → planned (added to the buy list) → stocked (actually
+// received/confirmed in) · or declined. "stocked" now means the item is really in, not just on the list.
+export const REQUEST_STATUSES = ['open', 'planned', 'stocked', 'declined'];
+const ACTIVE_STATUSES = ['open', 'planned']; // still-live demand
 
 function load() { const a = readJSON(NAME, []); return Array.isArray(a) ? a : []; }
 function persist(list) { return writeJSON(NAME, list); }
@@ -16,9 +19,10 @@ function newId() {
 const norm = (s) => (s || '').trim().toLowerCase();
 
 /** Open requests, most-requested first. */
+const rank = (st) => (st === 'open' ? 0 : st === 'planned' ? 1 : 2);
 export function sortRequests(list) {
   return [...list].sort((a, b) => {
-    const s = (a.status === 'open' ? 0 : 1) - (b.status === 'open' ? 0 : 1);
+    const s = rank(a.status) - rank(b.status);
     if (s) return s;
     if (b.count !== a.count) return b.count - a.count;
     return b.lastAt - a.lastAt;
@@ -45,7 +49,14 @@ export function useRequests() {
     const cur = load();
     const key = norm(name);
     if (!key) return null;
-    const idx = cur.findIndex((r) => r.status === 'open' && norm(r.name) === key);
+    // Re-asking preserves live demand: bump the existing open OR planned request instead of creating a
+    // duplicate (audit W15). A re-ask for a planned item also pulls it back to 'open' so it's visible again.
+    const idx = cur.findIndex((r) => ACTIVE_STATUSES.includes(r.status) && norm(r.name) === key);
+    if (idx >= 0 && cur[idx].status === 'planned') {
+      const next = cur.map((r, i) => (i === idx ? { ...r, status: 'open', count: (r.count || 1) + 1, lastAt: Date.now(), note: note || r.note } : r));
+      commit(next);
+      return next[idx];
+    }
     if (idx >= 0) {
       const next = cur.map((r, i) => (i === idx ? { ...r, count: (r.count || 1) + 1, lastAt: Date.now(), note: note ? note : r.note } : r));
       commit(next);

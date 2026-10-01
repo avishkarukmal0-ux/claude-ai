@@ -4,7 +4,7 @@ import {
   ArrowLeft, ScanLine, Keyboard, PackageCheck, Package2, Minus, Plus, Check, PackagePlus, Sparkles, Loader2,
 } from 'lucide-react';
 import BarcodeScanner, { barcodeScanSupported } from './BarcodeScanner';
-import { useInventory, margin } from '../../lib/inventoryStore';
+import { useInventory, margin, worstExpiry } from '../../lib/inventoryStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse } from '../../config/categories';
 import { lookupBarcode } from '../../lib/productLookup';
@@ -213,7 +213,13 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
       </div>
 
       {/* Sell one (quick) */}
-      <button type="button" onClick={() => { const r = inv.sellUnits(p.id, 1); if (r.ok) onSold(); else toast.error(r.error || 'Nothing in stock'); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 active:scale-[0.99]">
+      <button type="button" onClick={() => {
+        // Expiry safety (audit W3): never quietly sell a past use-by item; warn on a past best-before.
+        const ei = worstExpiry(p);
+        if (ei && ei.mustPull) { toast.error('Past use-by — pull from sale, don’t sell it'); return; }
+        if (ei && ei.status === 'expired' && !window.confirm('This is past its best-before date. Sell anyway?')) return;
+        const r = inv.sellUnits(p.id, 1); if (r.ok) onSold(); else toast.error(r.error || 'Nothing in stock');
+      }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 active:scale-[0.99]">
         <Minus className="h-4 w-4" /> Sell 1
       </button>
 

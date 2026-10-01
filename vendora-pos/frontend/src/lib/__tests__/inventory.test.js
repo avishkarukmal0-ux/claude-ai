@@ -1,7 +1,7 @@
 import React, { StrictMode } from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useInventory, margin, costKnown, normalisePackSize, matchBarcode, reconcileAllocations, markSold } from '../inventoryStore';
+import { useInventory, margin, costKnown, normalisePackSize, matchBarcode, reconcileAllocations, markSold, worstExpiry } from '../inventoryStore';
 import { salesUnits, inferredDepletionUnits } from '../movementStore';
 import { readJSON, writeJSON, setActiveWorkspace } from '../storage';
 
@@ -162,5 +162,17 @@ describe('inventory — explicit sales + stocktake typing', () => {
     const recs = movements();
     expect(salesUnits(recs, id)).toBe(0);
     expect(recs.filter((r) => r.type === 'stock_adjustment' && r.reason === 'stocktake').length).toBe(1);
+  });
+});
+
+describe('inventory — worstExpiry batch-aware (audit W3)', () => {
+  const now = new Date('2026-10-01');
+  it('flags an expired use-by BATCH even when the product-level date is fine', () => {
+    const p = { expiry: '2026-12-01', dateType: 'best-before', batches: [{ id: 'b', qty: 2, expiry: '2026-09-20', dateType: 'use-by' }] };
+    const ei = worstExpiry(p, now);
+    expect(ei.mustPull).toBe(true); // the expired use-by batch wins
+  });
+  it('returns null when nothing is dated', () => {
+    expect(worstExpiry({ qty: 5 }, now)).toBeNull();
   });
 });

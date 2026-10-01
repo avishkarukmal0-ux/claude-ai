@@ -71,3 +71,26 @@ describe('outcomes — actuals only, estimates separate', () => {
     expect(o.estimated.rescued).toBe(30);      // separate, not mixed into actuals
   });
 });
+
+describe('requestStore — planned lifecycle (audit W15)', () => {
+  it('a re-ask for a planned item reopens and bumps it instead of duplicating', () => {
+    const { result } = renderHook(() => useRequests());
+    act(() => { result.current.addRequest({ name: 'Oat milk' }); });
+    const id = result.current.requests[0].id;
+    act(() => { result.current.setStatus(id, 'planned'); });   // added to buy list
+    act(() => { result.current.addRequest({ name: 'oat milk' }); }); // asked again
+    const matches = result.current.requests.filter((r) => r.name.toLowerCase() === 'oat milk');
+    expect(matches).toHaveLength(1);                 // no duplicate
+    expect(matches[0].status).toBe('open');          // pulled back to open
+    expect(matches[0].count).toBe(2);                // demand preserved
+  });
+
+  it('a stocked item is terminal — re-asking creates fresh demand', () => {
+    const { result } = renderHook(() => useRequests());
+    act(() => { result.current.addRequest({ name: 'Yuzu' }); });
+    const id = result.current.requests[0].id;
+    act(() => { result.current.setStatus(id, 'stocked'); });
+    act(() => { result.current.addRequest({ name: 'Yuzu' }); });
+    expect(result.current.requests.filter((r) => r.name === 'Yuzu')).toHaveLength(2);
+  });
+});

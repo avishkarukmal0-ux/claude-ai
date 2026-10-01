@@ -8,7 +8,7 @@
 // Severity order: critical (legal / money-on-fire) → warn (about to cost you) →
 // info (worth doing today). We only ever surface the top few so it stays glanceable.
 
-import { expiryInfo, isLowStock, isSlowStock } from './inventoryStore';
+import { expiryInfo, worstExpiry, isLowStock, isSlowStock } from './inventoryStore';
 import { velocity, daysOfCover } from './movementStore';
 
 const qtyOf = (p) => Number(p.qty) || 0;
@@ -42,7 +42,7 @@ export function buildActions({ products = [], records = [], todayEntry = null, t
   }
 
   // 1) CRITICAL — hard-stop dates passed (use-by / medicine). Illegal to sell.
-  const mustPull = inStock.filter((p) => { const e = expiryInfo(p, now); return e && e.mustPull; });
+  const mustPull = inStock.filter((p) => { const e = worstExpiry(p, now); return e && e.mustPull; });
   if (mustPull.length) {
     actions.push({
       id: 'pull',
@@ -58,7 +58,7 @@ export function buildActions({ products = [], records = [], todayEntry = null, t
 
   // 2) WARN — expiring soon and still sellable → mark it down before it's binned.
   const expiringSoon = inStock.filter((p) => {
-    const e = expiryInfo(p, now);
+    const e = worstExpiry(p, now);
     return e && !e.mustPull && (e.status === 'soon' || e.status === 'expired') && e.daysLeft <= 3;
   });
   if (expiringSoon.length) {

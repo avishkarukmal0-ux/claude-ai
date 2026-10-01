@@ -66,3 +66,24 @@ describe('claims — lifecycle & honest amounts', () => {
     expect(nextStates('settled')).toEqual([]);
   });
 });
+
+describe('claims — wrong-price claims the overcharge (audit W8)', () => {
+  it('a wrong_price item starts at £0 with the billed price captured, then claims (billed − agreed) × qty', () => {
+    const delivery = {
+      id: 'd1', status: 'received', supplierName: 'Booker', reference: 'INV1',
+      lines: [{ ...blankLine(), name: 'Cola', qty: 10, unitCost: 2, issue: 'wrong_price', qtyMode: 'units', receivedQty: 10 }],
+    };
+    const items = claimItemsFromDelivery(delivery);
+    expect(items[0]).toMatchObject({ reason: 'wrong_price', unitBilled: 2, unitAgreed: null, amount: 0 });
+
+    const { result } = renderHook(() => useClaims());
+    let claim;
+    act(() => { claim = result.current.createFromDelivery(delivery); });
+    const item = result.current.claims[0].items[0];
+    act(() => { result.current.updateClaimItem(claim.id, item.id, { unitAgreed: 1.8 }); });
+    const updated = result.current.claims[0].items[0];
+    // Claims the OVERCHARGE (billed − agreed) × qty, NOT the full value (billed × qty).
+    expect(updated.amount).toBeCloseTo((2 - 1.8) * updated.qty, 2);
+    expect(updated.amount).toBeLessThan(2 * updated.qty);
+  });
+});

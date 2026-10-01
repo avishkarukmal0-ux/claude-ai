@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Flag, Send, AlertTriangle } from 'lucide-react';
-import { useInventory, isLowStock, expiryInfo } from '../../lib/inventoryStore';
+import { useInventory, isLowStock, worstExpiry } from '../../lib/inventoryStore';
 import { useSuggestions } from '../../lib/suggestionsStore';
 
 // Worker / staff view — what a staff member needs on shift: what's expiring,
@@ -12,7 +12,7 @@ export default function WorkerBoard({ onBack }) {
   const [note, setNote] = useState('');
 
   const expiring = useMemo(
-    () => products.map((p) => ({ p, info: expiryInfo(p) })).filter((x) => x.info && x.info.status !== 'ok').sort((a, b) => a.info.daysLeft - b.info.daysLeft),
+    () => products.map((p) => ({ p, info: worstExpiry(p) })).filter((x) => x.info && x.info.status !== 'ok').sort((a, b) => a.info.daysLeft - b.info.daysLeft),
     [products]
   );
   const low = useMemo(() => products.filter(isLowStock), [products]);

@@ -26,7 +26,7 @@ async function shareClaim(claim) {
 // Stage 5b — supplier claims. Raise from a delivery's flagged issues (with evidence photos),
 // then track it through to credit actually received. Nothing is sent automatically.
 export default function ClaimsView({ onBack }) {
-  const { claims, createFromDelivery, updateClaim, advance, removeClaim } = useClaims();
+  const { claims, createFromDelivery, updateClaim, updateClaimItem, advance, removeClaim } = useClaims();
   const { deliveries } = useDeliveries();
 
   const claimable = useMemo(() => deliveries.filter((d) => d.status === 'received'
@@ -77,10 +77,10 @@ export default function ClaimsView({ onBack }) {
       ) : (
         <>
           {open.length > 0 && (
-            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} advance={advance} removeClaim={removeClaim} />)}</ul></section>
+            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} removeClaim={removeClaim} />)}</ul></section>
           )}
           {done.length > 0 && (
-            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} advance={advance} removeClaim={removeClaim} />)}</ul></section>
+            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} removeClaim={removeClaim} />)}</ul></section>
           )}
         </>
       )}
@@ -90,7 +90,7 @@ export default function ClaimsView({ onBack }) {
 
 // Module-scope so it keeps a stable component identity across parent re-renders — defined inside the
 // parent, every keystroke created a NEW component type and remounted the card, dropping input focus (W9).
-function ClaimCard({ c, updateClaim, advance, removeClaim }) {
+function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
     const t = claimTotals(c);
     const meta = STATUS[c.status] || STATUS.draft;
     return (
@@ -103,10 +103,22 @@ function ClaimCard({ c, updateClaim, advance, removeClaim }) {
 
         <ul className="mb-2 space-y-1.5">
           {(c.items || []).map((i) => (
-            <li key={i.id} className="flex items-center gap-2 text-[12px]">
-              {i.photo ? <img src={i.photo} alt="" className="h-7 w-7 rounded object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded bg-gray-100 text-gray-400"><AlertTriangle className="h-3.5 w-3.5" /></span>}
-              <span className="min-w-0 flex-1 truncate text-gray-800">{i.name} <span className="text-gray-400">×{i.qty}</span> · {DELIVERY_ISSUES[i.reason]?.label || i.reason}</span>
-              <span className="tabular-nums text-gray-600">{money(i.amount)}</span>
+            <li key={i.id} className="text-[12px]">
+              <div className="flex items-center gap-2">
+                {i.photo ? <img src={i.photo} alt="" className="h-7 w-7 rounded object-cover" /> : <span className="flex h-7 w-7 items-center justify-center rounded bg-gray-100 text-gray-400"><AlertTriangle className="h-3.5 w-3.5" /></span>}
+                <span className="min-w-0 flex-1 truncate text-gray-800">{i.name} <span className="text-gray-400">×{i.qty}</span> · {DELIVERY_ISSUES[i.reason]?.label || i.reason}</span>
+                <span className="tabular-nums text-gray-600">{money(i.amount)}</span>
+              </div>
+              {/* Wrong-price line: enter the agreed £/unit so the claim asks for the OVERCHARGE, not the full value (W8). */}
+              {i.reason === 'wrong_price' && OPEN_CLAIM_STATUSES.includes(c.status) && (
+                <div className="mt-1 ml-9 flex items-center gap-2 text-[11px] text-gray-500">
+                  <span>billed {money(i.unitBilled)}/u</span>
+                  <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1">agreed £/u
+                    <input value={i.unitAgreed ?? ''} onChange={(e) => updateClaimItem(c.id, i.id, { unitAgreed: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" placeholder="0.00" className="w-14 border-none p-0 text-gray-900 focus:outline-none" />
+                  </label>
+                  {i.unitAgreed == null && <span className="text-warning-dark">enter agreed price to claim the difference</span>}
+                </div>
+              )}
             </li>
           ))}
         </ul>
