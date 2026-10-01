@@ -248,7 +248,7 @@ function ReconcileView({ invoice, onBack }) {
   function raise() {
     const items = discrepanciesToClaimItems(selected);
     if (!items.length) { toast('Nothing selected to claim'); return; }
-    const c = createClaim({ supplierId: invoice.supplierId, supplierName: invoice.supplierName, deliveryId: delivery.id, deliveryRef: delivery.reference || invoice.reference || '', items });
+    const c = createClaim({ supplierId: invoice.supplierId, supplierName: invoice.supplierName, deliveryId: delivery.id, deliveryRef: delivery.reference || invoice.reference || '', invoiceId: invoice.id, invoiceRef: invoice.reference || '', items });
     if (c) { toast.success('Claim drafted — review it in Supplier claims'); onBack(); }
     else toast.error('Couldn’t create the claim');
   }

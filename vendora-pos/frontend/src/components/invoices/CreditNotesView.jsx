@@ -12,7 +12,7 @@ const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
 const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
 
 export default function CreditNotesView({ onBack }) {
-  const { notes, saveNote, setAllocation, removeNote } = useCreditNotes();
+  const { notes, saveNote, setAllocation, removeNote, findDuplicate } = useCreditNotes();
   const { claims, applyCredit, removeCredit } = useClaims();
   const { suppliers } = useSuppliers();
   const [adding, setAdding] = useState(false);
@@ -31,7 +31,11 @@ export default function CreditNotesView({ onBack }) {
           <Plus className="h-4 w-4" /> Add credit note
         </button>
       )}
-      {adding && <AddForm suppliers={suppliers} onCancel={() => setAdding(false)} onSave={(d) => { const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save'); }} />}
+      {adding && <AddForm suppliers={suppliers} onCancel={() => setAdding(false)} onSave={(d) => {
+        const dup = findDuplicate(d);
+        if (dup && !window.confirm(`This looks like a duplicate of a credit note you already have (${dup.supplierName || 'supplier'} · ${dup.reference || 'no ref'} · £${(Number(dup.amount) || 0).toFixed(2)}). Save it anyway?`)) return;
+        const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save');
+      }} />}
 
       {notes.length === 0 && !adding ? (
         <div className="mt-6 flex flex-col items-center text-center">

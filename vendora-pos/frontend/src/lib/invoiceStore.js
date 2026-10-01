@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, read, write, removeKey, getActiveWorkspace } from './storage';
 import { matchBarcode } from './inventoryStore';
+import { round2 as r2, sumMoney } from './money';
 
 const NAME = 'invoices_v1';
 const FILES = 'invoice_files_v1'; // local-only (not in STORE_NAMES)
@@ -18,7 +19,6 @@ function newId(p = 'inv') {
   return `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
-const r2 = (v) => Math.round(n(v) * 100) / 100;
 
 // --- pack/unit normalisation (shared with reconciliation) ------------------
 /** Units in a line regardless of how it's expressed: cases × packSize, or a raw unit count. */
@@ -58,7 +58,7 @@ export function findDuplicateInvoice(inv, existing = load()) {
 
 export function invoiceTotal(inv) {
   if (n(inv.total) > 0) return r2(inv.total);
-  return r2((inv.lines || []).reduce((s, l) => s + lineTotal(l), 0));
+  return sumMoney((inv.lines || []).map((l) => lineTotal(l)));
 }
 
 // --- product matching (reuse the inventory barcode/name resolver) ----------

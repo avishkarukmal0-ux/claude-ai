@@ -8,6 +8,7 @@
 // told `configured:false`. Pure helpers (buildDigest / isDue / londonParts) are exported for DB-free tests.
 const config = require('../config');
 const logger = require('../utils/logger');
+const { round2, sumMoney } = require('../utils/money');
 const emailService = require('./emailService');
 const Account = require('../models/Account');
 const SyncBlob = require('../models/SyncBlob');
@@ -65,7 +66,7 @@ function claimTarget(c) {
   return (c.items || []).reduce((n, i) => n + (Number(i.amount) || 0), 0);
 }
 function claimOutstanding(c) {
-  return Math.max(0, (claimTarget(c) || 0) - (Number(c.receivedAmount) || 0));
+  return round2(Math.max(0, (claimTarget(c) || 0) - (Number(c.receivedAmount) || 0)));
 }
 
 /**
@@ -114,14 +115,14 @@ function buildDigest({ shopName, blobsByName = {}, prefs = {}, now = Date.now() 
     }
   }
 
-  const expiringOutstanding = overdueClaims.reduce((n, c) => n + c.outstanding, 0);
+  const expiringOutstanding = sumMoney(overdueClaims.map((c) => c.outstanding));
   const empty = expiring.length === 0 && overdueClaims.length === 0 && urgentTasks.length === 0;
 
   return {
     shopName: shopName || 'your shop',
     generatedAt: now,
     expiry: { count: expiring.length, items: expiring.slice(0, MAX_LIST) },
-    claims: { count: overdueClaims.length, outstanding: Math.round(expiringOutstanding * 100) / 100, items: overdueClaims.slice(0, MAX_LIST) },
+    claims: { count: overdueClaims.length, outstanding: expiringOutstanding, items: overdueClaims.slice(0, MAX_LIST) },
     tasks: { count: urgentTasks.length, items: urgentTasks.slice(0, MAX_LIST) },
     empty,
   };

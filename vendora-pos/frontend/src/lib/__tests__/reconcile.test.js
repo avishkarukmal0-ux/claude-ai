@@ -15,6 +15,27 @@ describe('reconcile — pack/unit normalisation', () => {
   });
 });
 
+describe('reconcile — source references + calculation detail (A1/A2)', () => {
+  it('every claimable discrepancy carries source doc + line refs and a calc detail', () => {
+    const delivery = { id: 'del_1', lines: [dl({ id: 'dln_1', barcode: '1', name: 'Cola', deliveredQty: 10, unitCost: 1 })] };
+    const invoice = { id: 'inv_1', reference: 'INV-99', lines: [il({ id: 'iln_1', barcode: '1', name: 'Cola', qty: 20, unitCost: 1.2 })] };
+    const { discrepancies } = reconcile({ delivery, invoice });
+    for (const d of discrepancies.filter((x) => x.claimReason)) {
+      expect(d.invoiceId).toBe('inv_1');
+      expect(d.invoiceRef).toBe('INV-99');
+      expect(d.deliveryId).toBe('del_1');
+      expect(d.invoiceLineId).toBe('iln_1');
+      expect(typeof d.detail).toBe('string');
+      expect(d.detail.length).toBeGreaterThan(0);
+    }
+    // shortage line matched a delivery line → carries its id; claim items keep the refs + detail.
+    const items = discrepanciesToClaimItems(discrepancies);
+    const shortItem = items.find((i) => i.reason === 'missing');
+    expect(shortItem).toMatchObject({ invoiceId: 'inv_1', invoiceRef: 'INV-99', invoiceLineId: 'iln_1', deliveryLineId: 'dln_1' });
+    expect(shortItem.detail).toContain('short');
+  });
+});
+
 describe('reconcile — discrepancy types', () => {
   it('shortage: billed for more units than delivered', () => {
     const delivery = { lines: [dl({ barcode: '1', name: 'Cola', deliveredQty: 24, unitCost: 1 })] };

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { DELIVERY_ISSUES, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost } from './deliveryStore';
 import { actorName } from './actor';
+import { round2 as r2, sumMoney, mul } from './money';
 
 const NAME = 'claims_v1';
 export const CLAIM_STATUSES = ['draft', 'submitted', 'acknowledged', 'approved', 'rejected', 'settled'];
@@ -20,7 +21,6 @@ function newId(p = 'cl') {
   try { if (crypto?.randomUUID) return `${p}_${crypto.randomUUID()}`; } catch { /* ignore */ }
   return `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
-const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Allowed forward transitions (keeps the lifecycle honest). */
 export function nextStates(status) {
@@ -36,7 +36,7 @@ export function nextStates(status) {
 export function claimTotals(claim) {
   const requested = claim.requestedAmount != null
     ? Number(claim.requestedAmount) || 0
-    : (claim.items || []).reduce((n, i) => n + (Number(i.amount) || 0), 0);
+    : sumMoney((claim.items || []).map((i) => i.amount));
   return {
     requested: r2(requested),
     approved: claim.approvedAmount == null ? null : r2(claim.approvedAmount),
@@ -63,7 +63,7 @@ export function claimItemsFromDelivery(delivery) {
       if (l.issue === 'wrong_price') {
         return { ...base, unitBilled: r2(perUnitCost(l)), unitAgreed: null, amount: 0 };
       }
-      return { ...base, amount: r2(affected * perUnitCost(l)) };
+      return { ...base, amount: mul(perUnitCost(l), affected) };
     });
 }
 
@@ -89,7 +89,7 @@ export function useClaims() {
       id: newId(), status: 'draft',
       supplierId: delivery.supplierId || null, supplierName: delivery.supplierName || '',
       deliveryId: delivery.id, deliveryRef: delivery.reference || '',
-      items, requestedAmount: r2(items.reduce((n, i) => n + (Number(i.amount) || 0), 0)),
+      items, requestedAmount: sumMoney(items.map((i) => i.amount)),
       approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
       raisedBy: actorName(),
       createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
@@ -99,15 +99,17 @@ export function useClaims() {
   }, []);
 
   /** Create a claim from pre-built items (e.g. reconciliation discrepancies) — same lifecycle/shape as
-   *  createFromDelivery so the existing claims workflow handles it. Items may omit id (assigned here). */
-  const createClaim = useCallback(({ supplierId = null, supplierName = '', deliveryId = null, deliveryRef = '', items = [] } = {}) => {
+   *  createFromDelivery so the existing claims workflow handles it. Items may omit id (assigned here).
+   *  Carries the source invoice reference (acceptance A1) alongside the delivery reference. */
+  const createClaim = useCallback(({ supplierId = null, supplierName = '', deliveryId = null, deliveryRef = '', invoiceId = null, invoiceRef = '', items = [] } = {}) => {
     const withIds = items.map((it) => ({ id: newId('ci'), photo: null, ...it }));
     if (!withIds.length) return null;
     const claim = {
       id: newId(), status: 'draft',
       supplierId: supplierId || null, supplierName: supplierName || '',
       deliveryId: deliveryId || null, deliveryRef: deliveryRef || '',
-      items: withIds, requestedAmount: r2(withIds.reduce((n, i) => n + (Number(i.amount) || 0), 0)),
+      invoiceId: invoiceId || null, invoiceRef: invoiceRef || '',
+      items: withIds, requestedAmount: sumMoney(withIds.map((i) => i.amount)),
       approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
       raisedBy: actorName(),
       createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
@@ -131,7 +133,7 @@ export function useClaims() {
       if (c.id !== claimId) return c;
       const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId); // replace, don't duplicate
       credits.push({ id: newId('cr'), creditNoteId, creditNoteRef, amount: amt, at: Date.now() });
-      const received = r2(credits.reduce((s, x) => s + (Number(x.amount) || 0), 0));
+      const received = sumMoney(credits.map((x) => x.amount));
       updated = {
         ...c, credits, receivedAmount: received, creditNoteRef: creditNoteRef || c.creditNoteRef || '',
         updatedAt: Date.now(),
@@ -147,7 +149,7 @@ export function useClaims() {
     persistAll(load().map((c) => {
       if (c.id !== claimId) return c;
       const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId);
-      const received = credits.length ? r2(credits.reduce((s, x) => s + (Number(x.amount) || 0), 0)) : null;
+      const received = credits.length ? sumMoney(credits.map((x) => x.amount)) : null;
       return { ...c, credits, receivedAmount: received, updatedAt: Date.now(), history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit-removed', creditNoteId }] };
     }));
   }, []);
@@ -164,7 +166,7 @@ export function useClaims() {
           const billed = Number(merged.unitBilled);
           const agreed = Number(merged.unitAgreed);
           merged.amount = (Number.isFinite(billed) && Number.isFinite(agreed))
-            ? r2(Math.max(0, billed - agreed) * (Number(merged.qty) || 0)) : 0;
+            ? mul(Math.max(0, billed - agreed), merged.qty) : 0;
         }
         return merged;
       });

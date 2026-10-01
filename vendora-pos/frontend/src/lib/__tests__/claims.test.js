@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useClaims, claimTotals, nextStates, claimItemsFromDelivery } from '../claimStore';
+import { sumMoney } from '../money';
 import { blankLine } from '../deliveryStore';
 import { setActiveWorkspace } from '../storage';
 
@@ -89,5 +90,21 @@ describe('claims — wrong-price claims the overcharge (audit W8)', () => {
     // Claims the OVERCHARGE (billed − agreed) × qty, NOT the full value (billed × qty).
     expect(updated.amount).toBeCloseTo((2 - 1.8) * updated.qty, 2);
     expect(updated.amount).toBeLessThan(2 * updated.qty);
+  });
+});
+
+describe('claimStore.createClaim — source refs + decimal-safe total (A1/A3)', () => {
+  it('stores invoice + delivery references and sums the requested amount in pence', () => {
+    const { result } = renderHook(() => useClaims());
+    const items = [
+      { name: 'A', qty: 1, reason: 'missing', amount: 0.1, invoiceLineId: 'iln_a', deliveryLineId: 'dln_a' },
+      { name: 'B', qty: 1, reason: 'missing', amount: 0.2, invoiceLineId: 'iln_b', deliveryLineId: 'dln_b' },
+    ];
+    let claim;
+    act(() => { claim = result.current.createClaim({ supplierName: 'Booker', deliveryId: 'del_1', deliveryRef: 'D-1', invoiceId: 'inv_1', invoiceRef: 'INV-1', items }); });
+    expect(claim).toMatchObject({ invoiceId: 'inv_1', invoiceRef: 'INV-1', deliveryId: 'del_1' });
+    expect(claim.requestedAmount).toBe(sumMoney([0.1, 0.2])); // 0.30, not 0.30000000000000004
+    expect(claim.requestedAmount).toBe(0.3);
+    expect(claim.items[0]).toMatchObject({ invoiceLineId: 'iln_a', deliveryLineId: 'dln_a' });
   });
 });

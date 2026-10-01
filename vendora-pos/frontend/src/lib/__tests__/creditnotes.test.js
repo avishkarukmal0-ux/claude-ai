@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useClaims } from '../claimStore';
-import { useCreditNotes, suggestClaims, claimOutstanding, remainingToAllocate } from '../creditNoteStore';
+import {
+  useCreditNotes, suggestClaims, claimOutstanding, remainingToAllocate,
+  creditNoteFingerprint, findDuplicateCreditNote,
+} from '../creditNoteStore';
 import { setActiveWorkspace } from '../storage';
 
 let ws = 0;
@@ -23,6 +26,17 @@ describe('creditNoteStore — outstanding + matching', () => {
     ];
     const out = suggestClaims({ supplierName: 'Booker', reference: 'INV-1', amount: 20 }, claims);
     expect(out.map((x) => x.claim.id)).toEqual(['a']); // only the matching, outstanding one
+  });
+});
+
+describe('creditNoteStore — duplicate detection (A8)', () => {
+  it('detects a duplicate credit note by supplier + ref + date + amount', () => {
+    const a = { id: 'cn_a', supplierName: 'Booker', reference: 'CN-1', date: '2026-10-01', amount: 20 };
+    const b = { id: 'cn_b', supplierName: 'booker', reference: ' CN-1 ', date: '2026-10-01', amount: 20 }; // same identity
+    const c = { id: 'cn_c', supplierName: 'Booker', reference: 'CN-2', date: '2026-10-01', amount: 20 }; // different ref
+    expect(creditNoteFingerprint(a)).toBe(creditNoteFingerprint(b));
+    expect(findDuplicateCreditNote(b, [a, c])).toMatchObject({ id: 'cn_a' });
+    expect(findDuplicateCreditNote(c, [a])).toBeNull();
   });
 });
 

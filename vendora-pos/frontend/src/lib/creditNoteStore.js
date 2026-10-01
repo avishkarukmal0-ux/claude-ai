@@ -4,6 +4,7 @@
 // Workspace-scoped, synced (metadata) like other stores.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
+import { round2 as r2, sumMoney } from './money';
 
 const NAME = 'credit_notes_v1';
 
@@ -13,18 +14,31 @@ function newId(p = 'cn') {
   try { if (crypto?.randomUUID) return `${p}_${crypto.randomUUID()}`; } catch { /* ignore */ }
   return `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
-const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const norm = (s) => (s || '').trim().toLowerCase();
 
 /** Total already allocated from a credit note, and what's left to allocate. */
-export function allocatedTotal(cn) { return r2((cn.allocations || []).reduce((s, a) => s + (Number(a.amount) || 0), 0)); }
+export function allocatedTotal(cn) { return sumMoney((cn.allocations || []).map((a) => a.amount)); }
 export function remainingToAllocate(cn) { return r2((Number(cn.amount) || 0) - allocatedTotal(cn)); }
+
+/** A stable fingerprint of a credit note's identity for duplicate detection (acceptance A8). */
+export function creditNoteFingerprint(cn) {
+  const sup = norm(cn.supplierName || cn.supplierId);
+  const ref = norm(cn.reference);
+  const day = cn.date ? new Date(cn.date).toISOString().slice(0, 10) : '';
+  const total = (Number(cn.amount) || 0).toFixed(2);
+  return `${sup}|${ref}|${day}|${total}`;
+}
+/** Find an already-stored credit note that looks like a duplicate of `cn` (same fingerprint, different id). */
+export function findDuplicateCreditNote(cn, existing = []) {
+  const fp = creditNoteFingerprint(cn);
+  return existing.find((x) => x.id !== cn.id && creditNoteFingerprint(x) === fp) || null;
+}
 
 /** Outstanding on a claim = approved (or requested) − already received. Only positive values can be credited. */
 export function claimOutstanding(claim) {
   const target = claim.approvedAmount != null ? Number(claim.approvedAmount)
     : (claim.requestedAmount != null ? Number(claim.requestedAmount)
-      : (claim.items || []).reduce((n, i) => n + (Number(i.amount) || 0), 0));
+      : sumMoney((claim.items || []).map((i) => i.amount)));
   const received = Number(claim.receivedAmount) || 0;
   return r2(Math.max(0, (Number(target) || 0) - received));
 }
@@ -89,7 +103,7 @@ export function useCreditNotes() {
     const cur = load().find((x) => x.id === noteId);
     if (!cur) return { ok: false, error: 'Credit note not found' };
     const others = (cur.allocations || []).filter((a) => a.claimId !== claimId);
-    const otherTotal = others.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const otherTotal = sumMoney(others.map((a) => a.amount));
     if (amt + otherTotal - (Number(cur.amount) || 0) > 0.005) {
       return { ok: false, error: `That exceeds the credit note. £${r2((Number(cur.amount) || 0) - otherTotal).toFixed(2)} left to allocate.` };
     }
@@ -99,7 +113,15 @@ export function useCreditNotes() {
     return res.ok ? { ok: true } : res;
   }, []);
 
-  const removeNote = useCallback((id) => commit(load().filter((x) => x.id !== id)), []);
+  /** Void a credit note. Returns the removed note (incl. its allocations) so the caller can REVERSE those
+   *  allocations on the affected claims, keeping received totals honest (acceptance A4). */
+  const removeNote = useCallback((id) => {
+    const note = load().find((x) => x.id === id) || null;
+    const res = commit(load().filter((x) => x.id !== id));
+    return res.ok ? { ok: true, note, claimIds: (note && note.allocations || []).map((a) => a.claimId) } : res;
+  }, []);
 
-  return { notes, saveNote, setAllocation, removeNote };
+  const findDuplicate = useCallback((cn) => findDuplicateCreditNote(cn, load()), []);
+
+  return { notes, saveNote, setAllocation, removeNote, findDuplicate };
 }
