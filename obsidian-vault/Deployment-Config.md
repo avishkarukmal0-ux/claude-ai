@@ -58,6 +58,33 @@ and no migration script to run:
   or remove the allocation; history is retained. Delete a stored invoice scan with **Delete file** while
   keeping the checked record.
 
+## Enabling the optional channels (step-by-step)
+
+These are **config/secret actions only** — the code is already deployed behind these flags. Nobody but the
+account holder can do them (third-party keys + the Render dashboard).
+
+### Email digest (#6)
+1. **Render → the backend service → Environment**, add:
+   - `NOTIFY_EMAIL_PROVIDER=sendgrid`
+   - `SENDGRID_API_KEY=<your SendGrid key>`  (create at sendgrid.com → API Keys; needs "Mail Send")
+   - `NOTIFY_FROM_EMAIL=<a verified sender>`  (verify it in SendGrid → Sender Authentication)
+   - `NOTIFY_RUN_TOKEN=<a long random string you generate>`
+   Redeploy. `GET /api/pwa-notify/prefs` then reports `configured:true`.
+2. **Scheduling — pick ONE:**
+   - *GitHub Action (recommended, already committed):* repo **Settings → Secrets and variables → Actions**,
+     add `PWA_API_BASE=https://vendora-api-5pyt.onrender.com` and `NOTIFY_RUN_TOKEN=<same value as on Render>`.
+     The hourly `.github/workflows/pwa-notify-digest.yml` then drives delivery; it skips safely until both
+     secrets exist. (Run it once manually from the Actions tab to test.)
+   - *In-process:* set `NOTIFY_CRON=true` on Render — only reliable while the dyno is awake (the free tier
+     sleeps), so the GitHub Action is the robust choice.
+3. In the app: **More → Notifications → Email digest** → turn on, set recipient/time/quiet hours.
+
+### OCR (#1 capture aid)
+1. **Render → Environment**, add `INVOICE_OCR_PROVIDER=ocrspace` and `OCR_SPACE_API_KEY=<your OCR.space key>`
+   (free key at ocr.space/ocrapi). Redeploy. `GET /api/pwa-invoice-ocr/status` then reports `configured:true`.
+2. No app change — the capture screen starts showing scanned text + "Fill lines from this text" (still
+   review + commit). With no key it stays manual entry (`configured:false`), never fabricated.
+
 ## Verification commands (operator)
 
 - Frontend: `cd vendora-pos/frontend && npm run build && npm run test`.

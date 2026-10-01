@@ -1,0 +1,48 @@
+name: PWA notify digest
+
+# Reliable, not-app-open-dependent trigger for the PWA daily email digest (acceptance #6). GitHub's
+# scheduler POSTs to the backend's /api/pwa-notify/run every hour; the backend decides per account whether a
+# digest is actually due (send window, quiet hours, once-per-day guard), so hourly pings are safe and cheap.
+#
+# This is OFF until you add two repository secrets (Settings → Secrets and variables → Actions):
+#   PWA_API_BASE       e.g. https://vendora-api-5pyt.onrender.com   (no trailing slash)
+#   NOTIFY_RUN_TOKEN   the same secret you set as NOTIFY_RUN_TOKEN on the Render backend
+# Until both are set the job logs a skip and exits 0 (never fails the repo). The email channel itself also
+# needs NOTIFY_EMAIL_PROVIDER=sendgrid + SENDGRID_API_KEY on Render — otherwise /run reports configured:false
+# and sends nothing. See obsidian-vault/Deployment-Config.md.
+
+on:
+  schedule:
+    - cron: '0 * * * *'      # hourly (UTC); the backend gates to each account's local send window
+  workflow_dispatch: {}       # allow a manual run from the Actions tab
+
+# Avoid overlapping runs if one is slow.
+concurrency:
+  group: pwa-notify-digest
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger due digests
+        env:
+          BASE: ${{ secrets.PWA_API_BASE }}
+          TOKEN: ${{ secrets.NOTIFY_RUN_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ] || [ -z "${TOKEN:-}" ]; then
+            echo "PWA_API_BASE or NOTIFY_RUN_TOKEN not set — skipping. Add both repo secrets to enable."
+            exit 0
+          fi
+          code=$(curl -sS -m 60 -o /tmp/resp.json -w "%{http_code}" \
+            -X POST "${BASE%/}/api/pwa-notify/run" \
+            -H "x-notify-token: ${TOKEN}")
+          echo "HTTP ${code}"
+          # Don't print the body blindly (keep it terse); show it only on failure for debugging.
+          if [ "${code}" != "200" ]; then
+            echo "Digest run did not return 200:"; cat /tmp/resp.json || true
+            exit 1
+          fi
+          echo "Digest run OK."
