@@ -42,7 +42,55 @@ export default function ClaimsView({ onBack }) {
     else toast('No claimable issues on that delivery');
   }
 
-  function ClaimCard({ c }) {
+  return (
+    <div>
+      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+        <ArrowLeft className="h-4 w-4" /> Home
+      </button>
+      <h2 className="mb-1 text-base font-bold text-gray-900">Supplier claims</h2>
+      <p className="mb-4 text-xs text-gray-400">Recover credit for missing, damaged or wrong-priced goods — evidenced by your delivery photos. You send it; we track it.</p>
+
+      {claimable.length > 0 && (
+        <section className="mb-5">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Deliveries with issues</h3>
+          <ul className="space-y-2">
+            {claimable.map((d) => (
+              <li key={d.id} className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 shadow-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'}{d.reference && ` · ${d.reference}`}</span>
+                  <span className="block text-[11px] text-gray-500">{(d.lines || []).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable).length} issue(s) to claim</span>
+                </span>
+                <button type="button" onClick={() => raise(d)} className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {open.length === 0 && done.length === 0 && claimable.length === 0 ? (
+        <div className="mt-6 flex flex-col items-center text-center">
+          <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Receipt className="h-7 w-7" strokeWidth={1.75} /></span>
+          <p className="text-sm font-semibold text-gray-900">No claims yet</p>
+          <p className="mt-1 max-w-xs text-sm text-gray-500">When a delivery has missing or damaged goods, flag it on the Scan tab and raise a claim here.</p>
+        </div>
+      ) : (
+        <>
+          {open.length > 0 && (
+            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} advance={advance} removeClaim={removeClaim} />)}</ul></section>
+          )}
+          {done.length > 0 && (
+            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} advance={advance} removeClaim={removeClaim} />)}</ul></section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Module-scope so it keeps a stable component identity across parent re-renders — defined inside the
+// parent, every keystroke created a NEW component type and remounted the card, dropping input focus (W9).
+function ClaimCard({ c, updateClaim, advance, removeClaim }) {
     const t = claimTotals(c);
     const meta = STATUS[c.status] || STATUS.draft;
     return (
@@ -98,50 +146,4 @@ export default function ClaimsView({ onBack }) {
         </div>
       </li>
     );
-  }
-
-  return (
-    <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
-      <h2 className="mb-1 text-base font-bold text-gray-900">Supplier claims</h2>
-      <p className="mb-4 text-xs text-gray-400">Recover credit for missing, damaged or wrong-priced goods — evidenced by your delivery photos. You send it; we track it.</p>
-
-      {claimable.length > 0 && (
-        <section className="mb-5">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Deliveries with issues</h3>
-          <ul className="space-y-2">
-            {claimable.map((d) => (
-              <li key={d.id} className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 shadow-sm">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'}{d.reference && ` · ${d.reference}`}</span>
-                  <span className="block text-[11px] text-gray-500">{(d.lines || []).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable).length} issue(s) to claim</span>
-                </span>
-                <button type="button" onClick={() => raise(d)} className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {open.length === 0 && done.length === 0 && claimable.length === 0 ? (
-        <div className="mt-6 flex flex-col items-center text-center">
-          <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Receipt className="h-7 w-7" strokeWidth={1.75} /></span>
-          <p className="text-sm font-semibold text-gray-900">No claims yet</p>
-          <p className="mt-1 max-w-xs text-sm text-gray-500">When a delivery has missing or damaged goods, flag it on the Scan tab and raise a claim here.</p>
-        </div>
-      ) : (
-        <>
-          {open.length > 0 && (
-            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} />)}</ul></section>
-          )}
-          {done.length > 0 && (
-            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} />)}</ul></section>
-          )}
-        </>
-      )}
-    </div>
-  );
 }

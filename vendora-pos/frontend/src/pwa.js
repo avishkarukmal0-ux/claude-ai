@@ -56,6 +56,18 @@ export function registerServiceWorker() {
         // Nudge the browser to look for a newer sw.js on each load.
         try { registration.update(); } catch { /* ignore */ }
 
+        // Tell the active worker the exact (hashed) JS/CSS this page loaded, so it can precache them for
+        // offline use — a fresh install opened offline would otherwise have the shell but no assets.
+        try {
+          const sw = navigator.serviceWorker.controller;
+          if (sw) {
+            const urls = [...document.querySelectorAll('script[src], link[rel="stylesheet"][href]')]
+              .map((el) => el.src || el.href)
+              .filter((u) => u && u.startsWith(self.location.origin));
+            if (urls.length) sw.postMessage({ type: 'CACHE_ASSETS', urls });
+          }
+        } catch { /* best-effort warming */ }
+
         // An update may already be sitting waiting from a previous visit — offer it now.
         if (registration.waiting && navigator.serviceWorker.controller) {
           promptRefresh(registration.waiting);

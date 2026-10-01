@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v3';
+const CACHE_VERSION = 'vendora-v4';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -46,7 +46,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  const data = event.data;
+  if (data === 'SKIP_WAITING') { self.skipWaiting(); return; }
+  // The page sends the exact (hashed) JS/CSS it just loaded so we can precache them into the runtime
+  // cache right after first successful load — otherwise a fresh install opened offline would have the
+  // shell HTML but none of its hashed assets (audit: offline shell doesn't precache built JS/CSS).
+  if (data && data.type === 'CACHE_ASSETS' && Array.isArray(data.urls)) {
+    event.waitUntil(
+      caches.open(RUNTIME_CACHE).then((cache) => Promise.all(
+        data.urls.map((u) => cache.match(u).then((hit) => (hit ? null : cache.add(u).catch(() => {}))))
+      )),
+    );
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -66,8 +77,9 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(SHELL_CACHE).then((c) => c.put('/index.html', copy));
+          // Only cache a GOOD shell — never store an error page (404/500) as the offline fallback
+          // (audit: cached shell could point to a non-OK response).
+          if (res && res.ok) { const copy = res.clone(); caches.open(SHELL_CACHE).then((c) => c.put('/index.html', copy)); }
           return res;
         })
         .catch(() => caches.match('/index.html').then((r) => r || caches.match('/')))
