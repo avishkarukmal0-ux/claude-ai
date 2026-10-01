@@ -48,13 +48,15 @@ opaque JSON string the client already keeps — the server versions it, never pa
 
 ## Verification
 - Backend: app boots; `test:unit` 50/50; new `pwaSync.integration.test.js` (9 tests, DB-gated) SKIPS
-  cleanly without `VENDORA_TEST_URI`. **Needs a run against `vendora_test` on the founder's PC**
-  (`npm run test:pwa-sync`, like pwa-auth) to confirm end-to-end — not runnable in this sandbox (no Mongo).
+  cleanly without `VENDORA_TEST_URI`. **CONFIRMED 9/9 against the live `vendora_test` Atlas cluster on the
+  founder's PC (2026-10-01)** — `npm run test:pwa-sync`. (Gotcha that run surfaced: Atlas IP allow-list
+  must include the founder's current IP; home IPs rotate, so re-add "Current IP" in Atlas → Network Access
+  if a future run fails with `MongooseServerSelectionError`.)
 - Frontend: full suite **121/121** (+7 new `sync.test.js`: bootstrap server-wins, upload-new, push edit,
   pull newer, conflict adopt-server, plus session/guest guards). Build clean.
 
 ## Follow-ups
-- Run the DB-gated sync suite on the founder's PC.
+- ~~Run the DB-gated sync suite on the founder's PC.~~ ✅ Done 2026-10-01 — 9/9 against `vendora_test`.
 - Optional later: surface a one-time "updated from another device" toast; per-store conflict UI if a
   pilot shop actually runs two active devices; delete-propagation (currently a cleared store pushes an
   empty value rather than a tombstone — fine for the current stores).
