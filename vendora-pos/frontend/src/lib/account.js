@@ -76,9 +76,20 @@ function announce() { try { window.dispatchEvent(new CustomEvent(SESSION_EVENT))
 export function currentSession() { return loadSession(); }
 export function isLoggedIn() { return !!(loadSession() && loadSession().token); }
 export function currentShop() { const s = loadSession(); return s ? s.shop || null : null; }
+// Who is signed in, and what they're allowed to do. Guest/legacy sessions have no role → treated as the
+// owner of their on-device workspace (there's nobody else). The REAL permission guard is server-side
+// (pwaSyncService): this role only drives which screens the app shows.
+export function currentRole() { const s = loadSession(); return (s && s.role) || 'owner'; }
+export function currentMember() { const s = loadSession(); return (s && s.member) || null; }
 
 function normalize(d) {
-  return { token: d.token, refreshToken: d.refreshToken || null, shop: d.shop || d.store || null };
+  return {
+    token: d.token,
+    refreshToken: d.refreshToken || null,
+    shop: d.shop || d.store || null,
+    role: d.role || 'owner',
+    member: d.member || null,
+  };
 }
 /** Persist a session and switch the active workspace to the signed-in shop. */
 function activate(session) {
@@ -106,7 +117,11 @@ export async function refresh() {
   // or cross-contaminate it (audit: a pending refresh could restore a logged-out/other account).
   const cur = loadSession();
   if (!cur || cur.refreshToken !== s.refreshToken) throw new Error('session-changed');
-  const next = { ...cur, token: data.token };
+  // Adopt the role the server returns — the owner may have changed it (e.g. promoted staff to manager),
+  // and the member subobject is kept in step so the UI gates on the live role.
+  const role = data.role || cur.role || 'owner';
+  const member = cur.member ? { ...cur.member, role } : cur.member;
+  const next = { ...cur, token: data.token, role, member };
   saveSession(next);
   announce();
   return next;
@@ -148,5 +163,11 @@ export function useSession() {
       window.removeEventListener('storage', refreshState);
     };
   }, []);
-  return { session, shop: session ? session.shop : null, loggedIn: !!(session && session.token) };
+  return {
+    session,
+    shop: session ? session.shop : null,
+    role: (session && session.role) || 'owner',
+    member: (session && session.member) || null,
+    loggedIn: !!(session && session.token),
+  };
 }

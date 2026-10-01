@@ -12,8 +12,8 @@ All mounted under `/api` in `src/routes/index.js`. Public routes first, then `au
 ## PWA (always mounted — the live product)
 | Mount | File | Gate | Purpose |
 |---|---|---|---|
-| `/pwa-auth` | `pwaAuthRoutes.js` | public | owner accounts: `register`, `login`, `refresh`, `GET /me` — `typ:'pwa'` JWTs |
-| `/pwa-sync` | `pwaSyncRoutes.js` | PWA access token | cross-device sync: `GET /pull`, `POST /push` — per-store `{value,rev,mtime}` blobs, scoped to the account (infra Stage 3). See [[2026-09-30-Cross-Device-Sync]] |
+| `/pwa-auth` | `pwaAuthRoutes.js` | public (+ owner-gated staff routes) | owner accounts: `register`, `login` (owner **or** staff member), `refresh`, `GET /me` (→ shop+role+member) — `typ:'pwa'` JWTs carrying `role`/`mid`/`name`. Owner-only staff admin: `GET/POST /staff`, `PATCH/DELETE /staff/:id`. See [[2026-10-01-Staff-Access]] |
+| `/pwa-sync` | `pwaSyncRoutes.js` | PWA access token | cross-device sync: `GET /pull`, `POST /push` — per-store `{value,rev,mtime}` blobs, scoped to the account (infra Stage 3). **Role-enforced:** staff can't write/read financial stores (`takings_v1`,`claims_v1`,`credit_notes_v1`,`invoices_v1`) — push returns them in `rejected`, pull omits them. See [[2026-09-30-Cross-Device-Sync]] · [[2026-10-01-Staff-Access]] |
 | `/pwa-lookup` | `pwaLookupRoutes.js` | PWA access token | barcode auto-fill: `GET /:barcode` → `{found,name,category,brand}` via an Open Food Facts proxy (server-side). Name/category only — never shop-specific fields. See [[2026-10-01-Scan-Autofill-Lookup]] |
 | `/pwa-invoice-ocr` | `pwaInvoiceOcrRoutes.js` | PWA access token | optional invoice OCR (off unless `INVOICE_OCR_PROVIDER`+key set): `GET /status` → `{configured}`, `POST /` `{dataUrl}` → `{configured, text?}` (raw text only, never fabricated structured fields). See [[2026-10-01-Invoice-Mandate-P0-P1.1]] |
 

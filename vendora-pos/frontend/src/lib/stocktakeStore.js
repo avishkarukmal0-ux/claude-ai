@@ -6,6 +6,7 @@
 // store only holds the session and computes the maths.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, removeKey } from './storage';
+import { actorName } from './actor';
 
 const S_KEY = 'stocktake_v1';          // active session (logical name)
 const H_KEY = 'stocktake_history_v1';  // past summaries (logical name)
@@ -133,6 +134,7 @@ export function useStocktake() {
     const entry = {
       id: newId('h'),
       name: meta.name || 'Stock count',
+      by: meta.by || actorName(),
       startedAt: meta.startedAt || Date.now(),
       finishedAt: Date.now(),
       itemsCounted: summary.itemsCounted,

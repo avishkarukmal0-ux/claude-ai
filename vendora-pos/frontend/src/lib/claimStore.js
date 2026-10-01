@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { DELIVERY_ISSUES, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost } from './deliveryStore';
+import { actorName } from './actor';
 
 const NAME = 'claims_v1';
 export const CLAIM_STATUSES = ['draft', 'submitted', 'acknowledged', 'approved', 'rejected', 'settled'];
@@ -90,6 +91,7 @@ export function useClaims() {
       deliveryId: delivery.id, deliveryRef: delivery.reference || '',
       items, requestedAmount: r2(items.reduce((n, i) => n + (Number(i.amount) || 0), 0)),
       approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
+      raisedBy: actorName(),
       createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
     };
     persistAll([claim, ...load()]);
@@ -107,6 +109,7 @@ export function useClaims() {
       deliveryId: deliveryId || null, deliveryRef: deliveryRef || '',
       items: withIds, requestedAmount: r2(withIds.reduce((n, i) => n + (Number(i.amount) || 0), 0)),
       approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
+      raisedBy: actorName(),
       createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
     };
     persistAll([claim, ...load()]);

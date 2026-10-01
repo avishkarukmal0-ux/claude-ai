@@ -5,6 +5,7 @@
 // every edit so an interruption never loses work. Cases↔units conversion is explicit.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
+import { actorName } from './actor';
 
 const NAME = 'deliveries_v1';
 
@@ -121,7 +122,10 @@ export function useDeliveries() {
   }, []);
 
   const markReceived = useCallback((id) => {
-    const next = load().map((d) => (d.id === id ? { ...d, status: 'received', receivedAt: Date.now(), updatedAt: Date.now() } : d));
+    const who = actorName();
+    const next = load().map((d) => (d.id === id
+      ? { ...d, status: 'received', receivedAt: Date.now(), receivedBy: d.receivedBy || who, updatedAt: Date.now() }
+      : d));
     persist(next); setDeliveries(next);
   }, []);
 

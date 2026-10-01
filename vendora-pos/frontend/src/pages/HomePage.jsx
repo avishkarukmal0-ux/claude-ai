@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp,
+  FileSpreadsheet, TrendingUp, UserCog,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -37,7 +37,9 @@ import InvoiceCaptureView from '../components/invoices/InvoiceCaptureView';
 import CreditNotesView from '../components/invoices/CreditNotesView';
 import PriceHistoryView from '../components/invoices/PriceHistoryView';
 import WeeklyReportView from '../components/report/WeeklyReportView';
-import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
+import { ACCOUNTS_ENABLED, isLoggedIn, useSession } from '../lib/account';
+import { canSeeScreen, can } from '../lib/permissions';
+import StaffView from '../components/account/StaffView';
 import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -54,6 +56,8 @@ function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1
  */
 export default function HomePage() {
   const saved = getSavedShopType();
+  const { role } = useSession(); // 'owner' for guest/accounts-off; 'manager'/'staff' for signed-in members
+  const isStaff = role === 'staff';
   const [tab, setTab] = useState('today');
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
@@ -121,7 +125,15 @@ export default function HomePage() {
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
-        {/* Full-page workflow screens */}
+        {/* Full-page workflow screens. Money/cost + staff-admin screens are role-gated (defence in depth —
+            staff never see the entry tiles either). The real guard is server-side. */}
+        {screen && !canSeeScreen(role, screen) && (
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm">
+            <p className="text-sm font-semibold text-gray-700">Not available for your role</p>
+            <p className="mt-1 text-xs text-gray-400">This section is for the shop owner or a manager.</p>
+            <button type="button" onClick={() => setScreen(null)} className="mt-3 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white">Back</button>
+          </div>
+        )}
         {screen === 'receive' && <DeliveryReceivingView />}
         {screen === 'waste' && <WasteView onBack={() => setScreen(null)} />}
         {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
@@ -129,24 +141,25 @@ export default function HomePage() {
         {screen === 'stocktake' && <StocktakeView onBack={() => setScreen(null)} />}
         {screen === 'refill' && <RefillView onBack={() => setScreen(null)} />}
         {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
-        {screen === 'claims' && <ClaimsView onBack={() => setScreen(null)} />}
-        {screen === 'price-alerts' && <PriceAlertsView onBack={() => setScreen(null)} />}
+        {screen === 'claims' && canSeeScreen(role, 'claims') && <ClaimsView onBack={() => setScreen(null)} />}
+        {screen === 'price-alerts' && canSeeScreen(role, 'price-alerts') && <PriceAlertsView onBack={() => setScreen(null)} />}
         {screen === 'tasks' && <TasksView onBack={() => setScreen(null)} />}
         {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
         {screen === 'suggestions' && <SuggestionsInbox onBack={() => setScreen(null)} />}
         {screen === 'suppliers' && <SuppliersView onBack={() => setScreen(null)} familyId={saved.familyId} />}
-        {screen === 'takings' && <TakingsView onBack={() => setScreen(null)} />}
+        {screen === 'takings' && canSeeScreen(role, 'takings') && <TakingsView onBack={() => setScreen(null)} />}
         {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
         {screen === 'requests' && <RequestsView onBack={() => setScreen(null)} />}
-        {screen === 'outcomes' && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
+        {screen === 'outcomes' && canSeeScreen(role, 'outcomes') && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
         {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
-        {screen === 'invoices' && <InvoiceCaptureView onBack={() => setScreen(null)} />}
-        {screen === 'credit-notes' && <CreditNotesView onBack={() => setScreen(null)} />}
-        {screen === 'price-history' && <PriceHistoryView onBack={() => setScreen(null)} />}
-        {screen === 'weekly-report' && <WeeklyReportView onBack={() => setScreen(null)} />}
-        {screen === 'overview' && (
+        {screen === 'invoices' && canSeeScreen(role, 'invoices') && <InvoiceCaptureView onBack={() => setScreen(null)} />}
+        {screen === 'credit-notes' && canSeeScreen(role, 'credit-notes') && <CreditNotesView onBack={() => setScreen(null)} />}
+        {screen === 'price-history' && canSeeScreen(role, 'price-history') && <PriceHistoryView onBack={() => setScreen(null)} />}
+        {screen === 'weekly-report' && canSeeScreen(role, 'weekly-report') && <WeeklyReportView onBack={() => setScreen(null)} />}
+        {screen === 'staff-admin' && canSeeScreen(role, 'staff-admin') && <StaffView onBack={() => setScreen(null)} />}
+        {screen === 'overview' && canSeeScreen(role, 'overview') && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
 
@@ -221,11 +234,11 @@ export default function HomePage() {
             <HubTile icon={ShoppingCart} accent={accent} label="Buy list" desc="Low stock → cash-&-carry list" onClick={() => setScreen('reorder')} />
             <HubTile icon={Truck} accent={accent} label="Orders" desc="Track what you’ve ordered" onClick={() => setScreen('orders')} />
             <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />
-            <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />
-            <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />
-            <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />
-            <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />
-            <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />
+            {!isStaff && <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />}
+            {!isStaff && <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />}
+            {!isStaff && <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />}
+            {!isStaff && <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />}
+            {!isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
             <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
           </Hub>
         )}
@@ -233,12 +246,14 @@ export default function HomePage() {
         {/* ── MORE ── */}
         {!screen && tab === 'more' && (
           <div className="space-y-5">
-            <MoreGroup title="Money">
-              <Row icon={Coins} label="Takings & cash-up" onClick={() => setScreen('takings')} />
-              <Row icon={LayoutDashboard} label="Owner glance" onClick={() => setScreen('overview')} />
-              <Row icon={CalendarClock} label="This month" sub="Actual credits, tasks & coverage" onClick={() => setScreen('outcomes')} />
-              <Row icon={FileSpreadsheet} label="Weekly report" sub="Checking, waste, claims & price changes" onClick={() => setScreen('weekly-report')} />
-            </MoreGroup>
+            {!isStaff && (
+              <MoreGroup title="Money">
+                <Row icon={Coins} label="Takings & cash-up" onClick={() => setScreen('takings')} />
+                <Row icon={LayoutDashboard} label="Owner glance" onClick={() => setScreen('overview')} />
+                <Row icon={CalendarClock} label="This month" sub="Actual credits, tasks & coverage" onClick={() => setScreen('outcomes')} />
+                <Row icon={FileSpreadsheet} label="Weekly report" sub="Checking, waste, claims & price changes" onClick={() => setScreen('weekly-report')} />
+              </MoreGroup>
+            )}
             <MoreGroup title="Team">
               <Row icon={ClipboardList} label="Team tasks" onClick={() => setScreen('tasks')} badge={taskExceptions} />
               <Row icon={Users} label="Staff view" onClick={() => setScreen('worker')} />
@@ -253,6 +268,9 @@ export default function HomePage() {
             <MoreGroup title="Settings">
               <RowLink to="/" icon={Settings} label="Change shop type" />
               {ACCOUNTS_ENABLED && <RowLink to="/account" icon={LogIn} label="Your shop account" />}
+              {ACCOUNTS_ENABLED && isLoggedIn() && can(role, 'manageStaff') && (
+                <Row icon={UserCog} label="Staff access" sub="Give your team their own logins" onClick={() => setScreen('staff-admin')} />
+              )}
               {ACCOUNTS_ENABLED && isLoggedIn() && <SyncStatus />}
             </MoreGroup>
             <p className="px-1 text-center text-xs text-gray-400">Set up as {shopLabel} · Vendora</p>

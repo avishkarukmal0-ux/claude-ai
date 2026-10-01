@@ -149,6 +149,7 @@ export async function syncNow() {
     const adoptions = [];      // { name, rev, mtime, keepDirty? } (value already written to storage)
     const applied = [];        // { name, rev, sentMtime }
     const conflicts = [];      // { name, rev, mtime } (value already written to storage)
+    const rejected = [];       // names the server refused for this role (financial stores for staff)
     const adopted = new Set(); // stores we took from the server this run — never push them back
     let writeFailed = false;
 
@@ -204,6 +205,9 @@ export async function syncNow() {
         if (r && r.ok) conflicts.push({ name: c.name, rev: c.rev, mtime: c.mtime });
         else writeFailed = true;
       }
+      // Stores this role isn't allowed to write (backend-enforced). Stop pushing them so sync doesn't
+      // retry forever; the UI never lets this role edit them in the first place.
+      for (const rj of res.rejected || []) rejected.push(rj.name);
     }
 
     // 3) MERGE into a FRESH copy of meta so anything the user changed during the requests survives.
@@ -222,6 +226,8 @@ export async function syncNow() {
       else fresh[a.name] = { rev: a.rev, mtime: cur.mtime || a.sentMtime || Date.now(), dirty: false };
     }
     for (const c of conflicts) fresh[c.name] = { rev: c.rev, mtime: c.mtime, dirty: false };
+    // Clear dirty on role-rejected stores so we don't keep re-sending a write the server will always refuse.
+    for (const name of rejected) { const cur = fresh[name] || {}; fresh[name] = { ...cur, dirty: false }; }
     fresh.__boot = true;
     saveMeta(ws, fresh);
 

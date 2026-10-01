@@ -17,6 +17,7 @@ const dbTest = URI ? test : test.skip;
 
 let app;
 let Account;
+let Member;
 let SyncBlob;
 let token;
 let accountId;
@@ -33,7 +34,9 @@ beforeAll(async () => {
   await mongoose.connect(URI);
   app = require('../app');
   Account = require('../models/Account');
+  Member = require('../models/Member');
   SyncBlob = require('../models/SyncBlob');
+  await Member.deleteMany({ email: /pwa-sync-test/i });
   await Account.deleteMany({ email: /pwa-sync-test/i });
   const s = await registerAndLogin();
   token = s.token;
@@ -43,6 +46,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (!URI) return;
   if (SyncBlob && accountId) await SyncBlob.deleteMany({ account: accountId });
+  if (Member) await Member.deleteMany({ email: /pwa-sync-test/i });
   if (Account) await Account.deleteMany({ email: /pwa-sync-test/i });
   if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
 });
@@ -123,5 +127,61 @@ describe('PWA sync — /api/pwa-sync', () => {
     expect(res.status).toBe(200);
     expect(res.body.blobs).toEqual([]); // isolated — sees none of the first account's data
     await SyncBlob.deleteMany({ account: other.id });
+  });
+});
+
+describe('PWA sync — role-based store access (staff)', () => {
+  let staffToken;
+  let ownerToken;
+  let shopId;
+
+  // A dedicated owner + staff member so we don't disturb the main suite's blobs.
+  beforeAll(async () => {
+    if (!URI) return;
+    const owner = await registerAndLogin();
+    ownerToken = owner.token;
+    shopId = owner.id;
+    const email = `pwa-sync-test+staff${Date.now()}@example.com`;
+    await request(app).post('/api/pwa-auth/staff').set('Authorization', `Bearer ${ownerToken}`)
+      .send({ email, name: 'Floor Staff', role: 'staff', password: 'staffpass1' });
+    const login = await request(app).post('/api/pwa-auth/login').send({ email, password: 'staffpass1' });
+    staffToken = login.body.token;
+  });
+
+  dbTest('staff can push an operational store', async () => {
+    const res = await request(app).post('/api/pwa-sync/push').set('Authorization', `Bearer ${staffToken}`)
+      .send({ changes: [{ name: 'stocktake_v1', value: '[]', baseRev: 0, mtime: 10 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.applied).toEqual([{ name: 'stocktake_v1', rev: 1 }]);
+    expect(res.body.rejected).toEqual([]);
+  });
+
+  dbTest('staff cannot push a financial store — it is rejected, not applied', async () => {
+    const res = await request(app).post('/api/pwa-sync/push').set('Authorization', `Bearer ${staffToken}`)
+      .send({ changes: [{ name: 'takings_v1', value: '[{"cash":500}]', baseRev: 0, mtime: 20 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.applied).toEqual([]);
+    expect(res.body.rejected).toEqual([{ name: 'takings_v1', reason: 'forbidden' }]);
+    // And nothing was written for that store.
+    const blob = await SyncBlob.findOne({ account: shopId, name: 'takings_v1' });
+    expect(blob).toBeNull();
+  });
+
+  dbTest('staff pull omits financial stores the owner wrote', async () => {
+    // Owner writes a financial store.
+    await request(app).post('/api/pwa-sync/push').set('Authorization', `Bearer ${ownerToken}`)
+      .send({ changes: [{ name: 'claims_v1', value: '[{"id":"c1"}]', baseRev: 0, mtime: 30 }] });
+
+    const ownerPull = await request(app).get('/api/pwa-sync/pull').set('Authorization', `Bearer ${ownerToken}`);
+    expect(ownerPull.body.blobs.some((b) => b.name === 'claims_v1')).toBe(true);
+
+    const staffPull = await request(app).get('/api/pwa-sync/pull').set('Authorization', `Bearer ${staffToken}`);
+    expect(staffPull.body.blobs.some((b) => b.name === 'claims_v1')).toBe(false); // withheld from staff
+    expect(staffPull.body.blobs.some((b) => b.name === 'stocktake_v1')).toBe(true); // operational still visible
+  });
+
+  afterAll(async () => {
+    if (!URI || !shopId) return;
+    await SyncBlob.deleteMany({ account: shopId });
   });
 });

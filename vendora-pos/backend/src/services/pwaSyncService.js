@@ -22,10 +22,31 @@ const ALLOWED = new Set([
 const MAX_VALUE_BYTES = 2 * 1024 * 1024; // 2 MB per store — generous for a single shop, bounds abuse
 const MAX_CHANGES = 40;                   // more than the number of stores; one push covers everything
 
-/** All of an account's blobs, so the client can adopt anything the server has that's newer. */
-async function pull(accountId) {
+// Role-based store access (backend-enforced staff permissions). The `staff` role runs the shop floor —
+// stock, deliveries, counts, waste, tasks, buy lists — but NOT the money records. `manager` and `owner`
+// have full access. This is the real guard: a tampered or misbehaving client can't write a store its
+// role isn't allowed to, and those same financial stores are withheld from a staff member's pull.
+const FINANCIAL_STORES = new Set(['takings_v1', 'claims_v1', 'credit_notes_v1', 'invoices_v1']);
+
+/** Can this role WRITE this store? Unknown/legacy role (undefined) is treated as the owner. */
+function canWriteStore(role, name) {
+  if (role === 'staff') return !FINANCIAL_STORES.has(name);
+  return true; // owner, manager (and legacy tokens)
+}
+/** Can this role READ this store (what pull returns)? Mirrors write access for financial stores. */
+function canReadStore(role, name) {
+  if (role === 'staff') return !FINANCIAL_STORES.has(name);
+  return true;
+}
+
+/** All of an account's blobs the role may see, so the client can adopt anything newer it's allowed. */
+async function pull(accountId, role) {
   const docs = await SyncBlob.find({ account: accountId }).lean();
-  return { blobs: docs.map((d) => ({ name: d.name, value: d.value, rev: d.rev, mtime: d.mtime })) };
+  return {
+    blobs: docs
+      .filter((d) => canReadStore(role, d.name))
+      .map((d) => ({ name: d.name, value: d.value, rev: d.rev, mtime: d.mtime })),
+  };
 }
 
 /**
@@ -35,18 +56,22 @@ async function pull(accountId) {
  *  - server.rev !== baseRev       → concurrent edit; last-write-wins by mtime. If the client is newer
  *                                   it's applied (rev += 1); otherwise it's returned as a conflict so
  *                                   the client adopts the server's copy.
- * Returns { applied: [{name, rev}], conflicts: [{name, value, rev, mtime}] }.
+ * A change targeting a store the caller's role may not write is REJECTED (not applied) and returned in
+ * `rejected` so the client can stop and re-adopt the server copy, rather than wedging the whole sync.
+ * Returns { applied: [{name, rev}], conflicts: [{name, value, rev, mtime}], rejected: [{name, reason}] }.
  */
-async function push(accountId, changes) {
+async function push(accountId, changes, role) {
   if (!Array.isArray(changes)) throw AppError.validation('changes must be an array');
   if (changes.length > MAX_CHANGES) throw AppError.validation('Too many changes in one sync');
 
   const applied = [];
   const conflicts = [];
+  const rejected = [];
 
   for (const c of changes) {
     const name = c && c.name;
     if (!ALLOWED.has(name)) throw AppError.validation(`Unknown store: ${name}`);
+    if (!canWriteStore(role, name)) { rejected.push({ name, reason: 'forbidden' }); continue; }
     const value = typeof c.value === 'string' ? c.value : '';
     if (Buffer.byteLength(value, 'utf8') > MAX_VALUE_BYTES) throw AppError.validation(`${name} is too large to sync`);
     const baseRev = Number(c.baseRev) || 0;
@@ -96,7 +121,7 @@ async function push(accountId, changes) {
     conflicts.push({ name, value: current.value, rev: current.rev, mtime: current.mtime });
   }
 
-  return { applied, conflicts };
+  return { applied, conflicts, rejected };
 }
 
-module.exports = { pull, push, ALLOWED, MAX_VALUE_BYTES };
+module.exports = { pull, push, ALLOWED, MAX_VALUE_BYTES, canWriteStore, canReadStore, FINANCIAL_STORES };

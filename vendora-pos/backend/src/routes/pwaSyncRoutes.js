@@ -16,18 +16,20 @@ router.use((req, res, next) => {
 });
 
 // GET /api/pwa-sync/pull  → { success, blobs: [{ name, value, rev, mtime }] }
+// Scoped to the token's shopId; a staff role only receives the stores it's allowed to see.
 router.get('/pull', async (req, res, next) => {
   try {
-    const out = await sync.pull(req.pwa.sub);
+    const out = await sync.pull(req.pwa.sub, req.pwa.role);
     res.json({ success: true, ...out });
   } catch (err) { next(err); }
 });
 
 // POST /api/pwa-sync/push  { changes: [{ name, value, baseRev, mtime }] }
-//   → { success, applied: [{ name, rev }], conflicts: [{ name, value, rev, mtime }] }
+//   → { success, applied: [...], conflicts: [...], rejected: [{ name, reason }] }
+// The caller's role decides which stores it may write; forbidden stores come back in `rejected`.
 router.post('/push', async (req, res, next) => {
   try {
-    const out = await sync.push(req.pwa.sub, (req.body || {}).changes);
+    const out = await sync.push(req.pwa.sub, (req.body || {}).changes, req.pwa.role);
     res.json({ success: true, ...out });
   } catch (err) { next(err); }
 });
