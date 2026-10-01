@@ -100,6 +100,65 @@ describe('sync — ongoing (after bootstrap)', () => {
   });
 });
 
+describe('sync — concurrency hardening (audit 2026-10-01)', () => {
+  it('keeps an edit made while a push is in flight (not marked clean/overwritten)', async () => {
+    await sync.syncNow(); // bootstrap
+    storage.writeJSON('inventory_v1', [{ v: 1 }], ws);
+    sync.markStoreDirty('inventory_v1', 100);
+
+    let injected = false;
+    sync.__setSyncTransport(async (path, opts) => {
+      if (path === '/push' && !injected) {
+        injected = true;
+        // a newer local edit lands WHILE the push (carrying v1) is in flight
+        storage.writeJSON('inventory_v1', [{ v: 2 }], ws);
+        sync.markStoreDirty('inventory_v1', 200);
+      }
+      return server.transport(path, opts);
+    });
+
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(true);
+    expect(storage.readJSON('inventory_v1', null, ws)).toEqual([{ v: 2 }]); // v2 preserved, not clobbered
+    expect(sync.getSyncState().pending).toBeGreaterThanOrEqual(1);          // still dirty → will re-push
+  });
+
+  it('aborts without uploading when the account is switched mid-sync (no cross-account leak)', async () => {
+    localStorage.setItem('vendora:auth', JSON.stringify({ token: 'tA', refreshToken: 'rA', shop: { id: 'A', name: 'A' } }));
+    storage.setActiveWorkspace('shop:A');
+    await sync.syncNow(); // bootstrap A
+    storage.writeJSON('tasks_v1', [{ secret: 'A' }], 'shop:A');
+    sync.markStoreDirty('tasks_v1', 100);
+
+    let switched = false;
+    sync.__setSyncTransport(async (path, opts) => {
+      if (!switched) {
+        switched = true; // account switches to B during the first request
+        localStorage.setItem('vendora:auth', JSON.stringify({ token: 'tB', refreshToken: 'rB', shop: { id: 'B', name: 'B' } }));
+        storage.setActiveWorkspace('shop:B');
+      }
+      return server.transport(path, opts);
+    });
+
+    const res = await sync.syncNow();
+    expect(res.aborted).toBe(true);
+    expect(server.blobs.has('tasks_v1')).toBe(false); // A's secret never pushed under B's token
+  });
+
+  it('propagates a cleared store so it does not resurrect on other devices', async () => {
+    await sync.syncNow(); // bootstrap
+    storage.writeJSON('tasks_v1', [{ id: 't1' }], ws);
+    sync.markStoreDirty('tasks_v1', 100);
+    await sync.syncNow(); // tasks now on server at rev1
+    expect(server.blobs.get('tasks_v1').value).toBe(JSON.stringify([{ id: 't1' }]));
+
+    storage.removeKey('tasks_v1', ws);
+    sync.markStoreDirty('tasks_v1', 200); // simulate the write-event marking it dirty
+    await sync.syncNow();
+    expect(server.blobs.get('tasks_v1').value).toBe(''); // cleared propagated as empty
+  });
+});
+
 describe('sync — guards', () => {
   it('does nothing without a session', async () => {
     localStorage.removeItem('vendora:auth');

@@ -51,22 +51,48 @@ async function push(accountId, changes) {
     const baseRev = Number(c.baseRev) || 0;
     const mtime = Number(c.mtime) || 0;
 
+    // Atomic compare-and-set on (account, name, rev) so two concurrent pushes can never both "win" the
+    // same revision (audit: optimistic revisions were not atomic). findOneAndUpdate is a single atomic op.
+    // 1) Fast-forward: the row is exactly at the revision the client based its edit on.
     // eslint-disable-next-line no-await-in-loop
-    const existing = await SyncBlob.findOne({ account: accountId, name });
-    if (!existing) {
-      // eslint-disable-next-line no-await-in-loop
-      const created = await SyncBlob.create({ account: accountId, name, value, rev: 1, mtime });
-      applied.push({ name, rev: created.rev });
-    } else if (existing.rev === baseRev || mtime > (existing.mtime || 0)) {
-      existing.value = value;
-      existing.rev = existing.rev + 1;
-      existing.mtime = mtime;
-      // eslint-disable-next-line no-await-in-loop
-      await existing.save();
-      applied.push({ name, rev: existing.rev });
-    } else {
-      conflicts.push({ name, value: existing.value, rev: existing.rev, mtime: existing.mtime });
+    let doc = await SyncBlob.findOneAndUpdate(
+      { account: accountId, name, rev: baseRev },
+      { $set: { value, mtime }, $inc: { rev: 1 } },
+      { new: true },
+    );
+    if (doc) { applied.push({ name, rev: doc.rev }); continue; }
+
+    // 2) No row at baseRev — it either doesn't exist yet, or the server moved on (concurrent write).
+    // eslint-disable-next-line no-await-in-loop
+    let current = await SyncBlob.findOne({ account: accountId, name });
+    if (!current) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const created = await SyncBlob.create({ account: accountId, name, value, rev: 1, mtime });
+        applied.push({ name, rev: created.rev });
+        continue;
+      } catch (e) {
+        // A concurrent create won the unique (account,name) index — reload and fall through to resolve.
+        // eslint-disable-next-line no-await-in-loop
+        current = await SyncBlob.findOne({ account: accountId, name });
+        if (!current) throw e;
+      }
     }
+
+    // 3) Row exists at a different revision — resolve last-write-wins by client mtime, atomically.
+    if (mtime > (current.mtime || 0)) {
+      // eslint-disable-next-line no-await-in-loop
+      const won = await SyncBlob.findOneAndUpdate(
+        { account: accountId, name, rev: current.rev },
+        { $set: { value, mtime }, $inc: { rev: 1 } },
+        { new: true },
+      );
+      if (won) { applied.push({ name, rev: won.rev }); continue; }
+      // Lost the CAS race to another writer — reload and report the winner as a conflict.
+      // eslint-disable-next-line no-await-in-loop
+      current = await SyncBlob.findOne({ account: accountId, name });
+    }
+    conflicts.push({ name, value: current.value, rev: current.rev, mtime: current.mtime });
   }
 
   return { applied, conflicts };

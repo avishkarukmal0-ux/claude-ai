@@ -102,7 +102,11 @@ export async function refresh() {
   const s = loadSession();
   if (!s || !s.refreshToken) throw new Error('no-refresh-token');
   const data = await _transport('/refresh', { refreshToken: s.refreshToken });
-  const next = { ...s, token: data.token };
+  // If the session ENDED (logout) or SWITCHED accounts while this request was in flight, do not resurrect
+  // or cross-contaminate it (audit: a pending refresh could restore a logged-out/other account).
+  const cur = loadSession();
+  if (!cur || cur.refreshToken !== s.refreshToken) throw new Error('session-changed');
+  const next = { ...cur, token: data.token };
   saveSession(next);
   announce();
   return next;

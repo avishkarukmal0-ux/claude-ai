@@ -94,22 +94,35 @@ function canSync() {
 }
 
 let applyingRemote = false;
+// Apply a remote value to a store WITHOUT marking it dirty. Returns write()'s result so the caller can
+// avoid acknowledging a blob as synced when the local write actually failed (audit: false "synced" state).
 function applyRemote(ws, name, value) {
   applyingRemote = true;
-  try { write(name, value, ws); } finally { applyingRemote = false; }
+  try { return write(name, value, ws); } finally { applyingRemote = false; }
+}
+
+/** True while the signed-in account + active workspace still match the identity a reconcile started with. */
+function sessionOk(shopId, ws) {
+  const s = currentSession();
+  return !!(s && s.token && s.shop && s.shop.id === shopId && activeShopWs() === ws);
 }
 
 // --- the core --------------------------------------------------------------
 let syncing = false;
-async function authedRequest(path, opts) {
-  const s = currentSession();
+
+// Every request in one reconcile uses the SAME captured token + identity (ctx). On 401 we refresh once,
+// but only accept the refreshed token if the session is STILL the same account/workspace — otherwise a
+// slow request during an account switch could send one shop's data under another's token (audit P1).
+async function authedRequest(path, opts, ctx) {
   try {
-    return await _transport(path, { ...opts, token: s && s.token });
+    return await _transport(path, { ...opts, token: ctx.token });
   } catch (err) {
-    if (err && err.status === 401 && s && s.refreshToken) {
-      // Access token expired — refresh once and retry.
-      const next = await refreshSession();
-      return _transport(path, { ...opts, token: next && next.token });
+    if (err && err.status === 401) {
+      const next = await refreshSession().catch(() => null);
+      if (next && next.token && sessionOk(ctx.shopId, ctx.ws)) {
+        ctx.token = next.token;
+        return _transport(path, { ...opts, token: ctx.token });
+      }
     }
     throw err;
   }
@@ -119,74 +132,111 @@ async function authedRequest(path, opts) {
 export async function syncNow() {
   if (syncing) return { ok: false, skipped: true };
   if (!canSync()) { setState({ status: isOffline() ? 'offline' : 'idle' }); return { ok: false, skipped: true }; }
+  const session0 = currentSession();
   const ws = activeShopWs();
+  const ctx = { token: session0.token, shopId: session0.shop && session0.shop.id, ws };
+  // If the account/workspace changes mid-flight, bail before persisting anything (audit P1).
+  const guard = () => { if (!sessionOk(ctx.shopId, ctx.ws)) throw new Error('__aborted__'); };
+
   syncing = true;
   setState({ status: 'syncing', error: null });
   try {
     const meta = loadMeta(ws);
     const bootstrapped = !!meta.__boot;
-    let changedLocal = false;
+
+    // Results from the network phase; merged into FRESHLY-reloaded meta at the end so edits made WHILE a
+    // request was in flight aren't clobbered (audit P1: in-flight edits marked clean without upload).
+    const adoptions = [];      // { name, rev, mtime, keepDirty? } (value already written to storage)
+    const applied = [];        // { name, rev, sentMtime }
+    const conflicts = [];      // { name, rev, mtime } (value already written to storage)
+    const adopted = new Set(); // stores we took from the server this run — never push them back
+    let writeFailed = false;
 
     // 1) PULL — adopt anything the server has that we haven't seen.
-    const pull = await authedRequest('/pull', { method: 'GET' });
+    const pull = await authedRequest('/pull', { method: 'GET' }, ctx);
+    guard();
     const serverNames = new Set();
     for (const b of pull.blobs || []) {
       if (!STORE_NAMES.includes(b.name)) continue;
       serverNames.add(b.name);
       const lm = meta[b.name] || { rev: 0, mtime: 0, dirty: false };
-      if (!bootstrapped) {
-        // First sync for this device: server wins for anything it already has (never clobber cloud data).
-        applyRemote(ws, b.name, b.value);
-        meta[b.name] = { rev: b.rev, mtime: b.mtime, dirty: false };
-        changedLocal = true;
+      let take;
+      if (!bootstrapped) take = true;                       // first sync: server wins (never clobber cloud)
+      else if (b.rev > (lm.rev || 0)) take = !(lm.dirty && (lm.mtime || 0) > (b.mtime || 0));
+      else take = false;
+      if (take) {
+        const res = applyRemote(ws, b.name, b.value);
+        if (res && res.ok) { adoptions.push({ name: b.name, rev: b.rev, mtime: b.mtime }); adopted.add(b.name); }
+        else writeFailed = true;
       } else if (b.rev > (lm.rev || 0)) {
-        if (lm.dirty && (lm.mtime || 0) > (b.mtime || 0)) {
-          // Our unpushed change is newer — keep it, but adopt the server rev so our push fast-forwards.
-          meta[b.name] = { ...lm, rev: b.rev };
-        } else {
-          applyRemote(ws, b.name, b.value);
-          meta[b.name] = { rev: b.rev, mtime: b.mtime, dirty: false };
-          changedLocal = true;
-        }
+        // local unpushed edit is newer — keep it; adopt the server rev so our push fast-forwards.
+        adoptions.push({ name: b.name, rev: b.rev, mtime: lm.mtime, keepDirty: true });
       }
     }
 
-    // 2) PUSH — dirty stores, plus (on bootstrap) purely-local stores the server doesn't have yet.
+    // 2) PUSH — dirty stores, cleared stores, and (on bootstrap) purely-local stores the server lacks.
+    const sentMtime = {};
     const changes = [];
     for (const name of STORE_NAMES) {
+      if (adopted.has(name)) continue; // we just took the server's copy — don't push it back
       const lm = meta[name];
       const localVal = read(name, null, ws);
-      const hasLocal = localVal != null;
-      if (!hasLocal) continue;
       const dirty = !!(lm && lm.dirty);
-      const uploadNew = !bootstrapped ? !serverNames.has(name) : (!lm || (lm.rev || 0) === 0);
-      if (dirty || uploadNew) {
-        changes.push({ name, value: localVal, baseRev: (lm && lm.rev) || 0, mtime: (lm && lm.mtime) || Date.now() });
+      if (localVal != null) {
+        const uploadNew = !bootstrapped ? !serverNames.has(name) : (!lm || (lm.rev || 0) === 0);
+        if (dirty || uploadNew) {
+          sentMtime[name] = (lm && lm.mtime) || Date.now();
+          changes.push({ name, value: localVal, baseRev: (lm && lm.rev) || 0, mtime: sentMtime[name] });
+        }
+      } else if (dirty && lm && (lm.rev || 0) > 0) {
+        // Store was cleared locally after being synced — propagate the clear as an empty value so other
+        // devices don't resurrect it (audit P2: deleted stores never propagated).
+        sentMtime[name] = lm.mtime || Date.now();
+        changes.push({ name, value: '', baseRev: lm.rev, mtime: sentMtime[name] });
       }
     }
     if (changes.length) {
-      const res = await authedRequest('/push', { method: 'POST', body: { changes } });
-      for (const a of res.applied || []) {
-        const lm = meta[a.name] || {};
-        meta[a.name] = { rev: a.rev, mtime: lm.mtime || Date.now(), dirty: false };
-      }
+      const res = await authedRequest('/push', { method: 'POST', body: { changes } }, ctx);
+      guard();
+      for (const a of res.applied || []) applied.push({ name: a.name, rev: a.rev, sentMtime: sentMtime[a.name] });
       for (const c of res.conflicts || []) {
-        applyRemote(ws, c.name, c.value); // server's copy won — adopt it
-        meta[c.name] = { rev: c.rev, mtime: c.mtime, dirty: false };
-        changedLocal = true;
+        const r = applyRemote(ws, c.name, c.value); // server's copy won — adopt it
+        if (r && r.ok) conflicts.push({ name: c.name, rev: c.rev, mtime: c.mtime });
+        else writeFailed = true;
       }
     }
 
-    meta.__boot = true;
-    saveMeta(ws, meta);
+    // 3) MERGE into a FRESH copy of meta so anything the user changed during the requests survives.
+    guard();
+    const fresh = loadMeta(ws);
+    for (const a of adoptions) {
+      const cur = fresh[a.name] || {};
+      if (a.keepDirty) fresh[a.name] = { ...cur, rev: a.rev };
+      else if (cur.dirty && (cur.mtime || 0) > (a.mtime || 0)) fresh[a.name] = { ...cur, rev: a.rev }; // newer edit after adopt
+      else fresh[a.name] = { rev: a.rev, mtime: a.mtime, dirty: false };
+    }
+    for (const a of applied) {
+      const cur = fresh[a.name] || {};
+      // Only clear dirty if no newer edit landed since we sent this value.
+      if (cur.dirty && (cur.mtime || 0) > (a.sentMtime || 0)) fresh[a.name] = { ...cur, rev: a.rev };
+      else fresh[a.name] = { rev: a.rev, mtime: cur.mtime || a.sentMtime || Date.now(), dirty: false };
+    }
+    for (const c of conflicts) fresh[c.name] = { rev: c.rev, mtime: c.mtime, dirty: false };
+    fresh.__boot = true;
+    saveMeta(ws, fresh);
+
+    const changedLocal = adoptions.length > 0 || conflicts.length > 0;
     if (changedLocal) {
-      // Tell live store hooks to re-read (they listen to the workspace event). `synced` marks it so our
-      // own workspace listener doesn't treat it as a reason to sync again.
       try { window.dispatchEvent(new CustomEvent(WORKSPACE_EVENT, { detail: { synced: true } })); } catch { /* ignore */ }
     }
-    setState({ status: 'synced', lastSyncedAt: Date.now(), pending: countDirty(meta), error: null });
+    if (writeFailed) {
+      setState({ status: 'error', error: 'Some changes couldn’t be saved on this device', pending: countDirty(fresh) });
+      return { ok: false, writeFailed: true };
+    }
+    setState({ status: 'synced', lastSyncedAt: Date.now(), pending: countDirty(fresh), error: null });
     return { ok: true, changedLocal };
   } catch (err) {
+    if (err && err.message === '__aborted__') { setState({ status: 'idle' }); return { ok: false, aborted: true }; }
     setState({ status: isOffline() ? 'offline' : 'error', error: (err && err.message) || 'Sync failed' });
     return { ok: false, error: err };
   } finally {
