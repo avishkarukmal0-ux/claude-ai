@@ -11,6 +11,7 @@
 // Framework-free core (unit-testable); a thin React hook lives at the bottom.
 import { useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
+import { currentActor } from './actor';
 
 const NAME = 'movements_v1';
 const MAX_RECORDS = 5000;
@@ -30,9 +31,23 @@ const VALID_TYPES = new Set(Object.values(MOVEMENT_TYPES));
 
 const MOVEMENT_EVENT = 'vendora:movements';
 
+/**
+ * Drop structurally-invalid rows (unknown type, non-finite/zero delta, bad timestamp) so one corrupt
+ * record can never crash velocity/history or be carried forward on a write (Phase 1.2f: validate existing
+ * data before using/migrating it). Valid rows are untouched.
+ */
+export function sanitizeMovements(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter((r) => (
+    r && typeof r === 'object'
+    && VALID_TYPES.has(r.type)
+    && Number.isFinite(Number(r.delta)) && Number(r.delta) !== 0
+    && typeof r.at === 'number' && Number.isFinite(r.at)
+  ));
+}
+
 function load() {
-  const arr = readJSON(NAME, []);
-  return Array.isArray(arr) ? arr : [];
+  return sanitizeMovements(readJSON(NAME, []));
 }
 function persist(records) {
   return writeJSON(NAME, records);
@@ -60,29 +75,46 @@ function newId() {
  *                makes re-applying idempotent (see hasOperation()).
  *  - batchId     links a batch (Stage 4) / a waste undo group
  */
-export function recordMovement({
-  productId = null, type, delta, valuation, reason, batchId, productBatchId,
-  unit, location, actor, operationId, at = Date.now(),
-}) {
-  if (!VALID_TYPES.has(type)) return null;
-  const d = Number(delta);
+/**
+ * Build one normalized movement record (or null on bad input). Centralizes the record shape — including
+ * WHO did it: unless an explicit `actor` is passed, the signed-in member is captured ("Owner" for the
+ * guest / accounts-off case), so every ledger row carries actor/actorId/actorRole and is attributable
+ * (Phase 1.2b). Also carries `reversalOf` for compensating reversal entries (Phase 1.2d).
+ */
+function buildRecord(e) {
+  if (!e || !VALID_TYPES.has(e.type)) return null;
+  const d = Number(e.delta);
   if (!Number.isFinite(d) || d === 0) return null;
-  const rec = {
+  const who = currentActor();
+  const at = e.at || Date.now();
+  return {
     id: newId(),
-    productId: productId || null,
-    type,
+    productId: e.productId || null,
+    type: e.type,
     delta: d,
-    ...(valuation != null && Number.isFinite(Number(valuation)) ? { valuation: Number(valuation) } : {}),
-    ...(reason ? { reason: String(reason) } : {}),
-    ...(batchId ? { batchId } : {}),                     // waste-undo group id
-    ...(productBatchId ? { productBatchId: String(productBatchId) } : {}), // the dated batch wasted
-    ...(unit ? { unit: String(unit) } : {}),
-    ...(location ? { location: String(location) } : {}),
-    ...(actor ? { actor: String(actor) } : {}),
-    ...(operationId ? { operationId: String(operationId) } : {}),
+    ...(e.valuation != null && Number.isFinite(Number(e.valuation)) ? { valuation: Number(e.valuation) } : {}),
+    ...(e.reason ? { reason: String(e.reason) } : {}),
+    ...(e.batchId ? { batchId: e.batchId } : {}),                      // waste-undo / op group id
+    ...(e.productBatchId ? { productBatchId: String(e.productBatchId) } : {}), // the dated batch wasted
+    ...(e.unit ? { unit: String(e.unit) } : {}),
+    ...(e.location ? { location: String(e.location) } : {}),
+    ...(e.operationId ? { operationId: String(e.operationId) } : {}),
+    ...(e.reversalOf ? { reversalOf: String(e.reversalOf) } : {}),
+    actor: e.actor != null ? String(e.actor) : who.name,
+    ...(who.id ? { actorId: who.id } : {}),
+    ...(who.role ? { actorRole: who.role } : {}),
     at,
   };
-  const res = persist(prune([...load(), rec], at));
+}
+
+/**
+ * Append a typed movement. Deterministic: reads current, writes synchronously, returns the created record
+ * (or null on bad input). See buildRecord for the full field list (incl. actor attribution).
+ */
+export function recordMovement(entry) {
+  const rec = buildRecord(entry);
+  if (!rec) return null;
+  const res = persist(prune([...load(), rec], rec.at));
   try { window.dispatchEvent(new CustomEvent(MOVEMENT_EVENT)); } catch { /* ignore */ }
   return res.ok ? rec : null;
 }
@@ -94,19 +126,10 @@ export function recordMany(entries = []) {
   const recs = [];
   let maxAt = Date.now();
   for (const e of entries) {
-    if (!VALID_TYPES.has(e.type)) continue;
-    const d = Number(e.delta);
-    if (!Number.isFinite(d) || d === 0) continue;
-    const at = e.at || Date.now();
-    if (at > maxAt) maxAt = at;
-    recs.push({
-      id: newId(), productId: e.productId || null, type: e.type, delta: d,
-      ...(e.valuation != null && Number.isFinite(Number(e.valuation)) ? { valuation: Number(e.valuation) } : {}),
-      ...(e.reason ? { reason: String(e.reason) } : {}),
-      ...(e.batchId ? { batchId: e.batchId } : {}),
-      ...(e.operationId ? { operationId: String(e.operationId) } : {}),
-      at,
-    });
+    const rec = buildRecord(e);
+    if (!rec) continue;
+    if (rec.at > maxAt) maxAt = rec.at;
+    recs.push(rec);
   }
   if (!recs.length) return { ok: true, written: 0 };
   const res = persist(prune([...load(), ...recs], maxAt));
@@ -121,7 +144,8 @@ export function hasOperation(operationId) {
   return load().some((r) => r.operationId === operationId);
 }
 
-/** Remove movements by batchId (used to reverse a waste/undo). Returns count removed. */
+/** Remove movements by batchId (used by sales-import undo, where re-importing the same file must be
+ *  allowed afterwards). Returns count removed. For STOCK undos prefer reverseByBatch (keeps history). */
 export function removeByBatch(batchId) {
   if (!batchId) return 0;
   const cur = load();
@@ -129,6 +153,31 @@ export function removeByBatch(batchId) {
   const removed = cur.length - next.length;
   if (removed) { persist(next); try { window.dispatchEvent(new CustomEvent(MOVEMENT_EVENT)); } catch { /* ignore */ } }
   return removed;
+}
+
+/**
+ * Reverse every movement in a batch by APPENDING a compensating correction for each (delta negated),
+ * tagged `reversalOf` — never deleting the original (Phase 1.2d: corrections/reversals retain history).
+ * Idempotent: a batch already reversed is skipped. Returns { ok, reversed }.
+ */
+export function reverseByBatch(batchId, { reason } = {}) {
+  if (!batchId) return { ok: true, reversed: 0 };
+  const all = load();
+  const already = new Set(all.filter((r) => r.reversalOf).map((r) => r.reversalOf));
+  const originals = all.filter((r) => r.batchId === batchId && !r.reversalOf && !already.has(r.id));
+  if (!originals.length) return { ok: true, reversed: 0 };
+  const entries = originals.map((o) => ({
+    productId: o.productId,
+    type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, // a reversal is a correction; keeps sales velocity clean
+    delta: -o.delta,
+    ...(o.valuation != null ? { valuation: -o.valuation } : {}),
+    reason: reason || `Reversed ${String(o.type).replace(/_/g, ' ')}`,
+    batchId: `rev_${batchId}`,
+    reversalOf: o.id,
+    ...(o.productBatchId ? { productBatchId: o.productBatchId } : {}),
+  }));
+  const res = recordMany(entries);
+  return { ok: !!res.ok, reversed: res.ok ? entries.length : 0 };
 }
 
 // --- derivations -----------------------------------------------------------
@@ -202,6 +251,29 @@ export function salesCoverage(records, windowDays = 28, now = Date.now()) {
   const ids = new Set();
   for (const r of records) if (r.at >= since && r.type === MOVEMENT_TYPES.SALE) ids.add(r.productId);
   return ids.size;
+}
+
+/**
+ * Per-product movement history with a running balance derived from the ledger — the audit trail that
+ * explains how the current quantity was reached (Phase 1.2c). Oldest→newest internally so the balance is
+ * correct; returned newest-first by default for display.
+ */
+export function movementHistory(records, productId, { newestFirst = true } = {}) {
+  const rows = (records || []).filter((r) => r && r.productId === productId).slice().sort((a, b) => a.at - b.at);
+  let balance = 0;
+  const withBalance = rows.map((r) => { balance += r.delta; return { ...r, balance }; });
+  return newestFirst ? withBalance.reverse() : withBalance;
+}
+
+/**
+ * Reconcile the ledger against the stored quantity. `difference` is the quantity NOT explained by recorded
+ * movements — i.e. the opening balance that existed before movement tracking (or, if negative, stock that
+ * left without a movement). Surfaced honestly in the history view rather than hidden.
+ */
+export function reconcileQty(records, productId, currentQty) {
+  const ledgerSum = (records || []).filter((r) => r && r.productId === productId).reduce((n, r) => n + r.delta, 0);
+  const q = Number(currentQty) || 0;
+  return { ledgerSum, currentQty: q, difference: q - ledgerSum, matches: q === ledgerSum };
 }
 
 /** React hook: live movement records. */

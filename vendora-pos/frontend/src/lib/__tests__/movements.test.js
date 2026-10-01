@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  recordMovement, removeByBatch, salesUnits, inferredDepletionUnits,
-  velocity, daysOfCover, topMovers, MOVEMENT_TYPES,
+  recordMovement, removeByBatch, reverseByBatch, salesUnits, inferredDepletionUnits,
+  velocity, daysOfCover, topMovers, movementHistory, reconcileQty, sanitizeMovements, MOVEMENT_TYPES,
 } from '../movementStore';
 import { readJSON, setActiveWorkspace } from '../storage';
 
@@ -28,6 +28,65 @@ describe('movementStore — typed recording', () => {
     const removed = removeByBatch('b1');
     expect(removed).toBe(1);
     expect(readJSON('movements_v1', []).length).toBe(1);
+  });
+});
+
+describe('movementStore — Phase 1.2 traceability', () => {
+  it('stamps every row with an actor (Owner for guest/accounts-off)', () => {
+    setActiveWorkspace('shop:tr1');
+    const rec = recordMovement({ productId: 'p1', type: MOVEMENT_TYPES.WASTE, delta: -2, reason: 'binned' });
+    expect(rec.actor).toBe('Owner');
+    expect(rec.actorRole).toBe('owner');
+  });
+
+  it('sanitizeMovements drops structurally invalid rows', () => {
+    const dirty = [
+      { productId: 'p1', type: 'sale', delta: -1, at: 1 },      // ok
+      { productId: 'p2', type: 'nonsense', delta: -1, at: 2 },  // bad type
+      { productId: 'p3', type: 'sale', delta: 0, at: 3 },       // zero delta
+      { productId: 'p4', type: 'sale', delta: 'x', at: 4 },     // non-finite
+      { productId: 'p5', type: 'sale', delta: -1 },             // no timestamp
+      null,                                                      // junk
+    ];
+    const clean = sanitizeMovements(dirty);
+    expect(clean).toHaveLength(1);
+    expect(clean[0].productId).toBe('p1');
+  });
+
+  it('reverseByBatch appends a compensating correction and keeps the original (idempotent)', () => {
+    setActiveWorkspace('shop:tr2');
+    const w = recordMovement({ productId: 'p1', type: MOVEMENT_TYPES.WASTE, delta: -3, batchId: 'w1', reason: 'binned' });
+    const r1 = reverseByBatch('w1', { reason: 'waste undone' });
+    expect(r1.reversed).toBe(1);
+    const rows = readJSON('movements_v1', []);
+    expect(rows).toHaveLength(2); // original kept + reversal added (not deleted)
+    const rev = rows.find((x) => x.reversalOf);
+    expect(rev.reversalOf).toBe(w.id);
+    expect(rev.delta).toBe(3);                              // negated
+    expect(rev.type).toBe(MOVEMENT_TYPES.STOCK_ADJUSTMENT); // a correction, not a sale
+    // Idempotent: reversing again does nothing.
+    expect(reverseByBatch('w1').reversed).toBe(0);
+    expect(readJSON('movements_v1', [])).toHaveLength(2);
+  });
+
+  it('movementHistory gives a running balance; reconcileQty exposes the opening balance', () => {
+    const now = 1_700_000_000_000;
+    const recs = [
+      { id: 'a', productId: 'p1', type: 'goods_received', delta: 10, at: now - 3000 },
+      { id: 'b', productId: 'p1', type: 'sale', delta: -4, at: now - 2000 },
+      { id: 'c', productId: 'p1', type: 'waste', delta: -1, at: now - 1000 },
+      { id: 'd', productId: 'p2', type: 'sale', delta: -2, at: now }, // other product, ignored
+    ];
+    const hist = movementHistory(recs, 'p1'); // newest first
+    expect(hist.map((r) => r.id)).toEqual(['c', 'b', 'a']);
+    expect(hist[0].balance).toBe(5);  // 10 - 4 - 1
+    expect(hist[2].balance).toBe(10); // after the delivery
+
+    // Current qty 7 but ledger explains 5 → opening balance of 2 (stock present before tracking).
+    const recon = reconcileQty(recs, 'p1', 7);
+    expect(recon.ledgerSum).toBe(5);
+    expect(recon.difference).toBe(2);
+    expect(recon.matches).toBe(false);
   });
 });
 

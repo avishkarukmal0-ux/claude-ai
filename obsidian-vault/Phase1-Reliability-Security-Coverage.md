@@ -29,12 +29,12 @@ duplicate screens and parallel implementations; do not present mock data as comp
 
 | # | Requirement | Existing evidence | Status | Change | Acceptance |
 |---|---|---|---|---|---|
-| 1.2a | Record deliveries/waste/returns/counts/adjustments consistently | one ledger, 7 frozen types (`movementStore.js:20-28`); all writes funnel through `recordMovement`/`recordMany`; wired for delivery/sale/waste/count/adjust/transfer | 🟡→ | wire `CUSTOMER_RETURN`/`SUPPLIER_RETURN` writers where returns exist (else document as N/A) | returns recorded as movements where the flow exists |
-| 1.2b | Preserve source ref, actor, timestamp, quantity, reason | `at`, `delta`, `reason`, `operationId` (source) present; **`actor` accepted but never passed; `recordMany` can't carry it** (`movementStore.js:70-84,102-109`) | 🟡→ | thread `actor` (via `actor.js`/`stamp`) into `recordMovement`+`recordMany` and every caller | each movement row carries who did it (test) |
-| 1.2c | Explain how current quantity was calculated | `qty` is an independent mutated field (`inventoryStore.js:96`); `stockStatus` only labels counted/calculated (`:211-217`); **no ledger-derived explanation, no history drilldown** | 🟡→ | per-product movement history view: running balance derived from the ledger, each row with actor/reason/source; flag ledger-vs-qty divergence | opening a product shows its movement history + how qty was reached |
-| 1.2d | Corrections + reversals without deleting history | counts append a compensating `STOCK_ADJUSTMENT` (`inventoryStore.js:612-623`) ✅; **waste/sale/import undo DELETES rows via `removeByBatch`** (`movementStore.js:124-132`) | 🟡→ | replace reversal-by-delete with a compensating reversing entry (`reversalOf`), retaining the original | undo leaves both original + reversal in the ledger (test) |
+| 1.2a | Record deliveries/waste/returns/counts/adjustments consistently | one ledger, 7 frozen types; all writes funnel through `recordMovement`/`recordMany`; wired for delivery/sale/waste/count/adjust/transfer | 🟡 (honest) | — | **done for the flows that exist.** Returns (`CUSTOMER_RETURN`/`SUPPLIER_RETURN`) have no PWA workflow yet (the till owns refunds; the PWA has no returns screen), so no writer is wired — the types are reserved and `ProductHistory` renders them if ever present. Not inventing a returns screen (mock features don't count) |
+| 1.2b | Preserve source ref, actor, timestamp, quantity, reason | `at`, `delta`, `reason`, `operationId` present; now `buildRecord` captures `actor`/`actorId`/`actorRole` on EVERY row (signed-in member, "Owner" for guest) for both `recordMovement` and `recordMany` (`movementStore.js`) | ✅ (1.2) | — | **done** — `movements.test.js`: every row carries an actor |
+| 1.2c | Explain how current quantity was calculated | new `movementHistory()` (running balance from the ledger) + `reconcileQty()` (opening balance vs recorded) + `ProductHistory.jsx` reached from the Stock list (History button): every change with who/when/why + balance, and an honest "opening balance + movements = current" line | ✅ (1.2) | — | **done** — `movements.test.js` history/reconcile; UI wired in `InventoryView` |
+| 1.2d | Corrections + reversals without deleting history | counts already append corrections; now `reverseByBatch()` appends a compensating `STOCK_ADJUSTMENT` (`reversalOf`) instead of deleting, and `reverseWaste`/`reverseBatchWaste` use it (`movementStore.js`, `inventoryStore.js`). `removeByBatch` kept only for sales-import undo (must allow re-import) | ✅ (1.2) | — | **done** — `movements.test.js` reverseByBatch (kept+idempotent); `inventory`/`batches` tests assert history retained |
 | 1.2e | Prevent double application | `hasOperation` guard (delivery+import) ✅ | ✅ | — | — |
-| 1.2f | Validate existing data before migrating | backup/restore validates (`backup.js:57-101`) ✅; **no ledger schema validation/versioning** (`movementStore.js:33-45`) | 🟡→ | validate ledger rows on load (drop/repair malformed, never crash); version the store | malformed row doesn't corrupt velocity/history (test) |
+| 1.2f | Validate existing data before migrating | `sanitizeMovements()` drops structurally-invalid rows on every `load()` (unknown type, non-finite/zero delta, bad timestamp), so a corrupt row can't crash velocity/history or be written forward (`movementStore.js`) | ✅ (1.2) | — | **done** — `movements.test.js` sanitize |
 
 ## 1.3 Backup and recovery
 
@@ -76,7 +76,7 @@ duplicate screens and parallel implementations; do not present mock data as comp
 | Access another shop's records/files | isolation integration suites | ✅ (existing) |
 | Camera & notification permissions denied | Phase 3 (mobile) | 🔲 (Phase 3) |
 | Product with different unit & case barcodes | Phase 2 (#7) | 🔲 (Phase 2) |
-| A stock correction reversed without losing history | compensating reversal (1.2d); test | ⏳ |
+| A stock correction reversed without losing history | compensating reversal `reverseByBatch` (1.2d) — original kept + reversal appended | ✅ (1.2) |
 
 ## Feature flags & disablement
 - `SYNC_HISTORY` (backend) — server-side blob version history (1.3b). Default **off**; when off, behaviour is

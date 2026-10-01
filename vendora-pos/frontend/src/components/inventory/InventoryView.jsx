@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil } from 'lucide-react';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History } from 'lucide-react';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize } from '../../lib/inventoryStore';
+import ProductHistory from './ProductHistory';
 import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
@@ -13,7 +14,9 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // product being edited, or null
+  const [viewingId, setViewingId] = useState(null); // product whose movement history is open
   const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
+  const viewing = viewingId ? products.find((p) => p.id === viewingId) : null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -52,6 +55,8 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   }, [products]);
 
   const lowCount = products.filter(isLowStock).length;
+
+  if (viewing) return <ProductHistory product={viewing} onBack={() => setViewingId(null)} />;
 
   return (
     <div>
@@ -120,7 +125,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
               </div>
               <ul className="space-y-2">
                 {items.map((p) => (
-                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} onEdit={() => setEditing(p)} />
+                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} onEdit={() => setEditing(p)} onHistory={() => setViewingId(p.id)} />
                 ))}
               </ul>
             </div>
@@ -133,7 +138,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
 // One product row. Shows category + pack ("Case of N") alongside the existing barcode/price/margin so
 // the shopkeeper can see at a glance what the item is and how it's bought.
-function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit }) {
+function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHistory }) {
   const m = margin(p);
   const low = isLowStock(p);
   return (
@@ -188,6 +193,9 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={onHistory} className="p-1 text-gray-300 hover:text-primary" aria-label="Stock history">
+            <History className="h-4 w-4" />
+          </button>
           <button type="button" onClick={onEdit} className="p-1 text-gray-300 hover:text-primary" aria-label="Edit product">
             <Pencil className="h-4 w-4" />
           </button>

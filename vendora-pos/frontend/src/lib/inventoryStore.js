@@ -11,7 +11,7 @@
 //    log the movement. Nothing depends on a deferred React updater running.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, getActiveWorkspace } from './storage';
-import { recordMovement, removeByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
+import { recordMovement, reverseByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
 import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
 import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
 
@@ -432,18 +432,19 @@ export function useInventory() {
     const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, batches: batch ? newBatches : batchesOf(x), updatedAt: Date.now() } : x));
     persist(next);
     setProducts(next);
-    if (opGroupId) removeByBatch(opGroupId);
+    // Keep history: append a compensating correction rather than deleting the waste movement (Phase 1.2d).
+    if (opGroupId) reverseByBatch(opGroupId, { reason: 'waste undone' });
     return { ok: true };
   }, []);
 
-  /** Reverse a waste event (undo): restore stock and drop its movement(s). */
+  /** Reverse a waste event (undo): restore stock and record a compensating correction (history kept). */
   const reverseWaste = useCallback(({ id, qty, batchId }) => {
     const restore = Math.max(0, Number(qty) || 0);
     const prev = load();
     const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, updatedAt: Date.now() } : x));
     persist(next);
     setProducts(next);
-    if (batchId) removeByBatch(batchId);
+    if (batchId) reverseByBatch(batchId, { reason: 'waste undone' });
     return { ok: true };
   }, []);
 

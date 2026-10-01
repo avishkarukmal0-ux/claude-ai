@@ -72,7 +72,9 @@ describe('batches — binning the correct batch once', () => {
     p = result.current.products.find((x) => x.id === id);
     expect(p.qty).toBe(8);                 // restored
     expect(datedQty(p)).toBe(5);           // batch restored
-    expect(movements().filter((m) => m.type === 'waste').length).toBe(0);
+    // Phase 1.2d: the waste movement is RETAINED and a compensating correction is added (history kept).
+    expect(movements().filter((m) => m.type === 'waste').length).toBe(1);
+    expect(movements().some((m) => m.reversalOf && m.delta === 2)).toBe(true);
   });
 
   it('cannot bin more than the batch holds', () => {

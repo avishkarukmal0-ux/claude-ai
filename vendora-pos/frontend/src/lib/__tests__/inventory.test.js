@@ -115,7 +115,7 @@ describe('inventory — quantity decrease is an adjustment, never a sale (2C/2D)
 });
 
 describe('inventory — waste reduces stock exactly once with undo (2B)', () => {
-  it('recordWaste reduces stock once, logs one waste movement, and reverseWaste restores', () => {
+  it('recordWaste reduces stock once; reverseWaste restores AND keeps history (compensating reversal)', () => {
     const { result } = renderHook(() => useInventory());
     let id;
     act(() => { id = result.current.addProduct({ name: 'Yoghurt', cost: 0.5, price: 1, qty: 6 }).id; });
@@ -129,7 +129,13 @@ describe('inventory — waste reduces stock exactly once with undo (2B)', () => 
     act(() => { result.current.reverseWaste({ id, qty: 2, batchId: 'wb1' }); });
     expect(result.current.products.find((p) => p.id === id).qty).toBe(6); // restored
     recs = movements();
-    expect(recs.filter((r) => r.type === 'waste').length).toBe(0); // movement removed
+    // History is RETAINED (Phase 1.2d): the original waste stays, a compensating +2 correction is added.
+    expect(recs.filter((r) => r.type === 'waste').length).toBe(1);        // original kept, not deleted
+    const rev = recs.find((r) => r.reversalOf);
+    expect(rev).toBeTruthy();
+    expect(rev.delta).toBe(2);                                            // negates the -2 waste
+    expect(rev.type).toBe('stock_adjustment');                           // a correction, not a sale
+    expect(salesUnits(recs, id)).toBe(0);                                 // never a sale
   });
 
   it('cannot bin more than is in stock', () => {

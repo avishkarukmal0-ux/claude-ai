@@ -55,6 +55,26 @@ retries, `operationId` idempotency, SW update prompt. **Gaps closed:**
 ### Verification (1.1)
 - FE **235/235** (+5: sync conflict-recovery ×2, saveStatus ×3). Build clean.
 
+## 1.2 — Traceable stock movements ✅
+**Already solid:** one typed 7-type ledger, delivery/import `operationId` idempotency, append-only count
+corrections. **Gaps closed:**
+- **Actor on every row:** `movementStore` now has a shared `buildRecord()` used by `recordMovement` +
+  `recordMany` that stamps `actor`/`actorId`/`actorRole` from the signed-in member ("Owner" for guest).
+  Previously `actor` was accepted but never passed and `recordMany` couldn't carry it.
+- **Reversals keep history:** new `reverseByBatch()` appends a compensating `STOCK_ADJUSTMENT` tagged
+  `reversalOf` instead of deleting; `reverseWaste`/`reverseBatchWaste` switched to it. `removeByBatch` is
+  retained only for sales-import undo (re-importing the same file must stay possible).
+- **"How did this qty get here?":** `movementHistory()` (running balance from the ledger) + `reconcileQty()`
+  (opening balance vs recorded) power a new `ProductHistory.jsx`, reached from a History button on each
+  Stock row — every change with who/when/why + balance, and an honest opening-balance line.
+- **Validate before use/migrate:** `sanitizeMovements()` drops structurally-invalid rows on every load so a
+  corrupt record can't crash velocity/history or be carried forward.
+- **Returns (honest):** no PWA returns workflow exists, so `CUSTOMER_RETURN`/`SUPPLIER_RETURN` stay reserved
+  (not inventing a screen). `ProductHistory` renders them if ever recorded.
+
+### Verification (1.2)
+- FE **239/239** (+4 new movement tests; 2 undo tests updated to assert retained history). Build clean.
+
 ## Follow-ups
-- 1.2 traceability, 1.3 backup/recovery — next commits (see checklist).
+- 1.3 backup/recovery — next commit (see checklist).
 </content>
