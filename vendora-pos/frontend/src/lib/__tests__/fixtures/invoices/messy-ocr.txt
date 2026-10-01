@@ -1,0 +1,7 @@
+DELIVERY NOTE / INV
+SU6AR 1KG      2x    2.40
+teabags 240    3.99
+~~~ garbled line ~~~
+MARLB0R0 GOLD        14.95
+page 1 of 1
+total due 21.34

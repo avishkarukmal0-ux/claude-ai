@@ -10,6 +10,7 @@ import { useDeliveries } from '../../lib/deliveryStore';
 import { useClaims } from '../../lib/claimStore';
 import { extractInvoiceText } from '../../lib/invoiceOcr';
 import { reconcile, discrepanciesToClaimItems } from '../../lib/reconcile';
+import { parseInvoiceText } from '../../lib/parseInvoiceText';
 
 // Supplier invoice capture + review (Phase 1). Capture a photo/PDF (or enter manually), REVIEW every field
 // before committing. Matches lines to existing products, flags unmatched, warns on likely duplicates.
@@ -146,6 +147,14 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
   function setLine(i, patch) { setF((p) => ({ ...p, lines: p.lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) })); }
   function addLine() { setF((p) => ({ ...p, lines: [...p.lines, blankInvoiceLine()] })); }
   function removeLine(i) { setF((p) => ({ ...p, lines: p.lines.filter((_, idx) => idx !== i) })); }
+  // Heuristic pre-fill from the scanned text (human-review gated — every line is flagged uncertain and
+  // still needs checking + an explicit commit; nothing is applied to stock or money here).
+  function fillFromText() {
+    const { lines } = parseInvoiceText(ocr.text);
+    if (!lines.length) { toast('Couldn’t pick out lines automatically — enter them below'); return; }
+    setF((p) => ({ ...p, lines: lines.map((l) => blankInvoiceLine(l)) }));
+    toast('Lines pre-filled from the scan — check every figure before committing');
+  }
 
   const payload = () => ({ ...f, total, lines: matched });
   const canSave = (f.supplierName || f.supplierId) && (f.lines || []).some((l) => l.name || l.barcode);
@@ -170,6 +179,7 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
         <details className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600">
           <summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-700"><ScanText className="h-3.5 w-3.5" /> Scanned text (check &amp; type the figures below)</summary>
           <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[11px]">{ocr.text}</pre>
+          <button type="button" onClick={fillFromText} className="mt-2 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">Fill lines from this text (then check each)</button>
         </details>
       )}
 

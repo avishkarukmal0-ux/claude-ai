@@ -38,6 +38,7 @@ import CreditNotesView from '../components/invoices/CreditNotesView';
 import PriceHistoryView from '../components/invoices/PriceHistoryView';
 import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ACCOUNTS_ENABLED, isLoggedIn, useSession } from '../lib/account';
+import { INVOICES_ENABLED } from '../lib/features';
 import { canSeeScreen, can } from '../lib/permissions';
 import StaffView from '../components/account/StaffView';
 import NotificationsView from '../components/account/NotificationsView';
@@ -160,9 +161,9 @@ export default function HomePage() {
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
         {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
-        {screen === 'invoices' && canSeeScreen(role, 'invoices') && <InvoiceCaptureView onBack={() => setScreen(null)} />}
-        {screen === 'credit-notes' && canSeeScreen(role, 'credit-notes') && <CreditNotesView onBack={() => setScreen(null)} />}
-        {screen === 'price-history' && canSeeScreen(role, 'price-history') && <PriceHistoryView onBack={() => setScreen(null)} />}
+        {screen === 'invoices' && INVOICES_ENABLED && canSeeScreen(role, 'invoices') && <InvoiceCaptureView onBack={() => setScreen(null)} />}
+        {screen === 'credit-notes' && INVOICES_ENABLED && canSeeScreen(role, 'credit-notes') && <CreditNotesView onBack={() => setScreen(null)} />}
+        {screen === 'price-history' && INVOICES_ENABLED && canSeeScreen(role, 'price-history') && <PriceHistoryView onBack={() => setScreen(null)} />}
         {screen === 'weekly-report' && canSeeScreen(role, 'weekly-report') && <WeeklyReportView onBack={() => setScreen(null)} />}
         {screen === 'staff-admin' && canSeeScreen(role, 'staff-admin') && <StaffView onBack={() => setScreen(null)} />}
         {screen === 'notifications' && <NotificationsView onBack={() => setScreen(null)} />}
@@ -241,11 +242,11 @@ export default function HomePage() {
             <HubTile icon={ShoppingCart} accent={accent} label="Buy list" desc="Low stock → cash-&-carry list" onClick={() => setScreen('reorder')} />
             <HubTile icon={Truck} accent={accent} label="Orders" desc="Track what you’ve ordered" onClick={() => setScreen('orders')} />
             <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />
-            {!isStaff && <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />}
+            {INVOICES_ENABLED && !isStaff && <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />}
             {!isStaff && <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />}
-            {!isStaff && <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />}
+            {INVOICES_ENABLED && !isStaff && <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />}
             {!isStaff && <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />}
-            {!isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
+            {INVOICES_ENABLED && !isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
             <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
           </Hub>
         )}

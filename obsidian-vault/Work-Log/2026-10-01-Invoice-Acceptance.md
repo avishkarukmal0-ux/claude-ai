@@ -52,9 +52,26 @@ FE **205/205** (+10: money 7, reconcile refs, credit-note dedupe, createClaim re
   **4** (type/size validation; hostile line text stored verbatim; draft→commit gate). FE **212/212**, build
   clean, backend loads.
 
-## Phase 3 (pending)
-8 end-to-end scenarios, anonymised fixtures + `parseInvoiceText` extraction harness (observed results),
-feature flags, config/migration/safe-disable/recovery docs.
+## Phase 3 — scenarios, fixtures, feature flags, docs ✅
+- **8 end-to-end scenarios** (`scenarios.test.js`, 9 tests): correct invoice; shortage→partial credit
+  (approval≠receipt); wrong price + case/unit overcharge on normalised units; duplicate invoice + credit
+  note; interrupted save→retry (stable id + `operationId` idempotency); two-device last-write-wins (real
+  sync engine + fake server); staff vs owner-only (`canSeeScreen` + integration); unclear invoice→manual
+  correction→commit.
+- **Extraction harness** — `lib/parseInvoiceText.js` (pure heuristic, no model/tools, every line flagged
+  `uncertain`), 3 anonymised fixtures, `extraction-quality.test.js` reporting **observed** results
+  (cash-carry 4/4, itemised 3/3, messy-ocr 3/3 key items — not invented %). Wired as an optional
+  "Fill lines from this text" pre-fill in the review screen (still requires review + commit).
+- **Feature flag** — `lib/features.js` → `VITE_INVOICES_ENABLED` (default on) gates the invoice/credit/
+  price-history tiles + screens, following the `ACCOUNTS_ENABLED` pattern.
+- **Docs** — [[Deployment-Config]]: flag table, additive/lazy migrations, safe disablement (data retained),
+  recovery, operator verify commands.
+- Verification: FE **225/225** (+13), BE pure **30/30**, build clean, app+jobs load.
+
+## Outcome
+All acceptance requirements ✅ with evidence ([[Invoice-Acceptance-Coverage]]). FE 225 tests; BE pure 30 +
+DB-gated integration (auth/roles, sync role-access, notify prefs, cross-tenant isolation) via
+`VENDORA_TEST_URI`. Production deployment intentionally left to the operator.
 
 ## Commit
 `feat(pwa): decimal-safe money + source refs + credit-note dedupe (acceptance P0)`

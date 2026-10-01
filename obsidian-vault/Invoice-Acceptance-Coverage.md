@@ -66,22 +66,28 @@ totals = `sumMoney(parts)`. This avoids binary-float drift across many lines. (P
 
 | # | Scenario | Plan | Status |
 |---|---|---|---|
-| D1 | Correct invoice + complete delivery | reconcile → 0 claimable | 🔲 |
-| D2 | Shortage → partial supplier credit | reconcile shortage → claim → partial `applyCredit`; received < outstanding | 🔲 |
-| D3 | Wrong price + case/unit conversion | invoice cases vs delivery units → overcharge on normalised units | 🔲 |
-| D4 | Duplicate invoice / credit-note upload | `findDuplicate*` detects both | 🔲 |
-| D5 | Interrupted save → retry | failed `writeJSON` → retry, stable id, no double record/movement | 🔲 |
-| D6 | Conflicting edits two devices | sync LWW by mtime (existing `sync.test.js`) + scenario assert | 🟡 |
-| D7 | Staff attempts owner-only action | 403 (existing integration) + store-gate | 🟡 |
-| D8 | Unclear invoice → manual correction | OCR uncertain → edit → commit | 🔲 |
+| D1 | Correct invoice + complete delivery | reconcile → 0 claimable | ✅ `scenarios.test.js` |
+| D2 | Shortage → partial supplier credit | reconcile shortage → claim → approve (received null) → partial `applyCredit` → received 6, outstanding 4 | ✅ `scenarios.test.js` |
+| D3 | Wrong price + case/unit conversion | cases invoice vs units delivery → overcharge £4.80 on 24 normalised units | ✅ `scenarios.test.js` |
+| D4 | Duplicate invoice / credit-note upload | `findDuplicate` (invoice) + `findDuplicate` (credit note) both detect | ✅ `scenarios.test.js` |
+| D5 | Interrupted save → retry | retry with same id → single record; `operationId` guard → one movement | ✅ `scenarios.test.js` |
+| D6 | Conflicting edits two devices | real sync engine + fake server: newer mtime wins, stale device adopts server copy (also `sync.test.js` + `pwaSync.integration`) | ✅ `scenarios.test.js` |
+| D7 | Staff attempts owner-only action | `canSeeScreen` staff→false for money/claims/staff-admin; backend 403/404/reject in integration suites | ✅ `scenarios.test.js` + integration |
+| D8 | Unclear invoice → manual correction | `parseInvoiceText` flags uncertain → owner corrects → draft → explicit commit | ✅ `scenarios.test.js` |
 
 ## E. Cross-cutting (P3)
 
 | # | Requirement | Plan | Status |
 |---|---|---|---|
-| E1 | Fixtures to evaluate extraction quality | anonymised invoice-text fixtures + `parseInvoiceText` (pure, human-review gated) + harness reporting **observed** counts (no invented %) | 🔲 |
-| E2 | Feature flags for major new workflows | `VITE_INVOICES_ENABLED` (default on) gating invoice/reconcile/credit UI, following `ACCOUNTS_ENABLED`/`config.*` patterns | 🔲 |
-| E3 | Config / migration / safe-disable / recovery docs | setup doc: env flags, additive migrations (Account.notify default, Member new), disable → hides UI (data retained), recovery = re-enable | 🔲 |
+| E1 | Fixtures to evaluate extraction quality | `lib/parseInvoiceText.js` (pure, human-review gated) + 3 anonymised fixtures + `extraction-quality.test.js` harness. **Observed:** cash-carry 4/4, itemised 3/3, messy-ocr 3/3 key items detected; no invented % | ✅ |
+| E2 | Feature flags for major new workflows | `lib/features.js` → `VITE_INVOICES_ENABLED` (default on), gates invoice/credit/price-history tiles + screens in `HomePage` | ✅ |
+| E3 | Config / migration / safe-disable / recovery docs | [[Deployment-Config]] — flag table, additive/lazy migrations, safe disablement (data retained), recovery steps, operator verify commands | ✅ |
+
+### Observed extraction quality (E1 — measured, not invented)
+Run `npx vitest run src/lib/__tests__/extraction-quality.test.js`. On the current anonymised fixtures the
+heuristic pre-fill detected: **cash-carry 4/4**, **itemised 3/3**, **messy-ocr 3/3** key items, rows parsed
+matching the hand-labelled product-row counts. This is a convenience pre-fill only — every line is flagged
+`uncertain` and requires human review + commit; real-world OCR quality varies and is not claimed as a %.
 
 ---
 
@@ -89,4 +95,7 @@ totals = `sumMoney(parts)`. This avoids binary-float drift across many lines. (P
 - **Phase 0** — ✅ **passed** (A1–A8 done/verified). FE 205/205, BE pure 22/22, build clean.
 - **Phase 1** — ✅ **passed** (B1–B5). FE `isolation.test.js` 3/3; BE `pwaIsolation.integration` 7 (DB-gated, run on the founder's Mongo). FE 208/208, build clean.
 - **Phase 2** — ✅ **passed** (C1–C6). BE `invoiceOcr.test.js` 8/8; FE `invoice-upload.test.js` 4; retention/OCR-safety policy documented. FE 212/212, build clean.
-- **Phase 3** — in progress next.
+- **Phase 3** — ✅ **passed** (D1–D8, E1–E3). `scenarios.test.js` 9, `extraction-quality.test.js` 4, feature flag + docs. FE 225/225, BE pure 30/30, build clean.
+
+**All phases complete.** Every acceptance requirement is ✅ with test/doc evidence above. DB-gated integration
+suites (auth/roles, sync role-access, notify, cross-tenant isolation) run on `VENDORA_TEST_URI`.
