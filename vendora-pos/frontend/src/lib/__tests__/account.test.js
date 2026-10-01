@@ -53,13 +53,41 @@ describe('account — login/register session', () => {
     expect(account.isLoggedIn()).toBe(false);
   });
 
-  it('logout clears the session and returns to the guest workspace (data not deleted)', async () => {
+  it('logout purges this device’s shop cache by default (shared-device safety)', async () => {
     await account.login({ email: 'o@x.com', password: 'pw' });
-    writeJSON('inventory_v1', [{ id: 'keep' }]); // data in the shop workspace
+    writeJSON('inventory_v1', [{ id: 'secret' }]); // data in the shop workspace
     account.logout();
     expect(account.isLoggedIn()).toBe(false);
     expect(getActiveWorkspace()).toBe(LOCAL_WORKSPACE);
-    // shop data still there if they log back in
+    // shop data is gone from THIS device (it stays in the cloud and re-pulls on next sign-in)
+    expect(readJSON('inventory_v1', null, shopWorkspace('shopA'))).toBeNull();
+  });
+
+  it('logout({ purge: false }) keeps the shop cache on this (personal) device', async () => {
+    await account.login({ email: 'o@x.com', password: 'pw' });
+    writeJSON('inventory_v1', [{ id: 'keep' }]);
+    account.logout({ purge: false });
+    expect(account.isLoggedIn()).toBe(false);
+    expect(readJSON('inventory_v1', [], shopWorkspace('shopA'))).toEqual([{ id: 'keep' }]);
+  });
+
+  it('switching to a different shop purges the previous shop’s cache (device handover)', async () => {
+    await account.login({ email: 'a@x.com', password: 'pw' }); // shopA
+    writeJSON('inventory_v1', [{ id: 'A-only' }]);
+    // Now a different account signs in on the same device.
+    account.__setTransport(makeTransport({
+      '/login': () => ({ token: 't9', refreshToken: 'r9', shop: { id: 'shopB', name: 'B' } }),
+    }));
+    await account.login({ email: 'b@x.com', password: 'pw' }); // shopB
+    expect(getActiveWorkspace()).toBe(shopWorkspace('shopB'));
+    // shopA's cached data must not linger on the device for shopB's user to find
+    expect(readJSON('inventory_v1', null, shopWorkspace('shopA'))).toBeNull();
+  });
+
+  it('re-login as the SAME shop keeps its cache (no needless re-download)', async () => {
+    await account.login({ email: 'o@x.com', password: 'pw' }); // shopA
+    writeJSON('inventory_v1', [{ id: 'keep' }]);
+    await account.login({ email: 'o@x.com', password: 'pw' }); // shopA again
     expect(readJSON('inventory_v1', [], shopWorkspace('shopA'))).toEqual([{ id: 'keep' }]);
   });
 });

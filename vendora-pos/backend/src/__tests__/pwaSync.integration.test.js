@@ -132,6 +132,7 @@ describe('PWA sync — /api/pwa-sync', () => {
 
 describe('PWA sync — role-based store access (staff)', () => {
   let staffToken;
+  let staffId;
   let ownerToken;
   let shopId;
 
@@ -142,8 +143,9 @@ describe('PWA sync — role-based store access (staff)', () => {
     ownerToken = owner.token;
     shopId = owner.id;
     const email = `pwa-sync-test+staff${Date.now()}@example.com`;
-    await request(app).post('/api/pwa-auth/staff').set('Authorization', `Bearer ${ownerToken}`)
+    const created = await request(app).post('/api/pwa-auth/staff').set('Authorization', `Bearer ${ownerToken}`)
       .send({ email, name: 'Floor Staff', role: 'staff', password: 'staffpass1' });
+    staffId = created.body.member.id;
     const login = await request(app).post('/api/pwa-auth/login').send({ email, password: 'staffpass1' });
     staffToken = login.body.token;
   });
@@ -178,6 +180,22 @@ describe('PWA sync — role-based store access (staff)', () => {
     const staffPull = await request(app).get('/api/pwa-sync/pull').set('Authorization', `Bearer ${staffToken}`);
     expect(staffPull.body.blobs.some((b) => b.name === 'claims_v1')).toBe(false); // withheld from staff
     expect(staffPull.body.blobs.some((b) => b.name === 'stocktake_v1')).toBe(true); // operational still visible
+  });
+
+  dbTest('deactivating a member revokes their EXISTING access token on the sync path (Phase 1.4)', async () => {
+    // The token still works right now…
+    const before = await request(app).get('/api/pwa-sync/pull').set('Authorization', `Bearer ${staffToken}`);
+    expect(before.status).toBe(200);
+    // Owner deactivates the member (invalidates the member-status cache).
+    const patch = await request(app).patch(`/api/pwa-auth/staff/${staffId}`)
+      .set('Authorization', `Bearer ${ownerToken}`).send({ active: false });
+    expect(patch.status).toBe(200);
+    // …and the SAME token is now rejected without needing a refresh or waiting for expiry.
+    const after = await request(app).get('/api/pwa-sync/pull').set('Authorization', `Bearer ${staffToken}`);
+    expect(after.status).toBe(401);
+    // Re-activate so later cross-suite state stays clean.
+    await request(app).patch(`/api/pwa-auth/staff/${staffId}`)
+      .set('Authorization', `Bearer ${ownerToken}`).send({ active: true });
   });
 
   afterAll(async () => {

@@ -92,5 +92,28 @@ export async function del(key) {
   });
 }
 
+/** Delete every key that starts with `prefix`. Resolves the number deleted. Used to purge a whole
+ *  workspace's durable copy on sign-out / account switch (shared-device safety). */
+export async function delByPrefix(prefix) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    let tx;
+    try { tx = db.transaction(STORE, 'readwrite'); }
+    catch (e) { reject(e); return; }
+    const os = tx.objectStore(STORE);
+    const req = os.openCursor();
+    let n = 0;
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (!cur) return;
+      if (typeof cur.key === 'string' && cur.key.indexOf(prefix) === 0) { os.delete(cur.key); n += 1; }
+      cur.continue();
+    };
+    tx.oncomplete = () => resolve(n);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('idb-abort'));
+  });
+}
+
 /** Test hook: drop the cached DB handle. */
 export function _resetForTest() { _dbPromise = null; }

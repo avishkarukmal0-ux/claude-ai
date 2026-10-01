@@ -9,10 +9,15 @@ const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
 const sync = require('../services/pwaSyncService');
 
-// Gate: require a valid PWA access token and attach the decoded payload.
-router.use((req, res, next) => {
-  try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); next(); }
-  catch (err) { next(err); }
+// Gate: require a valid PWA access token, then (for staff/manager tokens) re-check the member is still
+// active against the DB so a revoked member's existing token can't keep syncing (Phase 1.4). Owner tokens
+// skip the DB check. The decoded payload (with the member's LIVE role) is attached as req.pwa.
+router.use(async (req, res, next) => {
+  try {
+    req.pwa = pwaAuth.verifyAccess(req.headers.authorization);
+    await pwaAuth.assertMemberActive(req.pwa);
+    next();
+  } catch (err) { next(err); }
 });
 
 // GET /api/pwa-sync/pull  → { success, blobs: [{ name, value, rev, mtime }] }

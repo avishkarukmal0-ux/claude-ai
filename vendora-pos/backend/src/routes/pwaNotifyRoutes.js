@@ -26,10 +26,14 @@ router.post('/run', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Everything below needs a valid PWA access token.
-router.use((req, res, next) => {
-  try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); next(); }
-  catch (err) { next(err); }
+// Everything below needs a valid PWA access token; staff/manager tokens are re-checked against the DB so a
+// revoked member's token can't keep reading/writing prefs (Phase 1.4). req.pwa carries the live role.
+router.use(async (req, res, next) => {
+  try {
+    req.pwa = pwaAuth.verifyAccess(req.headers.authorization);
+    await pwaAuth.assertMemberActive(req.pwa);
+    next();
+  } catch (err) { next(err); }
 });
 
 // GET /api/pwa-notify/prefs → { configured, prefs }

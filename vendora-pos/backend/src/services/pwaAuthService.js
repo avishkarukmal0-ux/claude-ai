@@ -152,6 +152,51 @@ function requireOwner(decoded) {
   if (!decoded || decoded.role !== 'owner') throw new AppError('Only the shop owner can do this', 403, 'FORBIDDEN');
 }
 
+// ── Prompt staff-access revocation on the data path ───────────────────────────────────────────────────
+// Access tokens are stateless JWTs, so by themselves a deactivated/removed/role-changed member would keep
+// working until their short-lived token expired. The data routes (sync, notify) call assertMemberActive()
+// to re-check the member against the DB. A tiny TTL cache keeps this to roughly one lookup per member per
+// 30s under load; owner/member admin writes invalidate the entry so a deactivation bites on the NEXT
+// request, not up to a TTL later. Owner tokens have no separate member to revoke and skip the DB entirely.
+const MEMBER_CACHE_TTL_MS = 30000;
+const _memberCache = new Map(); // memberId -> { at, found, active, role, account }
+
+function invalidateMember(memberId) { if (memberId) _memberCache.delete(String(memberId)); }
+/** Test hook: clear the member-status cache. */
+function __clearMemberCache() { _memberCache.clear(); }
+
+function isOwnerToken(decoded) {
+  return !decoded || decoded.role === 'owner' || !decoded.mid || decoded.mid === decoded.shopId;
+}
+
+/**
+ * For a MEMBER access token, re-validate the member against the DB and reject if they've been deactivated,
+ * removed, or moved to another account; adopt their LIVE role so a role change takes effect immediately on
+ * the data path too. No-op for owner tokens. Returns the (possibly role-updated) decoded payload.
+ */
+async function assertMemberActive(decoded) {
+  if (isOwnerToken(decoded)) return decoded;
+  const id = String(decoded.mid);
+  const now = Date.now();
+  let cached = _memberCache.get(id);
+  if (!cached || now - cached.at > MEMBER_CACHE_TTL_MS) {
+    const m = await Member.findById(id).select('active role account').lean();
+    cached = {
+      at: now,
+      found: !!m,
+      active: m ? m.active !== false : false,
+      role: m ? m.role : null,
+      account: m && m.account ? m.account.toString() : null,
+    };
+    _memberCache.set(id, cached);
+  }
+  if (!cached.found || !cached.active || cached.account !== decoded.shopId) {
+    throw new AppError('Access has been revoked', 401, 'AUTH_TOKEN_EXPIRED');
+  }
+  decoded.role = cached.role; // live role wins over whatever the token was minted with
+  return decoded;
+}
+
 // ── Staff administration (owner only; the route enforces requireOwner) ───────────────────────────────
 async function listMembers(accountId) {
   const members = await Member.find({ account: accountId }).sort({ createdAt: 1 });
@@ -187,16 +232,19 @@ async function updateMember(accountId, memberId, { name, role, active, password 
     member.passwordHash = await Member.hashPassword(password);
   }
   await member.save();
+  invalidateMember(memberId); // deactivation / role change / reset bites on the next data request
   return { member: shapeMember(member) };
 }
 
 async function removeMember(accountId, memberId) {
   const res = await Member.deleteOne({ _id: memberId, account: accountId });
   if (!res.deletedCount) throw new AppError('Staff member not found', 404, 'NOT_FOUND');
+  invalidateMember(memberId);
   return { removed: true };
 }
 
 module.exports = {
-  register, login, refresh, me, verifyAccess, requireOwner,
+  register, login, refresh, me, verifyAccess, requireOwner, assertMemberActive,
   listMembers, addMember, updateMember, removeMember,
+  __clearMemberCache,
 };

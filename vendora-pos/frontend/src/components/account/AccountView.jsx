@@ -1,21 +1,94 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Store, LogIn, UserPlus, Loader2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Store, LogIn, UserPlus, Loader2, ShieldCheck, LogOut } from 'lucide-react';
 import {
-  login, register, guestDataExists, shopHasData, migrateGuestIntoShop, currentShop,
+  login, register, guestDataExists, shopHasData, migrateGuestIntoShop, currentShop, useSession,
 } from '../../lib/account';
+import { signOut, pendingCount } from '../../lib/session';
+import SyncStatus from './SyncStatus';
 
 // PWA shop-owner login / create-account, plus the explicit guest→shop data migration prompt.
 // Self-contained (no router) so it's easy to test. `onDone` is called once the owner is signed in
 // and any migration choice is made; `onBack` returns to where they came from.
 export default function AccountView({ onDone, onBack }) {
+  const { loggedIn, shop } = useSession();
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [form, setForm] = useState({ email: '', password: '', shopName: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState('auth'); // 'auth' | 'migrate'
+  const [confirmOut, setConfirmOut] = useState(false); // sign-out confirm panel
+  const [keepData, setKeepData] = useState(false);     // "keep this shop's data on this device"
+  const [outBusy, setOutBusy] = useState(false);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function doSignOut() {
+    setOutBusy(true);
+    try {
+      const { remaining } = await signOut({ purge: !keepData });
+      toast.success(remaining > 0 && !keepData
+        ? `Signed out. ${remaining} unsynced change${remaining === 1 ? '' : 's'} couldn’t be backed up and were removed from this device.`
+        : 'Signed out');
+      setConfirmOut(false);
+      onDone?.();
+    } finally {
+      setOutBusy(false);
+    }
+  }
+
+  // Already signed in → account panel + safe sign-out (Phase 1.4). Reached from More → "Your shop account".
+  if (loggedIn && step === 'auth') {
+    const pending = pendingCount();
+    return (
+      <div>
+        {onBack && (
+          <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
+        )}
+        <div className="mb-4 flex items-center gap-2">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Store className="h-5 w-5" /></span>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold text-gray-900">{shop?.name || 'Your shop'}</h2>
+            <p className="text-xs text-gray-400">Signed in on this device</p>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <SyncStatus />
+        </div>
+
+        {!confirmOut ? (
+          <button type="button" data-testid="sign-out" onClick={() => { setKeepData(false); setConfirmOut(true); }} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-danger/30 bg-white px-4 py-3 text-sm font-semibold text-danger active:scale-[0.99]">
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-sm font-semibold text-gray-900">Sign out of {shop?.name || 'your shop'}?</p>
+            {pending > 0 && (
+              <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">
+                You have {pending} change{pending === 1 ? '' : 's'} not yet backed up. We’ll try to back them up first.
+              </p>
+            )}
+            <label className="mt-3 flex items-start gap-2 text-xs text-gray-600">
+              <input type="checkbox" checked={keepData} onChange={(e) => setKeepData(e.target.checked)} className="mt-0.5" />
+              <span>Keep this shop’s data on this device (only on your own phone). Leave unticked on a shared phone — we’ll remove it so the next person can’t see it.</span>
+            </label>
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => setConfirmOut(false)} className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700">Cancel</button>
+              <button type="button" data-testid="sign-out-confirm" onClick={doSignOut} disabled={outBusy} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-danger px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+                {outBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />} Sign out
+              </button>
+            </div>
+          </div>
+        )}
+        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-400">
+          <ShieldCheck className="h-3.5 w-3.5" /> Your shop data is backed up to the cloud and returns when you sign back in.
+        </p>
+      </div>
+    );
+  }
 
   async function submit(e) {
     e?.preventDefault?.();

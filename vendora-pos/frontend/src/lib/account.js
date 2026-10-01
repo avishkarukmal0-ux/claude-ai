@@ -16,7 +16,7 @@
 // backend endpoints (/api/pwa-auth/*) are Stage 2b and require a deploy + database to verify.
 import { useEffect, useState } from 'react';
 import {
-  setActiveWorkspace, shopWorkspace, workspaceHasData, copyWorkspace, LOCAL_WORKSPACE,
+  setActiveWorkspace, shopWorkspace, workspaceHasData, copyWorkspace, purgeWorkspace, LOCAL_WORKSPACE,
 } from './storage';
 
 const AUTH_KEY = 'vendora:auth';        // device-level session (NOT workspace-scoped, NOT backed up)
@@ -93,8 +93,17 @@ function normalize(d) {
 }
 /** Persist a session and switch the active workspace to the signed-in shop. */
 function activate(session) {
+  // Shared-device safety: if a DIFFERENT shop was signed in on this device, wipe its cached data before
+  // the new person starts (Phase 1.4). Only a genuine account switch triggers this — re-login as the same
+  // shop keeps its cache (so sync doesn't have to re-download everything), and the guest workspace is
+  // never purged here (guest→shop migration stays explicit and user-controlled).
+  const prev = loadSession();
+  const prevId = prev && prev.shop && prev.shop.id;
+  const nextId = session && session.shop && session.shop.id;
+  if (prevId && nextId && prevId !== nextId) purgeWorkspace(shopWorkspace(prevId));
+
   saveSession(session);
-  if (session && session.shop && session.shop.id) setActiveWorkspace(shopWorkspace(session.shop.id));
+  if (nextId) setActiveWorkspace(shopWorkspace(session.shop.id));
   announce();
   return session;
 }
@@ -126,9 +135,22 @@ export async function refresh() {
   announce();
   return next;
 }
-/** Sign out: clear the session and return to the on-device guest workspace. Data is NOT deleted. */
-export function logout() {
+/**
+ * Sign out: clear the session and return to the on-device guest workspace.
+ *
+ * By default this also PURGES the signed-in shop's cached data from this device (localStorage + memory +
+ * IndexedDB) so the next person on a shared device can't recover it (Phase 1.4 — shared-device safety).
+ * The shop's data is safe in the cloud and re-downloads on the next sign-in. Pass `{ purge: false }` for
+ * "keep me signed in on this device" / a personal device where the owner wants the local cache retained.
+ *
+ * Callers that may have unsynced work should flush + attempt a final sync and warn the user BEFORE calling
+ * this (see AccountView.signOut) — purge is local and does not push to the server.
+ */
+export function logout({ purge = true } = {}) {
+  const s = loadSession();
+  const shopId = s && s.shop && s.shop.id;
   clearSession();
+  if (purge && shopId) purgeWorkspace(shopWorkspace(shopId));
   setActiveWorkspace(LOCAL_WORKSPACE);
   announce();
 }

@@ -320,6 +320,46 @@ export function copyWorkspace(from, to, { overwrite = false } = {}) {
   }
 }
 
+/**
+ * Remove EVERY on-device trace of one workspace: all `vendora:<ws>:*` keys from the in-memory cache,
+ * localStorage, AND IndexedDB. Used on sign-out / account switch so the next person on a shared device
+ * can't recover the previous shop's cached data (Phase 1.4 — shared-device safety). This also clears the
+ * workspace's local-only stores (e.g. raw invoice scans) and its per-workspace sync-meta.
+ *
+ * Only clears the ONE workspace asked for — never the active one implicitly, never the device session
+ * (`vendora:auth` isn't workspace-scoped), never the legacy-migrated flag. Returns { purged } = number of
+ * localStorage keys removed. The IndexedDB purge is async + best-effort (the on-device localStorage copy
+ * is already gone synchronously when this returns).
+ */
+export function purgeWorkspace(ws) {
+  if (!ws) return { purged: 0 };
+  const prefix = `${NS}:${ws}:`;
+  // MEM (synchronous working copy)
+  for (const mk of [...MEM.keys()]) if (mk.indexOf(prefix) === 0) MEM.delete(mk);
+  // localStorage
+  let purged = 0;
+  try {
+    const toDel = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) toDel.push(k);
+    }
+    for (const k of toDel) { localStorage.removeItem(k); purged += 1; }
+  } catch { /* ignore */ }
+  // IndexedDB (durable mirror) — delete by prefix when supported, else the known scoped keys.
+  if (durableOn()) {
+    try {
+      if (typeof _durable.delByPrefix === 'function') {
+        trackDurable(_durable.delByPrefix(prefix));
+      } else {
+        for (const name of [...STORE_NAMES, ...LOCAL_ONLY_STORE_NAMES, '__syncmeta']) durableDel(keyFor(name, ws));
+      }
+    } catch { /* ignore */ }
+  }
+  dispatch(WORKSPACE_EVENT, { purged: ws });
+  return { purged };
+}
+
 /** Subscribe a callback to workspace switches + cross-tab writes. Returns an unsubscribe. */
 export function onWorkspaceChange(cb) {
   const handler = () => cb();

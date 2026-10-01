@@ -20,6 +20,33 @@ describe('storage — workspace scoping', () => {
   });
 });
 
+describe('storage — purgeWorkspace (shared-device safety)', () => {
+  it('removes every key of the named workspace from localStorage + memory, leaving others intact', () => {
+    storage.__resetMemForTest();
+    storage.setActiveWorkspace('shop:A');
+    storage.writeJSON('inventory_v1', [{ id: 'a' }]);
+    storage.writeJSON('suppliers_v1', [{ id: 's' }]);
+    storage.writeJSON('invoice_files_v1', [{ id: 'f' }]); // local-only store is purged too
+    storage.setActiveWorkspace('shop:B');
+    storage.writeJSON('inventory_v1', [{ id: 'b' }]);
+
+    const res = storage.purgeWorkspace('shop:A');
+    expect(res.purged).toBeGreaterThanOrEqual(3);
+
+    // A is gone from both the raw store and the cache
+    expect(storage.readJSON('inventory_v1', null, 'shop:A')).toBeNull();
+    expect(storage.readJSON('suppliers_v1', null, 'shop:A')).toBeNull();
+    expect(storage.readJSON('invoice_files_v1', null, 'shop:A')).toBeNull();
+    expect(localStorage.getItem('vendora:shop:A:inventory_v1')).toBeNull();
+    // B is untouched
+    expect(storage.readJSON('inventory_v1', null, 'shop:B')).toEqual([{ id: 'b' }]);
+  });
+
+  it('is a safe no-op for a falsy workspace', () => {
+    expect(storage.purgeWorkspace()).toEqual({ purged: 0 });
+  });
+});
+
 describe('storage — visible write failures', () => {
   it('emits an error event and returns { ok:false } when the device rejects the write', () => {
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
