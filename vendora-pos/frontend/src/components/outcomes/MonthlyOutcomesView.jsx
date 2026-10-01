@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ArrowLeft, PiggyBank, Receipt, ClipboardCheck, CheckCircle2, TrendingDown, Info } from 'lucide-react';
+import { ArrowLeft, PiggyBank, Receipt, ClipboardCheck, CheckCircle2, TrendingDown, Info, CalendarClock } from 'lucide-react';
 import { useClaims } from '../../lib/claimStore';
 import { useTasks } from '../../lib/taskStore';
 import { useInventory } from '../../lib/inventoryStore';
@@ -22,6 +22,11 @@ export default function MonthlyOutcomesView({ onBack }) {
     [claims, tasks, products, history, monthWasted, monthSaved]);
   const monthName = new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
+  // Nothing recorded yet this month AND no catalogue — show a useful empty state rather than a wall of £0.00.
+  const isEmpty = o.coverageTotal === 0 && o.creditReceived === 0 && o.creditOutstanding === 0
+    && o.discrepanciesResolved === 0 && o.tasksCompleted === 0 && o.stockChecks === 0
+    && o.wasteCost === 0 && o.estimated.rescued === 0;
+
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -30,6 +35,21 @@ export default function MonthlyOutcomesView({ onBack }) {
       <h2 className="mb-1 text-base font-bold text-gray-900">This month</h2>
       <p className="mb-4 text-xs text-gray-400">{monthName} — what actually happened, from your records.</p>
 
+      {isEmpty && (
+        <div className="mt-6 flex flex-col items-center text-center">
+          <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary">
+            <CalendarClock className="h-7 w-7" strokeWidth={1.75} />
+          </span>
+          <p className="text-sm font-semibold text-gray-900">Nothing recorded yet this month</p>
+          <p className="mt-1 max-w-xs text-sm text-gray-500">
+            As you count stock, resolve claims, receive credit and complete tasks, the real figures appear
+            here — pulled from your records, never estimated.
+          </p>
+        </div>
+      )}
+
+      {!isEmpty && (
+      <>
       <div className="grid grid-cols-2 gap-3">
         <Stat icon={PiggyBank} tone="text-success" label="Credit received" value={money(o.creditReceived)} hint={o.creditOutstanding > 0 ? `${money(o.creditOutstanding)} still chasing` : undefined} />
         <Stat icon={Receipt} tone="text-gray-900" label="Claims resolved" value={String(o.discrepanciesResolved)} />
@@ -56,6 +76,8 @@ export default function MonthlyOutcomesView({ onBack }) {
         </div>
         <p className="mt-1 text-[10px] leading-snug text-gray-400">An estimate of value kept out of the bin — separate from the confirmed figures above.</p>
       </div>
+      </>
+      )}
     </div>
   );
 }

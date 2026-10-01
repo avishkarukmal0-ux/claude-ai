@@ -18,7 +18,18 @@ function statusAt(entity, status) {
 /**
  * @returns actuals + a separate `estimated` block.
  */
-export function monthlyOutcomes({ claims = [], tasks = [], products = [], stocktakeHistory = [], monthWasted = 0, monthSaved = 0, now = Date.now() } = {}) {
+export function monthlyOutcomes(input = {}) {
+  // Coerce every array input defensively: a `= []` default only catches `undefined`, so an explicit
+  // `null` (e.g. a store that loaded a malformed value) would slip through and throw on `.filter`.
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  const claims = arr(input.claims);
+  const tasks = arr(input.tasks);
+  const products = arr(input.products);
+  const stocktakeHistory = arr(input.stocktakeHistory);
+  const monthWasted = Number(input.monthWasted) || 0;
+  const monthSaved = Number(input.monthSaved) || 0;
+  const now = input.now || Date.now();
+
   // Supplier credit ACTUALLY received (settled this month).
   const settled = claims.filter((c) => c.status === 'settled' && sameMonth(statusAt(c, 'settled'), now));
   const creditReceived = settled.reduce((n, c) => n + (Number(c.receivedAmount) || 0), 0);

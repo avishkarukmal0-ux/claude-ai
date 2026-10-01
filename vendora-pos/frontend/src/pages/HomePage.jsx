@@ -55,6 +55,7 @@ import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
 import { getOpenExceptionCount } from '../lib/taskStore';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 const ONBOARDED_KEY = 'vendora:onboarded';
 function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return true; } }
@@ -168,6 +169,9 @@ export default function HomePage() {
       </header>
 
       <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto px-4 pb-24 pt-4 focus:outline-none">
+        {/* Screen-level error recovery: a crash in any one screen shows a recovery card (and "Back to
+            home") instead of blanking the whole app. Keyed by screen/tab so navigating away clears it. */}
+        <ErrorBoundary key={screen || `tab:${tab}`} onReset={() => setScreen(null)}>
         {/* Full-page workflow screens. Money/cost + staff-admin screens are role-gated (defence in depth —
             staff never see the entry tiles either). The real guard is server-side. */}
         {screen && !canSeeScreen(role, screen) && (
@@ -333,6 +337,7 @@ export default function HomePage() {
             <p className="px-1 text-center text-xs text-gray-400">Set up as {shopLabel} · Vendora</p>
           </div>
         )}
+        </ErrorBoundary>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>

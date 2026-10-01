@@ -11,9 +11,14 @@ import { actorName } from './actor';
 const S_KEY = 'stocktake_v1';          // active session (logical name)
 const H_KEY = 'stocktake_history_v1';  // past summaries (logical name)
 
-function loadJSON(name, fallback) {
-  const v = readJSON(name, undefined);
-  return v === undefined ? fallback : v;
+// IMPORTANT: readJSON(name, fallback) returns `fallback` when the key is missing or stored null, so
+// pass the real fallback straight through. (An earlier version passed `undefined` and tried to branch
+// on it, but readJSON's `fallback = null` default parameter turns an explicit `undefined` into `null`
+// — which made an empty history load as `null` and crashed the stocktake + monthly-outcomes screens.)
+function loadSession() { return readJSON(S_KEY, null); }
+function loadHistory() {
+  const h = readJSON(H_KEY, []);
+  return Array.isArray(h) ? h : []; // never let a malformed value become a non-array
 }
 function persist(name, value) {
   if (value == null) return removeKey(name);
@@ -76,11 +81,11 @@ export function buildSummary(session, products) {
 }
 
 export function useStocktake() {
-  const [session, setSession] = useState(() => loadJSON(S_KEY, null));
-  const [history, setHistory] = useState(() => loadJSON(H_KEY, []));
+  const [session, setSession] = useState(loadSession);
+  const [history, setHistory] = useState(loadHistory);
 
   useEffect(() => {
-    const refresh = () => { setSession(loadJSON(S_KEY, null)); setHistory(loadJSON(H_KEY, [])); };
+    const refresh = () => { setSession(loadSession()); setHistory(loadHistory()); };
     window.addEventListener('storage', refresh);
     window.addEventListener('vendora:workspace', refresh);
     return () => {

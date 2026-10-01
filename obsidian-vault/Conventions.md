@@ -54,6 +54,17 @@ House style observed across the codebase — follow these when adding code.
 - Frontend tests: **Vitest** (`npm test` in `frontend`). Backend DB-free tests: `npm run test:unit`;
   integration needs Mongo (`VENDORA_TEST_URI`). Don't weaken assertions to go green — split, don't skip.
 
+## Local-first storage (PWA)
+- **`readJSON(name, fallback)` returns `fallback` for missing OR stored-null.** It has a `fallback = null`
+  default param, so passing `undefined` explicitly yields `null` — never pass `undefined` and branch on it.
+  Always pass the real fallback (`readJSON('x_v1', [])`). This bug once made stocktake history load as `null`
+  and crashed two screens (see [[2026-10-02-Review-Phase1-Crashes]]).
+- Every store `load()` coerces: `const a = readJSON(NAME, []); return Array.isArray(a) ? a : [];`.
+- Pure report/aggregation functions should coerce array inputs too (`Array.isArray(v) ? v : []`): a `= []`
+  default only catches `undefined`, not an explicit `null` passed from a hook.
+- Screens under `HomePage` render inside a per-screen `<ErrorBoundary key={screen} onReset={…}>` — a crash in
+  one screen must never blank the whole app.
+
 ## Frontend patterns
 - One `services/*.js` module per API domain, each a thin axios wrapper.
 - Pages fetch via `useCallback` + `useEffect`; toast on error.
