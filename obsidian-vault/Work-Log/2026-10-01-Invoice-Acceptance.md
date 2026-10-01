@@ -27,9 +27,19 @@ in [[Invoice-Acceptance-Coverage]] (kept current as phases land).
 FE **205/205** (+10: money 7, reconcile refs, credit-note dedupe, createClaim refs/total). BE pure
 **22/22** (money 5 added). Build clean; backend loads. Gate passed → Phase 1.
 
-## Phases 1–3 (pending)
-1 — shop isolation + unauthorised-access tests. 2 — untrusted upload/OCR hardening. 3 — 8 end-to-end
-scenarios, anonymised fixtures + extraction harness, feature flags, config/migration/disable/recovery docs.
+## Phase 1 — shop isolation + unauthorised-access tests ✅
+- FE `lib/__tests__/isolation.test.js` (3): `invoice_files_v1` is local-only (∉ `STORE_NAMES`); a file saved
+  in shop A is invisible from shop B; credit notes are per-workspace.
+- BE `__tests__/pwaIsolation.integration.test.js` (7, DB-gated): B can't read A's sync blobs; sync/OCR/notify
+  reject missing tokens (401); owner A's PATCH/DELETE of shop B's staff member → 404 (token-scoped); A's
+  notify prefs change doesn't touch B; A's digest preview shows A's overdue claim while B's shows 0
+  (background-job isolation).
+- Verification: FE **208/208** (+3), build clean; BE isolation suite parses + skips offline, runs on the
+  founder's Mongo via `VENDORA_TEST_URI` (same pattern as the 9/9-verified sync/auth suites).
+
+## Phases 2–3 (pending)
+2 — untrusted upload/OCR hardening. 3 — 8 end-to-end scenarios, anonymised fixtures + extraction harness,
+feature flags, config/migration/disable/recovery docs.
 
 ## Commit
 `feat(pwa): decimal-safe money + source refs + credit-note dedupe (acceptance P0)`

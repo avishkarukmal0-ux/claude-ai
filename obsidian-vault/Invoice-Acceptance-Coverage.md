@@ -32,11 +32,11 @@ totals = `sumMoney(parts)`. This avoids binary-float drift across many lines. (P
 
 | # | Requirement | Existing evidence | Status | Change (phase) | Acceptance |
 |---|---|---|---|---|---|
-| B1 | API endpoints scoped per shop | sync scoped by token shopId (`pwaSyncService.js` queries by account); OCR/notify token-gated | ✅ | add explicit cross-shop tests (P1) | cross-shop pull/push/notify return only own data / 401-403 |
-| B2 | Uploaded documents isolated | invoice files on-device only, never synced (`invoiceStore.js:12,87-88`; `LOCAL_ONLY_STORE_NAMES`) | ✅ | document + test files never enter sync set (P1/P2) | test asserts `invoice_files_v1` ∉ synced stores |
-| B3 | Background jobs isolated | `runForAccount` uses that account's own blobs (`pwaNotifyService.js`) | 🟡 | test digest for A excludes B's data (P1) | per-account digest contains only that account's items |
-| B4 | Notifications isolated | prefs on the account; recipient defaults to owner email | ✅ | cross-shop prefs test (P1) | a token for A cannot read/write B's prefs |
-| B5 | Staff access isolated | ownerGate scopes by `req.pwa.shopId` (`pwaAuthRoutes.js`); role store-gate (`pwaSyncService.js`) | 🟡 | owner-A-cannot-manage-B test; staff financial-store denial test (P1) | cross-shop staff op 404; staff write to financial store rejected |
+| B1 | API endpoints scoped per shop | sync scoped by token shopId; OCR/notify token-gated | ✅ (P1 tests) | — | `pwaIsolation.integration`: B can't read A's blobs; sync/OCR/notify 401 without token |
+| B2 | Uploaded documents isolated | invoice files on-device only, never synced (`invoiceStore.js:12,87-88`; `LOCAL_ONLY_STORE_NAMES`) | ✅ (P1 tests) | — | `isolation.test.js`: `invoice_files_v1` ∉ `STORE_NAMES`; file in shop A invisible in shop B |
+| B3 | Background jobs isolated | `runForAccount`/preview use only that account's blobs (`pwaNotifyService.js`) | ✅ (P1 tests) | — | `pwaIsolation.integration`: A's digest preview shows A's claim, B's shows 0 |
+| B4 | Notifications isolated | prefs on the account; recipient defaults to owner email | ✅ (P1 tests) | — | `pwaIsolation.integration`: A enabling email leaves B's prefs default; prefs/preview 401 without token |
+| B5 | Staff access isolated | ownerGate scopes by `req.pwa.shopId`; role store-gate (`pwaSyncService.js`) | ✅ (P1 tests) | — | `pwaIsolation.integration`: owner A PATCH/DELETE of B's member → 404; (staff financial-store denial in `pwaSync.integration`) |
 
 ## C. Untrusted input (uploads / OCR)
 
@@ -74,5 +74,6 @@ totals = `sumMoney(parts)`. This avoids binary-float drift across many lines. (P
 
 ### Phase gate status
 - **Phase 0** — ✅ **passed** (A1–A8 done/verified). FE 205/205, BE pure 22/22, build clean.
-- **Phase 1** — in progress next.
-- Phases 2–3 — pending; each starts only after the previous phase's checks pass.
+- **Phase 1** — ✅ **passed** (B1–B5). FE `isolation.test.js` 3/3; BE `pwaIsolation.integration` 7 (DB-gated, run on the founder's Mongo). FE 208/208, build clean.
+- **Phase 2** — in progress next.
+- Phase 3 — pending; starts only after Phase 2's checks pass.
