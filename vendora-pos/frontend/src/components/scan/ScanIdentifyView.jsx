@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, ScanLine, Keyboard, PackageCheck, Package2, Minus, Plus, Check, PackagePlus,
+  ArrowLeft, ScanLine, Keyboard, PackageCheck, Package2, Minus, Plus, Check, PackagePlus, Sparkles, Loader2,
 } from 'lucide-react';
 import BarcodeScanner, { barcodeScanSupported } from './BarcodeScanner';
 import { useInventory, margin } from '../../lib/inventoryStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse } from '../../config/categories';
+import { lookupBarcode } from '../../lib/productLookup';
 
 // Scan → identify. Scan (or type) a barcode and see exactly what it is: the product, its category, price,
 // margin and stock — and whether the scan was a SINGLE or a whole CASE. Book stock in (a case books in
@@ -179,8 +180,32 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
 
 function AddUnknown({ code, categorySuggestions, onSave, onCancel }) {
   const [f, setF] = useState({ name: '', category: '', cost: '', price: '', qty: '', packSize: '', caseBarcode: '' });
+  const [lookup, setLookup] = useState({ state: 'idle' }); // 'idle' | 'searching' | 'found' | 'none'
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
+
+  // Try to auto-fill name + category from the public database (via our backend). Best-effort: only fills
+  // empty fields, never overwrites what the shopkeeper typed, and silently does nothing if offline / not
+  // signed in / not found. Price, cost and stock are never looked up — those are the shop's own.
+  useEffect(() => {
+    let cancelled = false;
+    setLookup({ state: 'searching' });
+    lookupBarcode(code).then((r) => {
+      if (cancelled) return;
+      if (r && r.found && (r.name || r.category)) {
+        setF((prev) => ({
+          ...prev,
+          name: prev.name || r.name || '',
+          category: prev.category || r.category || '',
+        }));
+        setLookup({ state: 'found' });
+      } else {
+        setLookup({ state: 'none' });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [code]);
+
   return (
     <div>
       <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-warning-light text-warning-dark">
@@ -190,6 +215,12 @@ function AddUnknown({ code, categorySuggestions, onSave, onCancel }) {
       <p className="mx-auto mb-3 max-w-xs text-center text-sm text-gray-500">
         Add it once and every future scan of <span className="font-mono text-gray-700">{code}</span> will identify it instantly.
       </p>
+      {lookup.state === 'searching' && (
+        <p className="mb-2 flex items-center justify-center gap-1.5 text-xs text-gray-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking up the name online…</p>
+      )}
+      {lookup.state === 'found' && (
+        <p className="mb-2 flex items-center justify-center gap-1.5 text-xs text-primary"><Sparkles className="h-3.5 w-3.5" /> Found online — please check it’s right. You still set the price &amp; stock.</p>
+      )}
       <div className="rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
         <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.category} onChange={set('category')} list="vendora-scan-cats" placeholder="Category" aria-label="Category" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
