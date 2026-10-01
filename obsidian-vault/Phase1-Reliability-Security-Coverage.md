@@ -41,12 +41,12 @@ duplicate screens and parallel implementations; do not present mock data as comp
 | # | Requirement | Existing evidence | Status | Change | Acceptance |
 |---|---|---|---|---|---|
 | 1.3a | Inspect/strengthen export/backup/restore | local engine `backup.js` v2, download/share, UI in More→Data (`HomePage.jsx:270-275`) | ✅ | — | — |
-| 1.3b | Automatic server backups where architecture supports | **MISSING** — `SyncBlob` is one row/store, overwrite-in-place, `rev` is a CAS counter not history (`SyncBlob.js:11-22`, `pwaSyncService.js:84-121`) | 🔲→ | keep a capped ring buffer of the last N blob revisions server-side (behind `SYNC_HISTORY` flag); owner can restore a prior server version | a bad overwrite is recoverable from server history (test) |
-| 1.3c | Show last successful backup | **MISSING** — no `lastBackup` stored anywhere; only last *sync* shown (`SyncStatus.jsx:29`) | 🔲→ | record `lastBackupAt` on export; show it in Data; distinguish from last-sync | Data shows when the user last exported |
+| 1.3b | Automatic server backups where architecture supports | new `SyncBlobHistory` collection records every committed revision when `SYNC_HISTORY` is on (capped `SYNC_HISTORY_KEEP`, TTL `SYNC_HISTORY_TTL_DAYS`); `pwaSyncService` `listHistory`/`getHistoryVersion`/`restore`; routes `GET /history`, `GET /history/:name/:rev`, `POST /restore`; client `cloudBackup.js` + `CloudBackups.jsx` (owner/manager) | ✅ (1.3) | — | **done** — `pwaSyncHistory.integration`: bad overwrite restored from a prior revision; `cloudbackup.test.js` client |
+| 1.3c | Show last successful backup | `backup.getLastBackupAt()` records a device-level timestamp on each successful export; shown on the Export row (More→Data) | ✅ (1.3) | — | **done** — `cloudbackup.test.js` records export time |
 | 1.3d | Validate restore files + preview effects | `readBackup` validates + rejects corrupt (`backup.js:61-102`); confirm shows per-store counts + date (`HomePage.jsx:95-97`) | ✅ | — | — |
 | 1.3e | Atomic / recoverable restore | snapshot+rollback (`backup.js:116-149`); recovery copy auto-downloaded first (`HomePage.jsx:98`) | ✅ | — | interrupted restore rolls back (existing test) |
-| 1.3f | Distinguish local exports from server backups | **MISSING** — "Synced" could read as "backed up" | 🔲→ | copy in Data + SyncStatus clarifying sync ≠ recoverable backup | UI states the difference |
-| 1.3g | Document config / retention / recovery | **MISSING** | 🔲→ | add a Backup & recovery section to [[Deployment-Config]] | documented |
+| 1.3f | Distinguish local exports from server backups | `SaveSyncStatus` copy ("Cross-device sync keeps your other devices up to date. For a restore point, use Export backup"); `CloudBackups` + docs state sync ≠ recoverable backup | ✅ (1.3) | — | **done** — UI + [[Deployment-Config]] Backup & recovery table |
+| 1.3g | Document config / retention / recovery | [[Deployment-Config]] — Backup & recovery section (4 levels, sync≠backup, retention, operator enable + verify) + flag table rows | ✅ (1.3) | — | **done** |
 
 ## 1.4 Shop and staff security
 

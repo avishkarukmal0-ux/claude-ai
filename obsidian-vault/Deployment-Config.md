@@ -22,6 +22,9 @@ flag in the Render service env and redeploy.
 | `NOTIFY_EMAIL_PROVIDER` (+ `SENDGRID_API_KEY`, `NOTIFY_FROM_EMAIL`) | backend | off | Turns on the email digest channel. Off → `configured:false`, nothing sent. |
 | `NOTIFY_RUN_TOKEN` | backend | off | Enables `POST /api/pwa-notify/run` for an external scheduler (header `x-notify-token`). Unset → that route is 404. |
 | `NOTIFY_CRON` | backend | off | `true` also runs an in-process 15-min digest sweep (only reliable while the instance stays awake). |
+| `SYNC_HISTORY` | backend | off | `true` keeps a server-side version history of each synced store so a bad overwrite / lost conflict is recoverable (owner → More → Data → Cloud version history → Restore). Off → latest-only, exactly as before. |
+| `SYNC_HISTORY_KEEP` | backend | 10 | Revisions kept per store when history is on. |
+| `SYNC_HISTORY_TTL_DAYS` | backend | 30 | History older than this self-expires (TTL index backstop). |
 
 ## Migrations
 
@@ -45,6 +48,37 @@ and no migration script to run:
 - **Staff access** — set a member inactive (owner → Staff access → Deactivate): they can't sign in or
   refresh; their past actions stay recorded. Turning `VITE_ACCOUNTS_ENABLED` off hides the whole
   account/sync/staff UI without deleting anything.
+
+## Backup & recovery (Phase 1.3)
+
+Vendora keeps data safe at three independent levels — know which is which:
+
+| Level | What it is | Where | Recovers from |
+|---|---|---|---|
+| **On-device** | the live local-first copy (localStorage + IndexedDB mirror) | the phone | app restart, offline, eviction (restored on boot) |
+| **Local export** | a manual, versioned `.json` file the owner saves/shares | wherever they save it | lost/replaced device; a bad local change (Restore from backup) |
+| **Cross-device sync** | the latest value of each store, per shop account | the backend (`SyncBlob`) | setting up a new device (re-pulls everything) |
+| **Server version history** | last N revisions of each store (opt-in) | the backend (`SyncBlobHistory`) | a bad overwrite / lost two-device conflict (owner restores a prior version) |
+
+**Sync is not a backup.** Cross-device sync holds only the *latest* value; without `SYNC_HISTORY` a bad
+overwrite replaces the server copy. The app says so in More → Data, and the **local export** is the always-
+available restore point. Turn on `SYNC_HISTORY` for recoverable server-side versions.
+
+- **Last successful backup** is shown on the Export row (More → Data) per device.
+- **Local restore** validates the file, previews per-store counts, auto-downloads a recovery copy of current
+  data first, and is atomic (snapshot + rollback) — an interrupted restore leaves data unchanged.
+- **Server restore** (owner/manager) writes the chosen revision as a new current revision (so it propagates
+  to every device) and is itself snapshotted, so a restore can be undone. Staff cannot restore.
+- **Two-device conflicts**: the losing device's edit is kept locally under More → Data → **Recovered changes**
+  (download/clear), so last-write-wins is never a silent loss.
+- **Retention**: server history keeps `SYNC_HISTORY_KEEP` revisions per store and expires anything older than
+  `SYNC_HISTORY_TTL_DAYS`. Local exports are kept by the owner wherever they saved them (no server retention).
+
+### Enabling server version history (operator)
+1. **Render → the backend service → Environment**: set `SYNC_HISTORY=true` (optionally `SYNC_HISTORY_KEEP`,
+   `SYNC_HISTORY_TTL_DAYS`). Redeploy. Needs accounts/sync in use (`VITE_ACCOUNTS_ENABLED=true`).
+2. Verify: `GET /api/pwa-sync/history` (with a shop token) reports `enabled:true`; the owner sees
+   More → Data → **Cloud version history**. Safe to turn off again — it simply stops recording new versions.
 
 ## Recovery
 

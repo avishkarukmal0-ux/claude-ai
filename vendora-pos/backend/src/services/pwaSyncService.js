@@ -8,7 +8,9 @@
 // resolved last-write-wins by the client's modification time (`mtime`) — simple and predictable. Every
 // query is scoped to the authenticated account id, so one shop can never read or write another's data.
 const AppError = require('../utils/AppError');
+const config = require('../config');
 const SyncBlob = require('../models/SyncBlob');
+const SyncBlobHistory = require('../models/SyncBlobHistory');
 
 // Mirror of the client STORE_NAMES (frontend/src/lib/storage.js). We only ever persist known stores, so
 // a compromised or buggy client can't fill the collection with arbitrary keys. Keep in sync with the client.
@@ -39,6 +41,77 @@ function canReadStore(role, name) {
   return true;
 }
 
+// ── Server-side version history (Phase 1.3) — optional, gated on config.sync.historyEnabled ─────────────
+function historyOn() { return !!config.sync.historyEnabled; }
+
+/** Snapshot a committed revision, then prune to the most recent N for that store. Best-effort: a history
+ *  failure must never fail the actual sync write. */
+async function recordHistory(accountId, name, value, rev, mtime, kind = 'write') {
+  if (!historyOn()) return;
+  try {
+    await SyncBlobHistory.create({ account: accountId, name, value, rev, mtime, kind, at: new Date() });
+    const keep = Math.max(1, config.sync.historyKeep || 10);
+    const old = await SyncBlobHistory.find({ account: accountId, name })
+      .sort({ rev: -1 }).skip(keep).select('_id').lean();
+    if (old.length) await SyncBlobHistory.deleteMany({ _id: { $in: old.map((o) => o._id) } });
+  } catch { /* history is a safety net, never a blocker */ }
+}
+
+/** Recent revisions (metadata only — no values) for each store the role may see. `{ enabled, history }`. */
+async function listHistory(accountId, role) {
+  if (!historyOn()) return { enabled: false, history: {} };
+  const keep = Math.max(1, config.sync.historyKeep || 10);
+  const docs = await SyncBlobHistory.find({ account: accountId }).sort({ rev: -1 }).lean();
+  const history = {};
+  for (const d of docs) {
+    if (!canReadStore(role, d.name)) continue;
+    if (!history[d.name]) history[d.name] = [];
+    if (history[d.name].length >= keep) continue;
+    history[d.name].push({ rev: d.rev, mtime: d.mtime, at: d.at, kind: d.kind, size: Buffer.byteLength(d.value || '', 'utf8') });
+  }
+  return { enabled: true, history };
+}
+
+/** The stored value of one historical revision (role must be allowed to read that store). */
+async function getHistoryVersion(accountId, name, rev, role) {
+  if (!historyOn()) throw new AppError('History is not enabled', 404, 'NOT_FOUND');
+  if (!ALLOWED.has(name)) throw AppError.validation(`Unknown store: ${name}`);
+  if (!canReadStore(role, name)) throw new AppError('Not allowed', 403, 'FORBIDDEN');
+  const doc = await SyncBlobHistory.findOne({ account: accountId, name, rev: Number(rev) }).lean();
+  if (!doc) throw new AppError('Revision not found', 404, 'NOT_FOUND');
+  return { name, rev: doc.rev, mtime: doc.mtime, value: doc.value, at: doc.at };
+}
+
+/**
+ * Restore a store to a prior revision's value (Phase 1.3 recovery). Writes it as a NEW current revision
+ * with mtime=now so it wins last-write-wins and propagates to every device. Atomic on the current rev.
+ * Staff cannot restore; a financial store needs owner/manager (canWriteStore). Returns { name, rev }.
+ */
+async function restore(accountId, name, rev, role) {
+  if (!historyOn()) throw new AppError('History is not enabled', 404, 'NOT_FOUND');
+  if (role === 'staff') throw new AppError('Only the owner or a manager can restore', 403, 'FORBIDDEN');
+  if (!ALLOWED.has(name)) throw AppError.validation(`Unknown store: ${name}`);
+  if (!canWriteStore(role, name)) throw new AppError('Not allowed', 403, 'FORBIDDEN');
+  const snap = await SyncBlobHistory.findOne({ account: accountId, name, rev: Number(rev) }).lean();
+  if (!snap) throw new AppError('Revision not found', 404, 'NOT_FOUND');
+
+  const now = Date.now();
+  const current = await SyncBlob.findOne({ account: accountId, name });
+  let saved;
+  if (!current) {
+    saved = await SyncBlob.create({ account: accountId, name, value: snap.value, rev: 1, mtime: now });
+  } else {
+    saved = await SyncBlob.findOneAndUpdate(
+      { account: accountId, name, rev: current.rev },
+      { $set: { value: snap.value, mtime: now }, $inc: { rev: 1 } },
+      { new: true },
+    );
+    if (!saved) throw new AppError('Store changed during restore — try again', 409, 'CONFLICT');
+  }
+  await recordHistory(accountId, name, snap.value, saved.rev, now, 'restore');
+  return { name, rev: saved.rev, fromRev: Number(rev) };
+}
+
 /** All of an account's blobs the role may see, so the client can adopt anything newer it's allowed. */
 async function pull(accountId, role) {
   const docs = await SyncBlob.find({ account: accountId }).lean();
@@ -67,6 +140,7 @@ async function push(accountId, changes, role) {
   const applied = [];
   const conflicts = [];
   const rejected = [];
+  const committed = []; // { name, value, rev, mtime } — snapshotted to history after the loop (if enabled)
 
   for (const c of changes) {
     const name = c && c.name;
@@ -86,7 +160,7 @@ async function push(accountId, changes, role) {
       { $set: { value, mtime }, $inc: { rev: 1 } },
       { new: true },
     );
-    if (doc) { applied.push({ name, rev: doc.rev }); continue; }
+    if (doc) { applied.push({ name, rev: doc.rev }); committed.push({ name, value, rev: doc.rev, mtime }); continue; }
 
     // 2) No row at baseRev — it either doesn't exist yet, or the server moved on (concurrent write).
     // eslint-disable-next-line no-await-in-loop
@@ -96,6 +170,7 @@ async function push(accountId, changes, role) {
         // eslint-disable-next-line no-await-in-loop
         const created = await SyncBlob.create({ account: accountId, name, value, rev: 1, mtime });
         applied.push({ name, rev: created.rev });
+        committed.push({ name, value, rev: created.rev, mtime });
         continue;
       } catch (e) {
         // A concurrent create won the unique (account,name) index — reload and fall through to resolve.
@@ -113,7 +188,7 @@ async function push(accountId, changes, role) {
         { $set: { value, mtime }, $inc: { rev: 1 } },
         { new: true },
       );
-      if (won) { applied.push({ name, rev: won.rev }); continue; }
+      if (won) { applied.push({ name, rev: won.rev }); committed.push({ name, value, rev: won.rev, mtime }); continue; }
       // Lost the CAS race to another writer — reload and report the winner as a conflict.
       // eslint-disable-next-line no-await-in-loop
       current = await SyncBlob.findOne({ account: accountId, name });
@@ -121,7 +196,18 @@ async function push(accountId, changes, role) {
     conflicts.push({ name, value: current.value, rev: current.rev, mtime: current.mtime });
   }
 
+  // Snapshot committed revisions to history (optional, best-effort — never fails the write).
+  if (historyOn()) {
+    for (const h of committed) {
+      // eslint-disable-next-line no-await-in-loop
+      await recordHistory(accountId, h.name, h.value, h.rev, h.mtime, 'write');
+    }
+  }
+
   return { applied, conflicts, rejected };
 }
 
-module.exports = { pull, push, ALLOWED, MAX_VALUE_BYTES, canWriteStore, canReadStore, FINANCIAL_STORES };
+module.exports = {
+  pull, push, listHistory, getHistoryVersion, restore,
+  ALLOWED, MAX_VALUE_BYTES, canWriteStore, canReadStore, FINANCIAL_STORES,
+};

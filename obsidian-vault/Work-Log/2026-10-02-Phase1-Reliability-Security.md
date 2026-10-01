@@ -75,6 +75,27 @@ corrections. **Gaps closed:**
 ### Verification (1.2)
 - FE **239/239** (+4 new movement tests; 2 undo tests updated to assert retained history). Build clean.
 
-## Follow-ups
-- 1.3 backup/recovery — next commit (see checklist).
+## 1.3 — Backup & recovery ✅
+**Already solid:** local export/restore (validated, previewed, atomic rollback, recovery copy). **Gaps closed:**
+- **Server-side version history (key, behind `SYNC_HISTORY`, default off):** new `SyncBlobHistory` collection
+  snapshots every committed revision (capped `SYNC_HISTORY_KEEP`=10, TTL `SYNC_HISTORY_TTL_DAYS`=30).
+  `pwaSyncService` gains `listHistory`/`getHistoryVersion`/`restore` (atomic, staff can't restore, financial
+  stores need owner/manager); routes `GET /history`, `GET /history/:name/:rev`, `POST /restore`. So a bad
+  overwrite or a lost two-device conflict is now **recoverable** server-side (was permanent).
+- **Client:** `cloudBackup.js` + `CloudBackups.jsx` (owner/manager, More→Data→Cloud version history): lists
+  recent revisions and restores one, then pulls it down. Honest "not switched on" state when the flag is off.
+- **Last successful backup:** `backup.getLastBackupAt()` records a device-level timestamp on each export;
+  shown on the Export row.
+- **Sync ≠ backup:** copy in `SaveSyncStatus` + `CloudBackups` + the docs makes the distinction explicit.
+- **Docs:** [[Deployment-Config]] Backup & recovery section (4 levels, retention, operator enable/verify) +
+  flag table rows.
+
+### Verification (1.3)
+- FE **242/242** (+3 cloudBackup client + last-backup). Build clean; backend loads.
+- BE: pure suites pass; new `pwaSyncHistory.integration` (DB-gated) — records revisions, restores a bad
+  overwrite, fetches a version, staff-restore 403 — parses + skips without `VENDORA_TEST_URI`.
+
+## Phase 1 status
+All four sub-areas (1.4 security, 1.1 status, 1.2 traceability, 1.3 backup) delivered + verified. Remaining:
+wire the Phase-1 acceptance scenarios into tests + final completion report (task #49).
 </content>

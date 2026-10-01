@@ -6,9 +6,9 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge,
+  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog,
 } from 'lucide-react';
-import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
+import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
 import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
@@ -45,6 +45,7 @@ import NotificationsView from '../components/account/NotificationsView';
 import { maybeNotify } from '../lib/notifications';
 import SaveSyncStatus from '../components/account/SaveSyncStatus';
 import ConflictRecovery from '../components/account/ConflictRecovery';
+import CloudBackups from '../components/account/CloudBackups';
 import { useSyncStatus, CONFLICT_EVENT } from '../lib/sync';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -69,6 +70,7 @@ export default function HomePage() {
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
+  const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt);
   const restoreInputRef = useRef(null);
 
   function go(target) {
@@ -95,8 +97,9 @@ export default function HomePage() {
 
   async function onExport() {
     const shared = await shareBackup();
-    if (shared) return;
+    if (shared) { setLastBackupAt(getLastBackupAt()); return; }
     const ok = downloadBackup();
+    if (ok) setLastBackupAt(getLastBackupAt());
     toast[ok ? 'success' : 'error'](ok ? 'Backup downloaded' : 'Couldn’t create the backup');
   }
   function onRestoreFile(e) {
@@ -183,6 +186,7 @@ export default function HomePage() {
         {screen === 'staff-admin' && canSeeScreen(role, 'staff-admin') && <StaffView onBack={() => setScreen(null)} />}
         {screen === 'notifications' && <NotificationsView onBack={() => setScreen(null)} />}
         {screen === 'recovered' && <ConflictRecovery onBack={() => setScreen(null)} />}
+        {screen === 'cloud-backups' && !isStaff && <CloudBackups onBack={() => setScreen(null)} />}
         {screen === 'overview' && canSeeScreen(role, 'overview') && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -285,9 +289,12 @@ export default function HomePage() {
             </MoreGroup>
             <MoreGroup title="Data">
               <Row icon={FileSpreadsheet} label="Import till sales" sub="Turn estimates into confirmed sales (optional)" onClick={() => setScreen('sales-import')} />
-              <Row icon={Download} label="Export backup" sub="Save your data to a file (or share it)" onClick={onExport} />
+              <Row icon={Download} label="Export backup" sub={lastBackupAt ? `Last saved ${new Date(lastBackupAt).toLocaleDateString('en-GB')} · a file you can restore` : 'Save your data to a file you can restore — no backup yet'} onClick={onExport} />
               <Row icon={Upload} label="Restore from backup" sub="Load a backup file — replaces current data" onClick={() => restoreInputRef.current?.click()} />
               <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
+              {ACCOUNTS_ENABLED && isLoggedIn() && !isStaff && (
+                <Row icon={CloudCog} label="Cloud version history" sub="Roll a store back to an earlier saved version" onClick={() => setScreen('cloud-backups')} />
+              )}
               {conflicts > 0 && (
                 <Row icon={GitMerge} label="Recovered changes" sub="Edits replaced by another device — kept safe" onClick={() => setScreen('recovered')} badge={conflicts} />
               )}

@@ -39,4 +39,30 @@ router.post('/push', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Server-side version history (Phase 1.3; no-op responses when SYNC_HISTORY is off) ──────────────────
+// GET /api/pwa-sync/history → { success, enabled, history: { name: [{ rev, mtime, at, kind, size }] } }
+router.get('/history', async (req, res, next) => {
+  try {
+    const out = await sync.listHistory(req.pwa.sub, req.pwa.role);
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// GET /api/pwa-sync/history/:name/:rev → { success, name, rev, mtime, value, at }
+router.get('/history/:name/:rev', async (req, res, next) => {
+  try {
+    const out = await sync.getHistoryVersion(req.pwa.sub, req.params.name, req.params.rev, req.pwa.role);
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// POST /api/pwa-sync/restore { name, rev } → restore a store to a prior revision (owner/manager only)
+router.post('/restore', async (req, res, next) => {
+  try {
+    const { name, rev } = req.body || {};
+    const out = await sync.restore(req.pwa.sub, name, rev, req.pwa.role);
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

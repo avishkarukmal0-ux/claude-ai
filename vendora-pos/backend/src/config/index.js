@@ -33,6 +33,19 @@ module.exports = {
     cronEnabled: process.env.NOTIFY_CRON === 'true',
   },
 
+  // Server-side sync-blob version history (optional, off by default). When on, every accepted sync write
+  // also snapshots the committed revision into a capped, TTL'd history collection, so a bad overwrite or a
+  // lost last-write-wins conflict is RECOVERABLE from the server (the owner can restore a prior revision).
+  // Off → behaviour is exactly as before (latest value only). See obsidian-vault/Deployment-Config.md.
+  //   SYNC_HISTORY=true            → enable server version history + the restore endpoints
+  //   SYNC_HISTORY_KEEP=<n>        → revisions kept per store (default 10)
+  //   SYNC_HISTORY_TTL_DAYS=<n>    → also expire history older than this many days (default 30)
+  sync: {
+    historyEnabled: process.env.SYNC_HISTORY === 'true',
+    historyKeep: parseInt(process.env.SYNC_HISTORY_KEEP, 10) || 10,
+    historyTtlDays: parseInt(process.env.SYNC_HISTORY_TTL_DAYS, 10) || 30,
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },

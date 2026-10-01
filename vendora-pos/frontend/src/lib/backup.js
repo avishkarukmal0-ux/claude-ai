@@ -10,6 +10,19 @@ import {
 
 const BACKUP_VERSION = 2;
 
+// Device-level record of the last successful LOCAL export (Phase 1.3c — "show the last successful backup").
+// Not workspace-scoped and not synced: it's about this device's export habit. Stored directly in
+// localStorage so it never participates in sync or a backup file.
+const LAST_BACKUP_KEY = 'vendora:last_backup';
+function markBackupDone() {
+  try { localStorage.setItem(LAST_BACKUP_KEY, String(Date.now())); } catch { /* ignore */ }
+}
+/** Epoch ms of the last successful local export on this device, or 0 if never. */
+export function getLastBackupAt() {
+  try { const n = Number(localStorage.getItem(LAST_BACKUP_KEY)); return Number.isFinite(n) ? n : 0; }
+  catch { return 0; }
+}
+
 // --- build -----------------------------------------------------------------
 export function buildBackup(ws = getActiveWorkspace()) {
   const data = {};
@@ -36,6 +49,7 @@ export function downloadBackup(ws = getActiveWorkspace(), prefix) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    markBackupDone();
     return true;
   } catch {
     return false;
@@ -48,6 +62,7 @@ export async function shareBackup(ws = getActiveWorkspace()) {
     const file = new File([json], backupFilename(), { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: 'Vendora backup' });
+      markBackupDone();
       return true;
     }
   } catch { /* fall through */ }
