@@ -14,6 +14,7 @@ import { readJSON, writeJSON, getActiveWorkspace } from './storage';
 import { recordMovement, reverseByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
 import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
 import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
+import { reassignProductRefs } from './productMerge';
 
 const NAME = 'inventory_v1';
 
@@ -222,14 +223,43 @@ export function normalisePackSize(v) {
   return Number.isFinite(n) && n >= 2 ? n : null;
 }
 
+// Every scannable code a product answers to: its single barcode, its outer/case barcode, and any extra
+// barcodes (a product line can ship under several EANs; a supplier's case sticker differs again). Used by
+// matching + duplicate detection so a second barcode still resolves to the one product (Phase 2.7a).
+export function codesOf(p) {
+  const out = [];
+  const main = (p && p.barcode || '').trim(); if (main) out.push(main);
+  const cse = (p && p.caseBarcode || '').trim(); if (cse) out.push(cse);
+  for (const c of (Array.isArray(p && p.extraBarcodes) ? p.extraBarcodes : [])) {
+    const code = String(c || '').trim(); if (code) out.push(code);
+  }
+  return out;
+}
+
+/** Clean an extra-barcode list: trimmed, non-empty, de-duped, and excluding the main/case codes. */
+function normaliseExtraBarcodes(arr, primary, caseBc) {
+  const seen = new Set([primary, caseBc].filter(Boolean));
+  const out = [];
+  for (const c of (Array.isArray(arr) ? arr : [])) {
+    const code = String(c || '').trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code); out.push(code);
+  }
+  return out;
+}
+
 function normaliseNew(p) {
+  const barcode = (p.barcode || '').trim();
+  const caseBarcode = (p.caseBarcode || '').trim() || null;
   return {
     id: newId(),
-    barcode: (p.barcode || '').trim(),
+    barcode,
     // A product is identified by its barcode. category + packSize + caseBarcode are what turn a bare
     // code into something the shop can act on: what kind of thing it is, and whether a scan is one unit
     // or a whole case. None of this lives in the barcode itself — it's the shop's own record.
-    caseBarcode: (p.caseBarcode || '').trim() || null,  // outer/case barcode; scanning it books a full case
+    caseBarcode,                                        // outer/case barcode; scanning it books a full case
+    extraBarcodes: normaliseExtraBarcodes(p.extraBarcodes, barcode, caseBarcode), // additional EANs (2.7a)
+    supplierAliases: Array.isArray(p.supplierAliases) ? p.supplierAliases : [],    // supplier code/name (2.7b)
     category: (p.category || '').trim() || null,
     packSize: normalisePackSize(p.packSize),            // units per case (null = sold only as singles)
     name: (p.name || '').trim() || 'Unnamed item',
@@ -258,12 +288,79 @@ export function matchBarcode(products, rawCode) {
   const code = String(rawCode || '').trim();
   if (!code) return null;
   const list = Array.isArray(products) ? products : [];
-  // Prefer a single-barcode match; fall back to a case-barcode match.
+  // Prefer a single-barcode match; then a case-barcode match; then any extra barcode (as a single unit).
   const bySingle = list.find((p) => (p.barcode || '') === code);
   if (bySingle) return { product: bySingle, unit: 'single', multiplier: 1 };
   const byCase = list.find((p) => (p.caseBarcode || '') === code);
   if (byCase) return { product: byCase, unit: 'case', multiplier: normalisePackSize(byCase.packSize) || 1 };
+  const byExtra = list.find((p) => Array.isArray(p.extraBarcodes) && p.extraBarcodes.includes(code));
+  if (byExtra) return { product: byExtra, unit: 'single', multiplier: 1 };
   return null;
+}
+
+/** The product (if any) already using this code in ANY of its barcode slots — used to prevent linking a
+ *  code that belongs to a different product. Returns the product or null. */
+export function productByAnyCode(products, rawCode, { exceptId } = {}) {
+  const code = String(rawCode || '').trim();
+  if (!code) return null;
+  return (Array.isArray(products) ? products : []).find((p) => p.id !== exceptId && codesOf(p).includes(code)) || null;
+}
+
+const normName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * Match a product by a SUPPLIER'S OWN code or name for it (Phase 2.7b) — the thing a supplier's invoice
+ * calls a product, which is neither its barcode nor your shelf name. Optionally scoped to a supplier.
+ * Returns the product or null.
+ */
+export function matchBySupplierAlias(products, { code = '', name = '', supplierId = null } = {}) {
+  const c = String(code || '').trim();
+  const n = normName(name);
+  if (!c && !n) return null;
+  for (const p of (Array.isArray(products) ? products : [])) {
+    for (const a of (Array.isArray(p.supplierAliases) ? p.supplierAliases : [])) {
+      if (supplierId && a.supplierId && a.supplierId !== supplierId) continue;
+      if (c && String(a.code || '').trim() === c) return p;
+      if (n && normName(a.name) === n) return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find likely duplicate products for a REVIEWABLE merge (Phase 2.7e) — never merges automatically.
+ * Groups two+ products that either share a barcode (strong) or have the same normalised name (likely).
+ * Returns [{ key, reason:'barcode'|'name', products:[...] }], biggest/strongest first.
+ */
+export function findDuplicateProducts(products) {
+  const list = Array.isArray(products) ? products : [];
+  const groups = [];
+  const seenKeys = new Set();
+  const pushGroup = (reason, members) => {
+    if (members.length < 2) return;
+    const key = `${reason}:${members.map((p) => p.id).sort().join('|')}`;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    groups.push({ key, reason, products: members });
+  };
+  // Shared barcode (any code in common).
+  const byCode = new Map();
+  for (const p of list) for (const c of codesOf(p)) {
+    if (!byCode.has(c)) byCode.set(c, new Map());
+    byCode.get(c).set(p.id, p);
+  }
+  for (const m of byCode.values()) if (m.size > 1) pushGroup('barcode', [...m.values()]);
+  // Same normalised name.
+  const byName = new Map();
+  for (const p of list) {
+    const n = normName(p.name);
+    if (!n || n === 'unnamed item') continue;
+    if (!byName.has(n)) byName.set(n, []);
+    byName.get(n).push(p);
+  }
+  for (const members of byName.values()) pushGroup('name', members);
+  // Strong (barcode) matches first.
+  return groups.sort((a, b) => (a.reason === b.reason ? 0 : a.reason === 'barcode' ? -1 : 1));
 }
 
 /** React hook: live inventory + mutators. Components re-render on every change. */
@@ -315,6 +412,52 @@ export function useInventory() {
     const next = load().filter((p) => p.id !== id);
     persist(next);
     setProducts(next);
+  }, []);
+
+  /**
+   * Merge a duplicate product into the one being kept (Phase 2.7e/f). Unions barcodes + supplier aliases,
+   * sums stock + shelf + batches, fills blank fields from the dropped one, then re-points ALL history
+   * (movements, claims, price alerts, invoice + delivery lines) from the dropped id to the kept id so
+   * nothing is stranded, and removes the dropped product. Returns { ok, merged, remap }.
+   */
+  const mergeProducts = useCallback((keepId, dropId) => {
+    if (!keepId || !dropId || keepId === dropId) return { ok: false, error: 'Pick two different products' };
+    const prev = load();
+    const keep = prev.find((p) => p.id === keepId);
+    const drop = prev.find((p) => p.id === dropId);
+    if (!keep || !drop) return { ok: false, error: 'Product not found' };
+
+    const extraBarcodes = normaliseExtraBarcodes(
+      [...(keep.extraBarcodes || []), drop.barcode, drop.caseBarcode, ...(drop.extraBarcodes || [])],
+      keep.barcode, keep.caseBarcode,
+    );
+    const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const shelfTrackedEither = keep.shelfQty != null || drop.shelfQty != null;
+    const merged = {
+      ...keep,
+      qty: num(keep.qty) + num(drop.qty),
+      extraBarcodes,
+      supplierAliases: [...(keep.supplierAliases || []), ...(drop.supplierAliases || [])],
+      caseBarcode: keep.caseBarcode || drop.caseBarcode || null,
+      packSize: keep.packSize || drop.packSize || null,
+      category: keep.category || drop.category || null,
+      cost: keep.cost == null || keep.cost === '' ? drop.cost : keep.cost,
+      price: keep.price == null || keep.price === '' ? drop.price : keep.price,
+      supplierId: keep.supplierId || drop.supplierId || null,
+      batches: [...batchesOf(keep), ...batchesOf(drop)],
+      shelfQty: shelfTrackedEither ? num(keep.shelfQty) + num(drop.shelfQty) : null,
+      countedAt: Math.max(keep.countedAt || 0, drop.countedAt || 0) || keep.countedAt || drop.countedAt || null,
+      lastSoldAt: Math.max(keep.lastSoldAt || 0, drop.lastSoldAt || 0) || keep.lastSoldAt || drop.lastSoldAt || null,
+      updatedAt: Date.now(),
+    };
+    const next = prev.filter((p) => p.id !== dropId).map((p) => (p.id === keepId ? merged : p));
+    const res = persist(next);
+    if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
+    setProducts(next);
+    // Re-point history AFTER the product records are safely saved (stock union is bookkeeping, not a new
+    // movement — the kept product now carries both products' ledgers via the remap).
+    const remap = reassignProductRefs(dropId, keepId);
+    return { ok: true, merged, remap };
   }, []);
 
   /**
@@ -470,7 +613,37 @@ export function useInventory() {
   const findByBarcode = useCallback((barcode) => {
     const b = (barcode || '').trim();
     if (!b) return null;
-    return load().find((p) => p.barcode && p.barcode === b) || null;
+    return load().find((p) => codesOf(p).includes(b)) || null;
+  }, []);
+
+  /** Link an extra barcode to an existing product (Phase 2.7a). Refuses a blank code or one already used by
+   *  a DIFFERENT product (no silent shadowing). Returns { ok, error? }. */
+  const addBarcode = useCallback((id, rawCode) => {
+    const code = String(rawCode || '').trim();
+    if (!code) return { ok: false, error: 'Enter a barcode' };
+    const prev = load();
+    const clash = productByAnyCode(prev, code, { exceptId: id });
+    if (clash) return { ok: false, error: `That barcode already belongs to ${clash.name}` };
+    const target = prev.find((p) => p.id === id);
+    if (!target) return { ok: false, error: 'Product not found' };
+    if (codesOf(target).includes(code)) return { ok: true }; // already linked here — no-op
+    const next = prev.map((p) => (p.id === id
+      ? { ...p, extraBarcodes: [...(Array.isArray(p.extraBarcodes) ? p.extraBarcodes : []), code], updatedAt: Date.now() }
+      : p));
+    const res = persist(next);
+    if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
+    setProducts(next);
+    return { ok: true };
+  }, []);
+
+  /** Remove an extra barcode from a product. */
+  const removeBarcode = useCallback((id, rawCode) => {
+    const code = String(rawCode || '').trim();
+    const next = load().map((p) => (p.id === id
+      ? { ...p, extraBarcodes: (Array.isArray(p.extraBarcodes) ? p.extraBarcodes : []).filter((c) => c !== code), updatedAt: Date.now() }
+      : p));
+    persist(next); setProducts(next);
+    return { ok: true };
   }, []);
 
   // Richer resolve used by the Scan tab: returns { product, unit:'single'|'case', multiplier } or null,
@@ -683,7 +856,8 @@ export function useInventory() {
   return {
     products,
     workspace: getActiveWorkspace(),
-    addProduct, updateProduct, removeProduct,
+    addProduct, updateProduct, removeProduct, mergeProducts,
+    addBarcode, removeBarcode,
     sellUnits, recordWaste, reverseWaste,
     addBatch, wasteBatch, reverseBatchWaste,
     setCounts, applyCounts, setShelfQty, transferStock,

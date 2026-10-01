@@ -35,12 +35,12 @@ no parallel screens, no mock data presented as complete.
 
 | # | Requirement | Existing evidence | Status | Change | Acceptance |
 |---|---|---|---|---|---|
-| 2.7a | Multiple barcodes per product | only `barcode` + `caseBarcode` (`inventoryStore.js`) | 🔲→ | `extraBarcodes[]` on the product; `matchBarcode` checks them; edit UI to add/remove; "link this scan to an existing product" | a 2nd barcode resolves to the product (test) |
-| 2.7b | Supplier-specific aliases | **MISSING** — supplier model has no product mapping; reconcile matches by name per-document | 🔲→ | per-product `supplierAliases[{supplierId,code,name}]`; reconcile uses them; capture on manual match | an invoice line matches via a stored supplier alias (test) |
+| 2.7a | Multiple barcodes per product | now `extraBarcodes[]` on the product; `matchBarcode`/`findByBarcode` resolve them; `codesOf`/`productByAnyCode`; hook `addBarcode`/`removeBarcode` (clash-guarded); EditForm "Other barcodes" editor (`inventoryStore.js`, `InventoryView.jsx`) | ✅ (2.7) | — | **done** — `product-matching.test.js`: extra barcode resolves; clash refused |
+| 2.7b | Supplier-specific aliases | now `supplierAliases[{supplierId,code,name}]` on the product; `matchBySupplierAlias` (supplier-scoped); wired into `invoiceStore.matchLines`; EditForm "Supplier names/codes" editor | ✅ (2.7) | — | **done** — `product-matching.test.js`: alias matches by code/name + via matchLines |
 | 2.7c | Case sizes & loose units explicit | `packSize`/`caseBarcode`; `matchBarcode` single/case; delivery `qtyMode` | ✅ | — | (one case tier only — documented) |
 | 2.7d | Normalise units before comparing qty & cost | `deliveryStore`/`invoiceStore` normalisers; `reconcile` compares normalised | ✅ | — | — |
-| 2.7e | Reviewable duplicate-product merge | **MISSING** — no detection, no merge | 🔲→ | duplicate detection (same barcode / fuzzy name) + a reviewable `mergeProducts(keepId,dropId)` | merge combines two products behind a confirm (test) |
-| 2.7f | Preserve historical refs on merge | all history keyed by `productId`; `removeProduct` is a hard delete | 🔲→ | merge remaps `productId` across movements/claims/invoices before dropping | after merge, the kept product owns the merged history (test) |
+| 2.7e | Reviewable duplicate-product merge | now `findDuplicateProducts` (shared barcode / same name) + `mergeProducts(keepId,dropId)` (unions barcodes/aliases, sums stock+batches, fills blanks); `MergeView` review screen + an amber badge in the Stock header | ✅ (2.7) | — | **done** — `product-matching.test.js`: detect + merge; never automatic (confirm) |
+| 2.7f | Preserve historical refs on merge | `productMerge.reassignProductRefs` re-points `productId` across movements, price alerts, claim items, invoice + delivery lines before the duplicate is dropped; fires a workspace event so hooks re-read | ✅ (2.7) | — | **done** — `product-matching.test.js`: the dup's movement is re-pointed to the kept product |
 | 2.7g | Confirm ambiguous matches; never invent pack sizes | unknown→manual add; `normalisePackSize` needs explicit ≥2; online lookup fills name/category only | ✅ | — | — |
 
 ## 2.8 Stock confidence & quick counts
@@ -60,7 +60,7 @@ no parallel screens, no mock data presented as complete.
 ## Acceptance scenarios (Phase 2)
 | Scenario | Plan | Status |
 |---|---|---|
-| A product has different unit and case barcodes | existing case/single `matchBarcode` + new `extraBarcodes` | ⏳ (2.7) |
+| A product has different unit and case barcodes | case/single `matchBarcode` + `extraBarcodes` all resolve to the one product | ✅ (2.7) — `product-matching.test.js` |
 | (reliability/mobile scenarios live in Phase 1 / Phase 3 checklists) | — | — |
 
 ## Feature flags & disablement

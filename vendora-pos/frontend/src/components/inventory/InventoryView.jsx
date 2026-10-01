@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History } from 'lucide-react';
-import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize } from '../../lib/inventoryStore';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge } from 'lucide-react';
+import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
 import ProductHistory from './ProductHistory';
+import MergeView from './MergeView';
 import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
@@ -15,8 +16,10 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // product being edited, or null
   const [viewingId, setViewingId] = useState(null); // product whose movement history is open
+  const [merging, setMerging] = useState(false);    // duplicate-merge screen open
   const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
   const viewing = viewingId ? products.find((p) => p.id === viewingId) : null;
+  const dupCount = useMemo(() => findDuplicateProducts(products).length, [products]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,6 +60,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const lowCount = products.filter(isLowStock).length;
 
   if (viewing) return <ProductHistory product={viewing} onBack={() => setViewingId(null)} />;
+  if (merging) return <MergeView onBack={() => setMerging(false)} />;
 
   return (
     <div>
@@ -69,6 +73,11 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {dupCount > 0 && (
+            <button type="button" onClick={() => setMerging(true)} className="flex h-9 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2 text-xs font-semibold text-amber-700 active:scale-95" aria-label="Merge duplicate products">
+              <Merge className="h-4 w-4" /> {dupCount}
+            </button>
+          )}
           {onOpenImport && (
             <button type="button" onClick={onOpenImport} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95" aria-label="Import products">
               <Upload className="h-4 w-4" />
@@ -288,6 +297,30 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
 
+  // Extra barcodes (Phase 2.7a): a product can answer to several codes. Kept out of the main/case slots.
+  const [extra, setExtra] = useState(() => (Array.isArray(product.extraBarcodes) ? product.extraBarcodes : []));
+  const [newBc, setNewBc] = useState('');
+  function addExtra() {
+    const code = newBc.trim();
+    if (!code) return;
+    if (code === f.barcode.trim() || code === f.caseBarcode.trim() || extra.includes(code)) { setNewBc(''); return; }
+    setExtra([...extra, code]);
+    setNewBc('');
+  }
+  const removeExtra = (c) => setExtra(extra.filter((x) => x !== c));
+
+  // Supplier aliases (Phase 2.7b): the code/name a supplier uses for this product on their invoices.
+  const [aliases, setAliases] = useState(() => (Array.isArray(product.supplierAliases) ? product.supplierAliases : []));
+  const [al, setAl] = useState({ supplierId: '', code: '', name: '' });
+  function addAlias() {
+    const code = al.code.trim(); const name = al.name.trim();
+    if (!code && !name) return;
+    setAliases([...aliases, { supplierId: al.supplierId || null, code, name }]);
+    setAl({ supplierId: '', code: '', name: '' });
+  }
+  const removeAlias = (i) => setAliases(aliases.filter((_, idx) => idx !== i));
+  const supplierLabel = (id) => (suppliers.find((s) => s.id === id)?.name || 'Any supplier');
+
   function save() {
     onSave({
       name: f.name.trim() || 'Unnamed item',
@@ -298,6 +331,8 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
       supplierId: f.supplierId || null,
       packSize: normalisePackSize(f.packSize),
       caseBarcode: f.caseBarcode.trim() || null,
+      extraBarcodes: extra.map((c) => String(c).trim()).filter((c) => c && c !== f.barcode.trim() && c !== f.caseBarcode.trim()),
+      supplierAliases: aliases,
     });
   }
 
@@ -322,6 +357,60 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
         <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       </div>
+
+      {/* Extra barcodes (Phase 2.7a) — the same product can scan under several codes. */}
+      <div className="mb-2">
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Other barcodes</p>
+        {extra.length > 0 && (
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {extra.map((c) => (
+              <span key={c} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 font-mono text-[11px] text-gray-700">
+                {c}
+                <button type="button" onClick={() => removeExtra(c)} className="text-gray-400 hover:text-danger" aria-label={`Remove barcode ${c}`}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            value={newBc}
+            onChange={(e) => setNewBc(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addExtra(); } }}
+            inputMode="numeric"
+            placeholder="Add another barcode"
+            aria-label="Add another barcode"
+            className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          />
+          <button type="button" onClick={addExtra} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-primary">Add</button>
+        </div>
+      </div>
+
+      {/* Supplier aliases (Phase 2.7b) — what a supplier calls this on their invoice. */}
+      <div className="mb-2">
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Supplier names / codes</p>
+        {aliases.length > 0 && (
+          <ul className="mb-1.5 space-y-1">
+            {aliases.map((a, i) => (
+              <li key={`${a.code}-${a.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1 text-[11px] text-gray-700">
+                <span className="min-w-0 flex-1 truncate">{supplierLabel(a.supplierId)}: {a.code && <span className="font-mono">{a.code}</span>}{a.code && a.name ? ' · ' : ''}{a.name}</span>
+                <button type="button" onClick={() => removeAlias(i)} className="text-gray-400 hover:text-danger" aria-label="Remove supplier alias">×</button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {suppliers.length > 0 ? (
+            <select value={al.supplierId} onChange={(e) => setAl((p) => ({ ...p, supplierId: e.target.value }))} className="col-span-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none">
+              <option value="">Any supplier</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          ) : null}
+          <input value={al.code} onChange={(e) => setAl((p) => ({ ...p, code: e.target.value }))} placeholder="Their code" aria-label="Supplier code" className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+          <input value={al.name} onChange={(e) => setAl((p) => ({ ...p, name: e.target.value }))} placeholder="Their name for it" aria-label="Supplier name for product" className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+        </div>
+        <button type="button" onClick={addAlias} className="mt-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary">Add supplier alias</button>
+      </div>
+
       <div className="flex gap-2">
         <button type="button" disabled={!canSave} onClick={save} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save changes</button>
         <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>

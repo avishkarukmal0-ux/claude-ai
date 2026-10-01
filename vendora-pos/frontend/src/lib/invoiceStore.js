@@ -6,7 +6,7 @@
 // manual entry. Nothing is ever auto-committed — the owner reviews and confirms every field.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, read, write, removeKey, getActiveWorkspace } from './storage';
-import { matchBarcode } from './inventoryStore';
+import { matchBarcode, matchBySupplierAlias } from './inventoryStore';
 import { round2 as r2, sumMoney } from './money';
 
 const NAME = 'invoices_v1';
@@ -77,13 +77,17 @@ export function invoiceTotal(inv) {
 }
 
 // --- product matching (reuse the inventory barcode/name resolver) ----------
-/** Match each line to a product by barcode then name; marks `matched`/`productId`. Pure. */
-export function matchLines(lines, products) {
+/** Match each line to a product by barcode, supplier alias, then name; marks `matched`/`productId`. Pure.
+ *  Pass the invoice's supplierId to scope alias matching to that supplier when known. */
+export function matchLines(lines, products, { supplierId = null } = {}) {
   const byName = new Map();
   for (const p of products) if (p.name) byName.set(String(p.name).trim().toLowerCase(), p);
   return lines.map((l) => {
     let product = null;
     if (l.barcode) { const m = matchBarcode(products, l.barcode); if (m) product = m.product; }
+    // A supplier's own code/name for the product (Phase 2.7b) — resolves lines that carry neither the
+    // barcode nor your shelf name.
+    if (!product && (l.barcode || l.name)) product = matchBySupplierAlias(products, { code: l.barcode, name: l.name, supplierId: supplierId || null });
     if (!product && l.name) product = byName.get(String(l.name).trim().toLowerCase()) || null;
     return { ...l, productId: product ? product.id : null, matched: !!product };
   });
