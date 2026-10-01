@@ -208,13 +208,13 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button type="button" onClick={onHistory} className="p-1 text-gray-300 hover:text-primary" aria-label="Stock history">
+          <button type="button" onClick={onHistory} className="p-2 text-gray-500 hover:text-primary" aria-label="Stock history">
             <History className="h-4 w-4" />
           </button>
-          <button type="button" onClick={onEdit} className="p-1 text-gray-300 hover:text-primary" aria-label="Edit product">
+          <button type="button" onClick={onEdit} className="p-2 text-gray-500 hover:text-primary" aria-label="Edit product">
             <Pencil className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => removeProduct(p.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete">
+          <button type="button" onClick={() => removeProduct(p.id)} className="p-2 text-gray-500 hover:text-danger" aria-label="Delete">
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
@@ -244,10 +244,10 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
   const canSave = f.name.trim().length > 0;
   return (
     <div className="mb-3 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
-      <input value={f.name} onChange={set('name')} placeholder="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" aria-label="Barcode" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       <input
-        value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category (e.g. Confectionery)"
+        value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category (e.g. Confectionery)" aria-label="Category"
         className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none"
       />
       <datalist id="vendora-category-list">
@@ -260,9 +260,9 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
         </select>
       )}
       <div className="mb-2 grid grid-cols-3 gap-2">
-        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       </div>
 
       {!showPack ? (

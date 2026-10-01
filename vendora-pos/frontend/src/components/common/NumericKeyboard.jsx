@@ -46,8 +46,8 @@ export default function NumericKeyboard({ value = '', onValueChange, onDone, max
             {n}
           </button>
         ))}
-        <button onClick={handleBackspace} className="bg-red-100 text-red-700 font-bold py-3 rounded-lg hover:bg-red-200 active:bg-red-300">
-          ←
+        <button type="button" onClick={handleBackspace} aria-label="Backspace" className="bg-red-100 text-red-700 font-bold py-3 rounded-lg hover:bg-red-200 active:bg-red-300">
+          <span aria-hidden="true">←</span>
         </button>
 
         {[4, 5, 6].map(n => (

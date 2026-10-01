@@ -163,6 +163,48 @@
 }
 .vd-table tbody td { padding: 12px 16px; font-size: 13px; }
 
+/* ── Accessibility (Phase 3.9) ────────────────────────────────
+   Systemic a11y that the per-component Tailwind classes miss. */
+
+/* Respect the OS "reduce motion" setting — the app had none, so the infinite pulse/spin animations ran
+   unconditionally. Near-instant everything (and stop the looping ones) when the user asks for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A visible keyboard-focus ring everywhere. Many components use Tailwind's `focus:outline-none` without a
+   replacement; this guarantees a focus indicator for keyboard users (mouse/touch focus is unaffected).
+   !important is needed to beat the utility's `:focus` outline. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus-ring, #2563eb) !important;
+  outline-offset: 2px !important;
+  border-radius: 6px;
+}
+
+/* Lift the pervasive secondary-text colour to meet WCAG AA (4.5:1). `text-gray-400` (#9CA3AF ≈ 2.8:1 on
+   white) was used widely for sub-labels; map it to ~#5b6472 (≈5:1). Declared after @tailwind utilities so
+   source order wins. gray-300 stays for genuinely decorative dividers/chevrons. */
+.text-gray-400 { color: #5b6472; }
+
+/* Skip-to-content link (hidden until focused). */
+.skip-link {
+  position: absolute; left: 8px; top: -48px; z-index: 50;
+  background: #111827; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 8px; }
+
 /* ── Pill badge ──────────────────────────────────────────── */
 .vd-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; }
 .vd-badge-blue   { background: var(--blue-dim);   color: var(--blue-light); }
