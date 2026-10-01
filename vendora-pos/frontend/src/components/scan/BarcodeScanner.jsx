@@ -28,7 +28,7 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const rafRef = useRef(null);
-  const lastRef = useRef({ code: null, at: 0 });
+  const lastRef = useRef({ code: null, armed: true });
   const [error, setError] = useState(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
@@ -61,6 +61,7 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
           if (caps && caps.torch) setTorchAvailable(true);
         } catch { /* no torch */ }
 
+        let emptyTicks = 0;
         const tick = async () => {
           if (cancelled || !videoRef.current) return;
           try {
@@ -69,16 +70,22 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
               const value = codes[0].rawValue;
               if (value) {
                 if (!continuous) { stop(); feedback(); onScan(value); return; }
-                // continuous: debounce the same code for 1.5s so a lingering barcode isn't double-counted
-                const now = Date.now();
-                if (value !== lastRef.current.code || now - lastRef.current.at > 1500) {
-                  lastRef.current = { code: value, at: now };
+                // continuous: count a code once per physical presentation. A different code counts straight
+                // away; the SAME code only counts again after the item has left the frame (a few confirmed
+                // empty frames re-arm it), so holding one barcode steady can't inflate the count (audit W5).
+                emptyTicks = 0;
+                if (value !== lastRef.current.code || lastRef.current.armed) {
+                  lastRef.current = { code: value, armed: false };
                   feedback();
                   onScan(value);
                 }
               }
+            } else {
+              // a confirmed empty frame (detect succeeded, saw nothing) — item is out of view
+              emptyTicks += 1;
+              if (emptyTicks >= 3) lastRef.current.armed = true;
             }
-          } catch { /* frame not ready — keep trying */ }
+          } catch { /* frame not ready — keep trying (does NOT count as an empty frame) */ }
           rafRef.current = requestAnimationFrame(tick);
         };
         rafRef.current = requestAnimationFrame(tick);

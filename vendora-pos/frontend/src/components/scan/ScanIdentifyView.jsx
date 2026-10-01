@@ -23,7 +23,7 @@ export default function ScanIdentifyView({ onBack }) {
   const rapidMissRef = React.useRef(new Set());
 
   const categorySuggestions = useMemo(() => {
-    const family = getFamily(getSavedShopType());
+    const family = getFamily(getSavedShopType()?.familyId);
     const used = categoriesInUse(products);
     const presets = categoriesForFamily(family && family.id);
     const seen = new Set();
@@ -151,9 +151,12 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
   const [singles, setSingles] = useState(1);
   const m = margin(p);
   const isCaseScan = unit === 'case';
+  // Units per case = the PRODUCT's pack size (the scan's multiplier is 1 for a single-barcode scan, which
+  // must not override packSize when booking in cases). A case-barcode scan already carries packSize.
+  const per = Number(p.packSize) > 1 ? Number(p.packSize) : (multiplier || 1);
 
   function bookCases(nCases) {
-    const units = Math.max(1, nCases) * (multiplier || 1);
+    const units = Math.max(1, nCases) * per;
     const res = inv.bookIn(p.id, units);
     if (res.ok) onBookedIn(res.added, 'units');
   }
@@ -188,9 +191,9 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
         <h3 className="mb-2 text-sm font-bold text-gray-900">Book in stock</h3>
         {isCaseScan || p.packSize > 1 ? (
           <div className="space-y-2">
-            <Stepper label={`Cases (× ${multiplier || p.packSize})`} value={cases} setValue={setCases} />
+            <Stepper label={`Cases (× ${per})`} value={cases} setValue={setCases} />
             <button type="button" onClick={() => bookCases(cases)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]">
-              <PackageCheck className="h-4 w-4" /> Book in {cases} case{cases === 1 ? '' : 's'} (+{cases * (multiplier || p.packSize || 1)})
+              <PackageCheck className="h-4 w-4" /> Book in {cases} case{cases === 1 ? '' : 's'} (+{cases * per})
             </button>
             <div className="pt-1">
               <Stepper label="Or singles" value={singles} setValue={setSingles} />

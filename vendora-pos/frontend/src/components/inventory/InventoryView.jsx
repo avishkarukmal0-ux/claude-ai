@@ -44,7 +44,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
   // Category suggestions: shop-family presets, with any the shop already uses pulled to the front.
   const categorySuggestions = useMemo(() => {
-    const family = getFamily(getSavedShopType());
+    const family = getFamily(getSavedShopType()?.familyId);
     const used = categoriesInUse(products);
     const presets = categoriesForFamily(family && family.id);
     const seen = new Set();

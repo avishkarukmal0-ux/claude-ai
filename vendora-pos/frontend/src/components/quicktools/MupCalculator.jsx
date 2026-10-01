@@ -27,8 +27,11 @@ export default function MupCalculator() {
   const valid = Number.isFinite(abv) && Number.isFinite(ml) && abv > 0 && ml > 0;
 
   const unitsEach = valid ? (abv * ml) / 1000 : null;      // UK units per item
-  const floor = valid ? rate * unitsEach * packQty : null;  // legal floor for the pack
-  const belowFloor = floor != null && Number.isFinite(price) && price < floor - 0.005;
+  // The legal minimum must be ROUNDED UP to the next whole penny (Scottish Government guidance:
+  // mygov.scot/minimum-unit-price-alcohol). Rounding to nearest (or down) could show a price a penny
+  // under the legal floor as acceptable — an offence. Ceil to pence.
+  const floor = valid ? Math.ceil(rate * unitsEach * packQty * 100) / 100 : null;
+  const belowFloor = floor != null && Number.isFinite(price) && price < floor - 1e-9;
 
   return (
     <div>
