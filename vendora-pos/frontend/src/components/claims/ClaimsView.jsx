@@ -144,9 +144,12 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
           </div>
         )}
         {OPEN_CLAIM_STATUSES.includes(c.status) && c.status !== 'draft' && (
-          <label className="mb-2 flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500"><CalendarClock className="h-3.5 w-3.5" /> Follow up
-            <input type="date" value={c.followUpDate || ''} onChange={(e) => updateClaim(c.id, { followUpDate: e.target.value })} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
-          </label>
+          <div className="mb-2 flex items-center gap-1.5">
+            <label className="flex flex-1 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500"><CalendarClock className="h-3.5 w-3.5" /> Follow up
+              <input type="date" value={c.followUpDate || ''} onChange={(e) => updateClaim(c.id, { followUpDate: e.target.value })} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            </label>
+            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); updateClaim(c.id, { followUpDate: d.toISOString().slice(0, 10) }); }} className="shrink-0 rounded-lg bg-gray-100 px-2 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95">Snooze 1wk</button>
+          </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">

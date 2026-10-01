@@ -9,6 +9,8 @@
 // info (worth doing today). We only ever surface the top few so it stays glanceable.
 
 import { expiryInfo, worstExpiry, isLowStock, isSlowStock } from './inventoryStore';
+import { OPEN_CLAIM_STATUSES } from './claimStore';
+import { claimOutstanding } from './creditNoteStore';
 import { velocity, daysOfCover } from './movementStore';
 
 const qtyOf = (p) => Number(p.qty) || 0;
@@ -23,9 +25,28 @@ const andMore = (list) => (list.length > 1 ? ` +${list.length - 1} more` : '');
  * Build the prioritised action list.
  * @returns Array<{ id, severity, kind, title, detail, money?, go, cta }>
  */
-export function buildActions({ products = [], records = [], todayEntry = null, taskExceptions = 0, now = new Date() } = {}) {
+export function buildActions({ products = [], records = [], todayEntry = null, taskExceptions = 0, claims = [], now = new Date() } = {}) {
   const actions = [];
   const inStock = products.filter((p) => qtyOf(p) > 0);
+
+  // 0b) WARN — supplier claims past their follow-up date (Phase 2 reminders). Uses the EXISTING follow-up
+  //     date + claim outstanding; snoozing just moves the date (in Supplier claims).
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  const overdueClaims = claims.filter((c) => OPEN_CLAIM_STATUSES.includes(c.status) && c.followUpDate
+    && new Date(c.followUpDate).setHours(0, 0, 0, 0) < today.getTime());
+  if (overdueClaims.length) {
+    const outstanding = overdueClaims.reduce((s, c) => s + claimOutstanding(c), 0);
+    actions.push({
+      id: 'claims-overdue',
+      severity: 'warn',
+      kind: 'claims',
+      title: overdueClaims.length === 1 ? 'Chase 1 overdue supplier claim' : `Chase ${overdueClaims.length} overdue supplier claims`,
+      detail: 'Past their follow-up date — send a reminder or record the credit.',
+      money: outstanding > 0 ? `${money(outstanding)} outstanding` : undefined,
+      go: { screen: 'claims' },
+      cta: 'Open claims',
+    });
+  }
 
   // 0) WARN — team tasks that need attention (overdue / high priority). Exceptions only, not
   //    a stream of every task (that lives in Team tasks).

@@ -117,6 +117,38 @@ export function useClaims() {
     persistAll(load().map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c)));
   }, []);
 
+  /** Allocate a supplier credit note to a claim (Phase 2). Received money is the sum of applied credits —
+   *  an auditable list, idempotent per credit note (re-applying the same note replaces its entry, never
+   *  double-counts). Returns the updated claim or null. */
+  const applyCredit = useCallback((claimId, { creditNoteId, creditNoteRef = '', amount }) => {
+    const amt = r2(amount);
+    if (!creditNoteId || !(amt > 0)) return null;
+    let updated = null;
+    persistAll(load().map((c) => {
+      if (c.id !== claimId) return c;
+      const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId); // replace, don't duplicate
+      credits.push({ id: newId('cr'), creditNoteId, creditNoteRef, amount: amt, at: Date.now() });
+      const received = r2(credits.reduce((s, x) => s + (Number(x.amount) || 0), 0));
+      updated = {
+        ...c, credits, receivedAmount: received, creditNoteRef: creditNoteRef || c.creditNoteRef || '',
+        updatedAt: Date.now(),
+        history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit', creditNoteId, amount: amt }],
+      };
+      return updated;
+    }));
+    return updated;
+  }, []);
+
+  /** Remove a credit note's allocation from a claim (correction). Recomputes received from remaining credits. */
+  const removeCredit = useCallback((claimId, creditNoteId) => {
+    persistAll(load().map((c) => {
+      if (c.id !== claimId) return c;
+      const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId);
+      const received = credits.length ? r2(credits.reduce((s, x) => s + (Number(x.amount) || 0), 0)) : null;
+      return { ...c, credits, receivedAmount: received, updatedAt: Date.now(), history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit-removed', creditNoteId }] };
+    }));
+  }, []);
+
   /** Edit one claim item (e.g. enter the agreed price on a wrong-price line). For wrong_price we recompute
    *  the claimed amount as the OVERCHARGE: max(0, billed − agreed) × qty (audit W8). */
   const updateClaimItem = useCallback((claimId, itemId, patch) => {
@@ -154,5 +186,5 @@ export function useClaims() {
 
   const removeClaim = useCallback((id) => { persistAll(load().filter((c) => c.id !== id)); }, []);
 
-  return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, advance, removeClaim };
+  return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, applyCredit, removeCredit, advance, removeClaim };
 }

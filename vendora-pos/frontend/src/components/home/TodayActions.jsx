@@ -4,6 +4,7 @@ import { useInventory } from '../../lib/inventoryStore';
 import { useMovements } from '../../lib/movementStore';
 import { useTakings } from '../../lib/takingsStore';
 import { useTasks, exceptionCount } from '../../lib/taskStore';
+import { useClaims } from '../../lib/claimStore';
 import { buildActions } from '../../lib/actionEngine';
 
 const KIND_ICON = {
@@ -13,6 +14,7 @@ const KIND_ICON = {
   deadstock: Hourglass,
   cashup: Coins,
   tasks: ClipboardList,
+  claims: Coins,
 };
 
 // Per-severity styling: the row's left rail, icon tint, and money-chip colour.
@@ -32,6 +34,7 @@ export default function TodayActions({ onGo }) {
   const { records } = useMovements();
   const { todayEntry } = useTakings();
   const { tasks } = useTasks();
+  const { claims } = useClaims();
 
   // Per-day "snooze": hides a reminder for today only. It NEVER changes the underlying records —
   // the action returns tomorrow if the condition still holds.
@@ -50,8 +53,8 @@ export default function TodayActions({ onGo }) {
 
   const taskExceptions = useMemo(() => exceptionCount(tasks), [tasks]);
   const actions = useMemo(
-    () => buildActions({ products, records, todayEntry, taskExceptions, now: new Date() }).filter((a) => !dismissed.has(a.id)),
-    [products, records, todayEntry, taskExceptions, dismissed],
+    () => buildActions({ products, records, todayEntry, taskExceptions, claims, now: new Date() }).filter((a) => !dismissed.has(a.id)),
+    [products, records, todayEntry, taskExceptions, claims, dismissed],
   );
 
   // Nothing to do — but only celebrate once there's actually stock to reason about.
