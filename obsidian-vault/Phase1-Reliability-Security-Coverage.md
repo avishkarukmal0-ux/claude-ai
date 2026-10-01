@@ -65,11 +65,11 @@ duplicate screens and parallel implementations; do not present mock data as comp
 
 | Scenario | Where covered | Status |
 |---|---|---|
-| Connectivity disappears mid-delivery | local-first write + dirty flag + resync; scenario test | ⏳ |
-| A failed operation retried >once | idempotent `operationId`; scenario test | ⏳ |
-| App closes & reopens with pending changes | `flushDurable`/`initStorage`; scenario test | ⏳ |
-| Two devices edit the same record | LWW + **recovery copy + notice** (1.1g); test | ⏳ |
-| Session expires while unsynced | refresh-once + dirty retained; test | ⏳ |
+| Connectivity disappears mid-delivery | local-first write + dirty flag + resync | ✅ `phase1-scenarios.test.js` (offline→reconnect) |
+| A failed operation retried >once | idempotent `operationId` guard | ✅ `movements.test.js` / `scenarios.test.js` D5 |
+| App closes & reopens with pending changes | `flushDurable` on hide + `initStorage` restore | ✅ `idb-durability.test.js` / `storage.test.js` |
+| Two devices edit the same record | LWW + **recovery copy + notice** (1.1g) | ✅ `sync.test.js` conflict-recovery ×2 |
+| Session expires while unsynced | refresh-once + dirty retained | ✅ `phase1-scenarios.test.js` (session expiry) |
 | PWA updates while a form is unfinished | SW no-skipWaiting + Refresh prompt | ✅ (existing) |
 | Backup or restore interrupted | snapshot+rollback (`backup.test.js`) | ✅ (existing) |
 | Staff attempts an owner-only action | role gate FE + backend 403/404 (integration) | ✅ (existing) |
@@ -85,7 +85,19 @@ duplicate screens and parallel implementations; do not present mock data as comp
   device" choice preserves the cache intentionally.
 
 ## Phase gate status
-- ⏳ **In progress.** Sub-areas delivered as reviewable commits (1.4 security → 1.1 status → 1.2 traceability
-  → 1.3 backup), each with tests; this checklist updated as each lands.
+- ✅ **Phase 1 complete.** All four sub-areas delivered as reviewable commits, each with tests + checklist +
+  Work-Log updates:
+  - **1.4 security** (`f321872`) — shared-device purge on logout/switch; prompt staff revocation on the data path.
+  - **1.1 status** (`3b30383`) — pilot save indicator; persistent failed-save; no silent conflict loss + recovery.
+  - **1.2 traceability** (`f464164`) — actor on every row; compensating reversals (history kept); per-product
+    history + reconciliation; ledger validation.
+  - **1.3 backup** (`7a18815`) — opt-in recoverable server version history + restore; last-backup indicator;
+    sync≠backup clarity; docs.
+- **Verification:** FE **244/244** (vitest); BE pure suites pass + DB-gated integration (auth/roles, sync
+  role-access + prompt revocation, cross-tenant isolation, server version-history restore) run on
+  `VENDORA_TEST_URI`; build clean; backend loads. The pre-existing till/back-office DB suites still require a
+  live Mongo (unrelated to this work).
+- **Production deployment intentionally left to the operator** (mandate: do not deploy). `SYNC_HISTORY` is the
+  one new flag, default off; everything else is additive/safe-by-default. See [[Deployment-Config]].
 </content>
 </invoke>

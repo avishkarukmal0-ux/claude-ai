@@ -28,6 +28,25 @@ House style observed across the codebase — follow these when adding code.
   authoritative; IndexedDB recovery only fills gaps. Keep the storage API synchronous — don't make stores async.
 - Stock only changes via a **typed movement** (`movementStore`): a manual qty edit is `stock_adjustment`,
   a sale is `sale` (`sellUnits`), binning is `waste` (`recordWaste`). Never infer a sale from any decrease.
+- Every movement is built through `buildRecord` (movementStore), so each row carries `actor`/`actorId`/
+  `actorRole` from the signed-in member ("Owner" for guest). Don't write ledger rows any other way.
+- **Reverse, don't delete.** Undoing a stock action appends a compensating entry via `reverseByBatch`
+  (`reversalOf` + negated delta), never removes history. `removeByBatch` survives ONLY for sales-import undo
+  (re-importing the same file must become possible again).
+- **Shared-device safety (Phase 1.4):** signing out or switching accounts purges the departing shop's
+  `vendora:<ws>:*` from localStorage + MEM + IndexedDB (`storage.purgeWorkspace`, via `account.logout`/
+  `activate`). Use `session.signOut` (flush + final push first) for any sign-out UI; pass `{purge:false}`
+  only for an explicit "keep on this device" choice.
+- **Revocation bites on the data path:** PWA data routes (sync, notify) re-check a member token with
+  `pwaAuthService.assertMemberActive` (cached 30s, invalidated on member admin writes). Add it to any new
+  member-accessible data route; owner tokens skip it.
+- **Sync is not a backup.** Cross-device sync keeps only the latest value. Recoverable server versions are
+  opt-in behind `SYNC_HISTORY` (`SyncBlobHistory` + `/history`/`/restore`); the always-available restore
+  point is the local Export. Say so in any UI that might be read as "backed up".
+
+## Decimal-safe money (2026-10-01)
+- All currency arithmetic goes through `lib/money.js` (FE) / `utils/money.js` (BE): integer pence, round
+  **half away from zero** to the penny. The legacy `r2()` note above is superseded — use the money helpers.
 - **Unknown ≠ zero.** `margin()` and valuations return null / exclude unknown-cost items; show coverage.
 - Persist **deterministically**: read → compute → `persist()` synchronously → `setState` → then log the
   movement. Don't read a value you assigned inside a `setState` updater (it runs later).
