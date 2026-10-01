@@ -3,10 +3,13 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, FileText, Camera, Plus, Trash2, Check, AlertTriangle, Loader2, ScanText,
 } from 'lucide-react';
-import { useInvoices, matchLines, blankInvoiceLine, lineUnitCost, lineTotal, invoiceTotal, invoiceFingerprint } from '../../lib/invoiceStore';
+import { useInvoices, matchLines, blankInvoiceLine, lineUnitCost, lineTotal, invoiceTotal } from '../../lib/invoiceStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useInventory } from '../../lib/inventoryStore';
+import { useDeliveries } from '../../lib/deliveryStore';
+import { useClaims } from '../../lib/claimStore';
 import { extractInvoiceText } from '../../lib/invoiceOcr';
+import { reconcile, discrepanciesToClaimItems } from '../../lib/reconcile';
 
 // Supplier invoice capture + review (Phase 1). Capture a photo/PDF (or enter manually), REVIEW every field
 // before committing. Matches lines to existing products, flags unmatched, warns on likely duplicates.
@@ -18,10 +21,11 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
   const { invoices, saveDraft, commitInvoice, removeInvoice, findDuplicate } = useInvoices();
   const { suppliers } = useSuppliers();
   const { products } = useInventory();
-  const [mode, setMode] = useState('list'); // 'list' | 'review'
+  const [mode, setMode] = useState('list'); // 'list' | 'review' | 'reconcile'
   const [draft, setDraft] = useState(null);
   const [file, setFile] = useState(null);   // { dataUrl, type }
   const [ocr, setOcr] = useState({ busy: false, text: null });
+  const [reconcileId, setReconcileId] = useState(null);
   const fileRef = useRef(null);
 
   function startManual() {
@@ -50,6 +54,12 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
     };
     reader.onerror = () => toast.error('Couldn’t read that file');
     reader.readAsDataURL(f);
+  }
+
+  if (mode === 'reconcile' && reconcileId) {
+    const inv = invoices.find((x) => x.id === reconcileId);
+    if (!inv) { setMode('list'); setReconcileId(null); return null; }
+    return <ReconcileView invoice={inv} onBack={() => { setMode('list'); setReconcileId(null); }} />;
   }
 
   if (mode === 'review' && draft) {
@@ -110,9 +120,7 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
                 {inv.status !== 'committed' && (
                   <button type="button" onClick={() => commitInvoice(inv.id)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95">Commit</button>
                 )}
-                {onReconcile && (
-                  <button type="button" onClick={() => onReconcile(inv.id)} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
-                )}
+                <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
               </div>
             </li>
           ))}
@@ -214,6 +222,102 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
         <button type="button" disabled={!canSave} onClick={() => onCommit(payload())} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><Check className="h-4 w-4" /> Commit</button>
       </div>
       <p className="mt-2 text-center text-[11px] text-gray-400">Nothing is applied to stock here — committing just confirms the invoice figures for checking &amp; price history.</p>
+    </div>
+  );
+}
+
+// Delivery ↔ invoice reconciliation (Phase 1.2). Pick a received delivery for the same supplier, see the
+// explained discrepancies, and raise a claim through the existing claims workflow. No order required.
+function ReconcileView({ invoice, onBack }) {
+  const { deliveries } = useDeliveries();
+  const { createClaim } = useClaims();
+  const supKey = (invoice.supplierName || '').trim().toLowerCase();
+  const candidates = useMemo(() => deliveries.filter((d) => d.status === 'received'
+    && (!supKey || (d.supplierName || '').trim().toLowerCase() === supKey)), [deliveries, supKey]);
+  const [deliveryId, setDeliveryId] = useState(candidates[0] ? candidates[0].id : '');
+  const [excluded, setExcluded] = useState(() => new Set());
+  const delivery = candidates.find((d) => d.id === deliveryId) || deliveries.find((d) => d.id === deliveryId) || null;
+  const result = useMemo(() => (delivery ? reconcile({ delivery, invoice }) : null), [delivery, invoice]);
+
+  const claimable = (result ? result.discrepancies : []).filter((d) => d.claimReason);
+  const info = (result ? result.discrepancies : []).filter((d) => !d.claimReason);
+  const selected = claimable.filter((_, i) => !excluded.has(i));
+  const selectedTotal = selected.reduce((s, d) => s + d.overcharge, 0);
+
+  function toggle(i) { setExcluded((prev) => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; }); }
+  function raise() {
+    const items = discrepanciesToClaimItems(selected);
+    if (!items.length) { toast('Nothing selected to claim'); return; }
+    const c = createClaim({ supplierId: invoice.supplierId, supplierName: invoice.supplierName, deliveryId: delivery.id, deliveryRef: delivery.reference || invoice.reference || '', items });
+    if (c) { toast.success('Claim drafted — review it in Supplier claims'); onBack(); }
+    else toast.error('Couldn’t create the claim');
+  }
+
+  return (
+    <div>
+      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+      <h2 className="mb-1 text-base font-bold text-gray-900">Check vs delivery</h2>
+      <p className="mb-3 text-xs text-gray-400">{invoice.supplierName || 'Invoice'}{invoice.reference ? ` · ${invoice.reference}` : ''} · {gbp(invoiceTotal(invoice))}</p>
+
+      {candidates.length === 0 ? (
+        <p className="rounded-xl bg-gray-50 px-3 py-6 text-center text-sm text-gray-400">No received deliveries for this supplier to check against. Receive a delivery first (Scan → Receive a delivery).</p>
+      ) : (
+        <>
+          <label className="mb-3 block">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Delivery to compare</span>
+            <select value={deliveryId} onChange={(e) => { setDeliveryId(e.target.value); setExcluded(new Set()); }} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
+              {candidates.map((d) => <option key={d.id} value={d.id}>{(d.reference || 'Delivery')} · {d.receivedAt ? new Date(d.receivedAt).toLocaleDateString('en-GB') : ''}</option>)}
+            </select>
+          </label>
+
+          {result && (
+            <>
+              {claimable.length === 0 && <p className="rounded-xl bg-success-light px-3 py-4 text-center text-sm font-semibold text-success-dark">No chargeable discrepancies — the invoice matches the delivery. ✅</p>}
+              {claimable.length > 0 && (
+                <ul className="space-y-2">
+                  {claimable.map((d, i) => (
+                    <li key={i} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+                      <label className="flex items-start gap-2">
+                        <input type="checkbox" checked={!excluded.has(i)} onChange={() => toggle(i)} className="mt-0.5 h-4 w-4" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="truncate text-sm font-semibold text-gray-900">{d.name}</span>
+                            <span className="shrink-0 font-bold tabular-nums text-danger">{gbp(d.overcharge)}</span>
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-gray-500">{d.detail}</span>
+                          <span className="mt-1 inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{d.type === 'overcharge' ? 'overcharge' : d.type === 'shortage' ? 'short-delivered' : 'not delivered'}</span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {info.length > 0 && (
+                <details className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-500">
+                  <summary className="cursor-pointer font-medium text-gray-600">{info.length} note(s) (no claim)</summary>
+                  <ul className="mt-2 space-y-1">{info.map((d, i) => <li key={i}>{d.detail}</li>)}</ul>
+                </details>
+              )}
+
+              {claimable.length > 0 && (
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between rounded-xl bg-gray-50 p-3">
+                    <span className="text-sm text-gray-500">Selected to claim</span>
+                    <span className="text-lg font-extrabold tabular-nums text-gray-900">{gbp(selectedTotal)}</span>
+                  </div>
+                  <button type="button" disabled={selected.length === 0} onClick={raise} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-40 active:scale-[0.99]">
+                    <Check className="h-4 w-4" /> Draft a claim for {selected.length} item{selected.length === 1 ? '' : 's'}
+                  </button>
+                  <p className="mt-2 text-center text-[11px] text-gray-400">Creates a draft in Supplier claims — you review, then submit &amp; follow up there.</p>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

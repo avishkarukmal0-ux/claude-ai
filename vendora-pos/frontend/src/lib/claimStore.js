@@ -96,6 +96,23 @@ export function useClaims() {
     return claim;
   }, []);
 
+  /** Create a claim from pre-built items (e.g. reconciliation discrepancies) — same lifecycle/shape as
+   *  createFromDelivery so the existing claims workflow handles it. Items may omit id (assigned here). */
+  const createClaim = useCallback(({ supplierId = null, supplierName = '', deliveryId = null, deliveryRef = '', items = [] } = {}) => {
+    const withIds = items.map((it) => ({ id: newId('ci'), photo: null, ...it }));
+    if (!withIds.length) return null;
+    const claim = {
+      id: newId(), status: 'draft',
+      supplierId: supplierId || null, supplierName: supplierName || '',
+      deliveryId: deliveryId || null, deliveryRef: deliveryRef || '',
+      items: withIds, requestedAmount: r2(withIds.reduce((n, i) => n + (Number(i.amount) || 0), 0)),
+      approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
+      createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
+    };
+    persistAll([claim, ...load()]);
+    return claim;
+  }, []);
+
   const updateClaim = useCallback((id, patch) => {
     persistAll(load().map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c)));
   }, []);
@@ -137,5 +154,5 @@ export function useClaims() {
 
   const removeClaim = useCallback((id) => { persistAll(load().filter((c) => c.id !== id)); }, []);
 
-  return { claims, createFromDelivery, updateClaim, updateClaimItem, advance, removeClaim };
+  return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, advance, removeClaim };
 }
