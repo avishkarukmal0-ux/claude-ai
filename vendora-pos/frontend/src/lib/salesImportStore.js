@@ -110,7 +110,11 @@ export function parseDate(v) {
     if (y < 100) y += 2000;
     if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
       const dt = new Date(y, mo - 1, d);
-      if (!Number.isNaN(dt.getTime())) return dt.getTime();
+      // Reject impossible dates: JS rolls 31/02 over to early March, so verify the parts round-trip.
+      if (!Number.isNaN(dt.getTime()) && dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) {
+        return dt.getTime();
+      }
+      return null; // a dd/mm/yyyy that looked valid but isn't a real calendar date
     }
   }
   const iso = Date.parse(str);
@@ -160,6 +164,7 @@ export function buildImport({ rows = [], mapping = {}, products = [], defaultDat
 
     if (!Number.isFinite(qty) || qty <= 0) { invalid.push({ barcode, name, reason: 'qty' }); continue; }
     if (ts == null) { invalid.push({ barcode, name, reason: 'no-date' }); continue; }
+    if (ts > now) { invalid.push({ barcode, name, reason: 'future' }); continue; } // a sale can't be in the future
     if (ts < cutoff) { tooOld += 1; continue; }
 
     let product = (barcode && byBarcode.get(barcode)) || null;

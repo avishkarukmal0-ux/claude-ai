@@ -71,7 +71,9 @@ export default function OverviewView({ onBack, onOpen }) {
               value={`£${insights.projected.value.toFixed(0)}`}
               icon={LineChart}
               tone="text-primary"
-              hint={insights.projected.basis === 'estimated' ? 'Estimate — from stock changes' : 'From recorded sales'}
+              hint={insights.projected.basis === 'estimated' ? 'Estimate — from stock changes'
+                : insights.projected.basis === 'mixed' ? 'Part sales, part estimate'
+                : 'From recorded sales'}
             />
           )}
           {insights.margin.value != null && (

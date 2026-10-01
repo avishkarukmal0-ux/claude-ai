@@ -176,3 +176,20 @@ describe('useSalesImport — apply / idempotency / undo', () => {
     expect(result.current.imports.length).toBe(0);
   });
 });
+
+describe('sales import — impossible/future dates (audit W11)', () => {
+  it('parseDate rejects a non-existent calendar date (31/02/2026)', () => {
+    expect(parseDate('31/02/2026')).toBeNull();
+    expect(parseDate('32/01/2026')).toBeNull();
+    expect(parseDate('15/03/2026')).not.toBeNull(); // a real date still parses
+  });
+
+  it('buildImport rejects rows dated in the future', () => {
+    const now = Date.UTC(2026, 9, 1); // 1 Oct 2026
+    const products = [{ id: 'p1', barcode: '111', name: 'A' }];
+    const rows = [['111', '5', '01/01/2027']]; // future
+    const res = buildImport({ rows, mapping: { barcode: 0, qty: 1, date: 2 }, products, now });
+    expect(res.matchedRows).toBe(0);
+    expect(res.invalid.some((i) => i.reason === 'future')).toBe(true);
+  });
+});

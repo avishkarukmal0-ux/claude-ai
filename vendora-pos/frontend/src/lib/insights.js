@@ -63,19 +63,22 @@ export function slowStockValue(products, days = 30) {
  *   movement; else null (no evidence at all).
  */
 export function projectedWeeklySales(products, records) {
-  let total = 0; let counted = 0; let sawSales = false; let sawEstimate = false;
+  let confirmedValue = 0; let estimatedValue = 0; let counted = 0;
   for (const p of products) {
     const { vpd, basis } = velocity(records, p.id);
     if (!vpd) continue;
     const price = Number(p.price) || 0;
     if (price <= 0) continue;
-    total += vpd * 7 * price;
+    const wk = vpd * 7 * price;
     counted += 1;
-    if (basis === 'sales') sawSales = true;
-    else if (basis === 'estimated') sawEstimate = true;
+    if (basis === 'sales') confirmedValue += wk;
+    else if (basis === 'estimated') estimatedValue += wk;
   }
-  if (counted === 0) return { value: null, basis: null, counted: 0 };
-  return { value: total, basis: sawSales ? 'sales' : (sawEstimate ? 'estimated' : null), counted };
+  if (counted === 0) return { value: null, basis: null, counted: 0, confirmedValue: 0, estimatedValue: 0 };
+  // Don't label the whole forecast "from sales" when most of it is estimated (audit W13): report both
+  // subtotals and a 'mixed' basis when confirmed and estimated are both present.
+  const basis = confirmedValue > 0 && estimatedValue > 0 ? 'mixed' : (confirmedValue > 0 ? 'sales' : 'estimated');
+  return { value: confirmedValue + estimatedValue, basis, counted, confirmedValue, estimatedValue };
 }
 
 /**

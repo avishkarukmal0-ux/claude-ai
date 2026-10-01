@@ -73,16 +73,27 @@ export function readBackup(text) {
   const known = new Set(STORE_NAMES);
   const data = {};
   const summary = {};
+  const corrupt = [];
   for (const [rawKey, value] of Object.entries(parsed.data)) {
     if (typeof value !== 'string') continue; // we only store raw string values
     const name = rawKey.startsWith(LEGACY_PREFIX) ? rawKey.slice(LEGACY_PREFIX.length) : rawKey;
     if (!known.has(name)) continue; // ignore unknown/unrelated keys — never import them
+    // Validate the SHAPE before we'd ever write it. Every store except shop_type holds JSON; a value that
+    // doesn't parse is corrupt and must not silently replace real data (audit W17). shop_type is a plain
+    // "family:member" token.
+    if (name === 'shop_type') {
+      if (!value.trim()) { corrupt.push(name); continue; }
+      summary[name] = 1;
+    } else {
+      try {
+        const v = JSON.parse(value);
+        summary[name] = Array.isArray(v) ? v.length : 1;
+      } catch { corrupt.push(name); continue; }
+    }
     data[name] = value;
-    // best-effort count for the preview
-    try {
-      const v = JSON.parse(value);
-      summary[name] = Array.isArray(v) ? v.length : 1;
-    } catch { summary[name] = 1; }
+  }
+  if (corrupt.length) {
+    return { ok: false, error: `This backup is corrupt (bad data in: ${corrupt.join(', ')}). Nothing was changed.` };
   }
   if (Object.keys(data).length === 0) {
     return { ok: false, error: 'This backup has no recognisable Vendora data.' };
@@ -105,11 +116,21 @@ export function restoreBackup(data, { mode = 'replace', ws = getActiveWorkspace(
   const snapshot = {};
   for (const name of STORE_NAMES) snapshot[name] = read(name, null, ws);
 
+  // Rollback reports whether it FULLY restored the snapshot — if storage is refusing writes, even the
+  // rollback can fail, and we must say so honestly rather than claim "nothing changed" (audit W17).
   const rollback = () => {
+    let fullyRestored = true;
     for (const name of STORE_NAMES) {
-      if (snapshot[name] == null) removeKey(name, ws);
-      else write(name, snapshot[name], ws);
+      const res = snapshot[name] == null ? removeKey(name, ws) : write(name, snapshot[name], ws);
+      if (res && res.ok === false) fullyRestored = false;
     }
+    return fullyRestored;
+  };
+  const failed = (reason) => {
+    const rolledBack = rollback();
+    return rolledBack
+      ? { ok: false, error: `${reason} Your data was left unchanged.` }
+      : { ok: false, rollbackFailed: true, error: `${reason} And the device then refused to restore the previous data — recover from the safety backup that was just downloaded.` };
   };
 
   try {
@@ -117,18 +138,17 @@ export function restoreBackup(data, { mode = 'replace', ws = getActiveWorkspace(
     for (const name of STORE_NAMES) {
       if (Object.prototype.hasOwnProperty.call(data, name)) {
         const res = write(name, data[name], ws);
-        if (!res.ok) { rollback(); return { ok: false, error: res.error || 'Write failed — nothing changed.' }; }
+        if (!res.ok) return failed(res.error || 'Write failed.');
         restored += 1;
       } else if (mode === 'replace') {
         const res = removeKey(name, ws);
-        if (!res.ok) { rollback(); return { ok: false, error: 'Couldn’t clear old data — nothing changed.' }; }
+        if (!res.ok) return failed('Couldn’t clear old data.');
         cleared += 1;
       }
     }
     return { ok: true, restored, cleared };
   } catch (e) {
-    rollback();
-    return { ok: false, error: 'Restore failed and was rolled back.' };
+    return failed('Restore failed.');
   }
 }
 

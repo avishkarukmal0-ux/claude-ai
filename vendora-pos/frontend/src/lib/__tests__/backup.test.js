@@ -89,3 +89,19 @@ describe('backup — atomic with rollback', () => {
     expect(readJSON('inventory_v1', [])).toEqual([{ id: 'keep' }]);
   });
 });
+
+describe('backup — corrupt stores rejected (audit W17)', () => {
+  it('readBackup rejects a backup whose known store is not valid JSON', () => {
+    const file = JSON.stringify({ app: 'vendora', version: 2, data: { inventory_v1: 'not json' } });
+    const res = readBackup(file);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/corrupt/i);
+  });
+
+  it('readBackup accepts a valid backup', () => {
+    const file = JSON.stringify({ app: 'vendora', version: 2, data: { inventory_v1: '[{"id":"a"}]' } });
+    const res = readBackup(file);
+    expect(res.ok).toBe(true);
+    expect(res.data.inventory_v1).toBe('[{"id":"a"}]');
+  });
+});

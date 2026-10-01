@@ -17,13 +17,19 @@ function newId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
   return `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
+// LOCAL calendar date YYYY-MM-DD. Must not go via toISOString(): that converts to UTC, so local midnight
+// in BST (UTC+1) would render as the PREVIOUS day and "today" would be saved/looked-up as yesterday (W14).
 function todayKey(d = new Date()) {
-  const x = new Date(d); x.setHours(0, 0, 0, 0);
-  return x.toISOString().slice(0, 10);
+  const x = new Date(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, '0');
+  const day = String(x.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
-function sameMonth(ts, now = Date.now()) {
-  const a = new Date(ts); const b = new Date(now);
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+// Month membership by the entry's BUSINESS date (its day key), not the timestamp it was saved/edited (W14).
+function sameMonthByDate(dateKey, now = new Date()) {
+  if (!dateKey || typeof dateKey !== 'string') return false;
+  return dateKey.slice(0, 7) === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export function entryTotals(e) {
@@ -70,7 +76,7 @@ export function useTakings() {
   }, []);
 
   const todayEntry = entries.find((e) => e.date === todayKey()) || null;
-  const monthTakings = entries.filter((e) => sameMonth(e.ts)).reduce((s, e) => s + entryTotals(e).takings, 0);
+  const monthTakings = entries.filter((e) => sameMonthByDate(e.date)).reduce((s, e) => s + entryTotals(e).takings, 0);
 
   return { entries, saveDay, removeEntry, todayEntry, monthTakings };
 }
@@ -81,5 +87,5 @@ export function getTodayTakings() {
   return e ? entryTotals(e).takings : 0;
 }
 export function getMonthTakings() {
-  return load().filter((e) => sameMonth(e.ts)).reduce((s, e) => s + entryTotals(e).takings, 0);
+  return load().filter((e) => sameMonthByDate(e.date)).reduce((s, e) => s + entryTotals(e).takings, 0);
 }

@@ -107,7 +107,8 @@ export function removeByBatch(batchId) {
 // --- derivations -----------------------------------------------------------
 function inWindow(records, productId, windowDays, now) {
   const since = now - windowDays * DAY;
-  return records.filter((r) => r.productId === productId && r.at >= since);
+  // Closed window [since, now]: a stray future-dated row must never inflate velocity/sales (audit W11).
+  return records.filter((r) => r.productId === productId && r.at >= since && r.at <= now);
 }
 
 /** Confirmed sale units for a product in the window (never counts waste/returns/adjustments). */

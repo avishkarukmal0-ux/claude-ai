@@ -60,7 +60,10 @@ export function recordCostChange({ productId, name, prevCost, newCost, price }) 
     suggestedRetail: prevMargin != null ? retailForMargin(newCost, prevMargin) : null,
     status: 'open', at: Date.now(),
   };
-  persist([alert, ...load()]);
+  // Supersede any still-open alert for the same product so an older snapshot can't be approved AFTER a
+  // newer one and overwrite the newer retail price (audit W16). Only the latest open alert stands.
+  const others = load().filter((a) => !(a.productId === productId && a.status === 'open'));
+  persist([alert, ...others]);
   try { window.dispatchEvent(new CustomEvent('vendora:price-alerts')); } catch { /* ignore */ }
   return alert;
 }
