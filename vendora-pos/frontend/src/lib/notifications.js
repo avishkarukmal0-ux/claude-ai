@@ -10,6 +10,7 @@
 // Device preferences are per-device (NOT synced, NOT part of a backup) — a phone and a back-office tablet
 // can want different reminders.
 import { readJSON } from './storage';
+import { recordFailure } from './diagnostics';
 import { worstExpiry } from './inventoryStore';
 import { OPEN_CLAIM_STATUSES } from './claimStore';
 import { claimOutstanding } from './creditNoteStore';
@@ -163,5 +164,6 @@ export async function maybeNotify(now = Date.now()) {
   setDevicePrefs({ lastShownDay: dayKey(now) });
   if (digest.empty) return { shown: false, reason: 'nothing_to_show' };
   const ok = await raise('Vendora — today’s summary', digestLine(digest));
+  if (!ok) { try { recordFailure('reminder', 'device notification not shown'); } catch { /* ignore */ } }
   return { shown: ok, reason: ok ? 'shown' : 'show_failed', digest };
 }

@@ -119,6 +119,27 @@ account holder can do them (third-party keys + the Render dashboard).
 2. No app change — the capture screen starts showing scanned text + "Fill lines from this text" (still
    review + commit). With no key it stays manual entry (`configured:false`), never fabricated.
 
+## Monitoring & support (Phase 3.10)
+
+How an authorised operator investigates a problem — no sensitive shop data leaves the device unless the
+owner chooses to send it.
+
+- **What the owner sees:** More → Settings → **Help & diagnostics** shows a safe snapshot (app version, sync
+  state, last-sync time, and counts of failed saves / sync / invoice-scan / reminder failures) plus recent
+  issue *types* (kind + short code + time) — never stock, invoices or customer data. "Report a problem" mints
+  a reference (`VEN-YYYYMMDD-XXXX`) and a **copyable** summary the owner sends to support themselves. Nothing
+  is transmitted automatically; documents and personal data are never attached (there is no telemetry channel).
+- **Where failures are recorded:** `frontend/src/lib/diagnostics.js` (device-local `vendora:diagnostics`,
+  capped). It self-captures save + sync failures from the app's own events and is called explicitly for OCR
+  and reminder failures. Cleared by the owner via "Clear recorded issues".
+- **Backend signals:** `GET /health` and `GET /api/health` return `{status, db, version, env}`. All errors
+  funnel through the central `errorHandler` (structured `{success,error:{code,message}}`) and Winston logs
+  (`error.log` / `combined.log`, JSON in production) with per-request logging. To investigate a reported
+  reference: match the time window in the logs; the reference itself is client-side (not sent to the server),
+  so correlate by account + timestamp + the failure kinds the owner pasted.
+- **App version for triage:** set `VITE_APP_VERSION` in the Vercel env so the diagnostics panel shows the
+  exact build; it falls back to `3.0.0`.
+
 ## Verification commands (operator)
 
 - Frontend: `cd vendora-pos/frontend && npm run build && npm run test`.

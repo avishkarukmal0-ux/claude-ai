@@ -12,6 +12,7 @@ import { extractInvoiceText } from '../../lib/invoiceOcr';
 import { reconcile, discrepanciesToClaimItems } from '../../lib/reconcile';
 import { parseInvoiceText } from '../../lib/parseInvoiceText';
 import { downscaleImage } from '../../lib/image';
+import { recordFailure } from '../../lib/diagnostics';
 
 // Supplier invoice capture + review (Phase 1). Capture a photo/PDF (or enter manually), REVIEW every field
 // before committing. Matches lines to existing products, flags unmatched, warns on likely duplicates.
@@ -56,6 +57,9 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
       if (!isPdf) {
         setOcr({ busy: true, text: null });
         const res = await extractInvoiceText(dataUrl);
+        // Don't silently drop a genuine OCR failure (Phase 3.10): record it + tell the owner to type it in,
+        // distinct from "OCR isn't switched on".
+        if (res && res.failed) { recordFailure('ocr', res.error); toast('Couldn’t read the image — type the details in.', { icon: '✏️' }); }
         setOcr({ busy: false, text: res && res.configured && res.text ? res.text : null, configured: res && res.configured });
       }
     };

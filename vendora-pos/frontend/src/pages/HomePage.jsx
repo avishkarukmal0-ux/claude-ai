@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles,
+  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -49,6 +49,7 @@ import { maybeNotify } from '../lib/notifications';
 import SaveSyncStatus from '../components/account/SaveSyncStatus';
 import ConflictRecovery from '../components/account/ConflictRecovery';
 import CloudBackups from '../components/account/CloudBackups';
+import SupportView from '../components/account/SupportView';
 import { useSyncStatus, CONFLICT_EVENT } from '../lib/sync';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -204,6 +205,7 @@ export default function HomePage() {
         {screen === 'notifications' && <NotificationsView onBack={() => setScreen(null)} />}
         {screen === 'recovered' && <ConflictRecovery onBack={() => setScreen(null)} />}
         {screen === 'cloud-backups' && !isStaff && <CloudBackups onBack={() => setScreen(null)} />}
+        {screen === 'support' && <SupportView onBack={() => setScreen(null)} />}
         {screen === 'overview' && canSeeScreen(role, 'overview') && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -320,6 +322,7 @@ export default function HomePage() {
             <MoreGroup title="Settings">
               <InstallCard />
               <Row icon={Bell} label="Notifications" sub="Daily heads-up: expiry, claims, tasks" onClick={() => setScreen('notifications')} />
+              <Row icon={LifeBuoy} label="Help & diagnostics" sub="App status + report a problem" onClick={() => setScreen('support')} />
               <RowLink to="/" icon={Settings} label="Change shop type" />
               {ACCOUNTS_ENABLED && <RowLink to="/account" icon={LogIn} label="Your shop account" />}
               {ACCOUNTS_ENABLED && isLoggedIn() && can(role, 'manageStaff') && (

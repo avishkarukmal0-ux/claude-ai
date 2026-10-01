@@ -23,7 +23,12 @@ export async function ocrStatus() {
   } catch { return { configured: false }; }
 }
 
-/** Extract raw text from an invoice image data URL. Returns { configured, text? }; never throws. */
+/**
+ * Extract raw text from an invoice image data URL. Returns { configured, text?, failed?, error? }; never
+ * throws. `failed:true` marks a genuine attempt that errored (signed in + online but the request failed),
+ * so the caller can tell a real failure apart from "OCR simply isn't switched on" and surface/record it
+ * instead of silently dropping it (Phase 3.10). Not-signed-in/offline is unavailability, not a failure.
+ */
 export async function extractInvoiceText(dataUrl) {
   if (!ACCOUNTS_ENABLED || isOffline() || !token()) return { configured: false };
   try {
@@ -32,7 +37,7 @@ export async function extractInvoiceText(dataUrl) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
       body: JSON.stringify({ dataUrl }),
     });
-    if (!res.ok) return { configured: false };
+    if (!res.ok) return { configured: false, failed: true, error: `HTTP ${res.status}` };
     return await res.json();
-  } catch { return { configured: false }; }
+  } catch (e) { return { configured: false, failed: true, error: (e && e.message) || 'network error' }; }
 }

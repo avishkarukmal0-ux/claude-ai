@@ -25,11 +25,11 @@ Living map of the **Phase 3 mandate** → existing implementation (file:line) �
 
 | # | Requirement | Existing evidence | Status | Change | Acceptance |
 |---|---|---|---|---|---|
-| 3.10a | Monitor failed saves / sync / doc-processing / reminder failures | failed-save → persistent strip (`saveStatus`); sync error → indicator; **OCR error silently dropped** (`InvoiceCaptureView` discards `res.error`); reminder failure not surfaced; **no persisted counter/log** | 🟡→ | `lib/diagnostics.js` persisted failure counters + recent-events ring (no sensitive data); hook save/sync/OCR/reminder failures in; stop dropping OCR error | failures counted + visible (test) |
-| 3.10b | Internal diagnostics without exposing shop data | scattered live signals (`getSaveStatus`/`getSyncState`); `ErrorBoundary` console-only; **no version string in FE** (`VITE_APP_VERSION` unused) | 🟡→ | a Diagnostics view: app version, last-sync, pending, conflict + failure counts — counts only, no shop data | diagnostics view shows safe signals |
-| 3.10c | Problem-reporting flow with a reference number | **MISSING** entirely (no support/feedback UI or route) | 🔲→ | a "Report a problem" screen that generates a local **reference number** + a copyable summary (version + counts + recent error *types*), guidance to send it; auto-transmits nothing | report gives a reference + copyable summary (test on the ref generator) |
-| 3.10d | Don't auto-transmit documents / personal data with reports | no telemetry/error channel exists; nothing is sent | ✅ (preserve) | the new report is copy-to-send only — never auto-uploads documents or personal data | report sends nothing automatically |
-| 3.10e | Document how operators investigate | backend `/health` + central `errorHandler` + winston ✅ | 🟡→ | document the diagnostics + report flow + backend signals in [[Deployment-Config]] | documented |
+| 3.10a | Monitor failed saves / sync / doc-processing / reminder failures | `lib/diagnostics.js` persists failure counts + a capped recent-events ring (kind + short code + time only); self-captures save + sync from app events; OCR now records a real failure (`invoiceOcr` returns `failed`, `InvoiceCaptureView` records + prompts manual entry instead of dropping it); reminder failure recorded in `notifications.maybeNotify` | ✅ (3.10) | — | **done** — `diagnostics.test.js` (counts, self-wired save, clear) |
+| 3.10b | Internal diagnostics without exposing shop data | `SupportView` shows app version (`VITE_APP_VERSION`), sync state, last-sync, failure counts + recent types — counts/metadata only, no shop data | ✅ (3.10) | — | **done** — More→Settings→Help & diagnostics |
+| 3.10c | Problem-reporting flow with a reference number | `SupportView` "Report a problem" → `makeReference()` `VEN-YYYYMMDD-XXXX` + a copyable summary (version + counts + recent types) | ✅ (3.10) | — | **done** — `diagnostics.test.js` ref format |
+| 3.10d | Don't auto-transmit documents / personal data with reports | copy-to-send only; summary carries no shop data/documents; no telemetry channel exists | ✅ (3.10) | — | **done** — report transmits nothing automatically |
+| 3.10e | Document how operators investigate | backend `/health` + central `errorHandler` + winston ✅; now a Monitoring & support section in [[Deployment-Config]] covering the owner diagnostics/report flow + backend signals + reference correlation | ✅ (3.10) | — | **done** |
 
 ---
 
@@ -44,6 +44,14 @@ Living map of the **Phase 3 mandate** → existing implementation (file:line) �
   nothing. Any flag added is listed in [[Deployment-Config]].
 
 ## Phase gate status
-- ⏳ **In progress.** Per-area commits (3.9b a11y → 3.9a mobile/forms → 3.10 ops), each with tests where
-  unit-testable; this checklist updated as each lands.
+- ✅ **Phase 3 complete.** Per-area commits, each with tests where unit-testable:
+  - **3.9b accessibility** (`4b5d388`) — reduced-motion, global focus-visible, contrast, touch targets,
+    labels, skip link.
+  - **3.9a mobile** (`701695e`) — unsaved-form drafts (add-product) + async invoice image downscale.
+  - **3.10 operations** (this commit) — diagnostics counters, Help & diagnostics view, problem-report with a
+    reference number (copy-to-send only), OCR failures no longer dropped, frontend version surfaced, docs.
+- **Verification:** FE **267/267**; build clean. No backend code changes (health/handler/logging already in
+  place; docs updated). Device testing (Android Chrome / iPhone Safari) is outside the sandbox — a manual
+  check list is in the Work-Log; everything logic-level is covered by vitest + the production build.
+- **Deployment** left to the operator (mandate). Optional: set `VITE_APP_VERSION` for exact build triage.
 </content>
