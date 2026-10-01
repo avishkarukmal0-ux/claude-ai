@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { AlertOctagon, TrendingDown, ShoppingCart, Hourglass, Coins, ChevronRight, CheckCircle2, ListChecks, ClipboardList, X } from 'lucide-react';
+import { AlertOctagon, TrendingDown, ShoppingCart, Hourglass, Coins, ChevronRight, CheckCircle2, ListChecks, ClipboardList, X, PackageCheck } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
 import { useMovements } from '../../lib/movementStore';
 import { useTakings } from '../../lib/takingsStore';
 import { useTasks, exceptionCount } from '../../lib/taskStore';
 import { useClaims } from '../../lib/claimStore';
+import { useDeliveries } from '../../lib/deliveryStore';
 import { buildActions } from '../../lib/actionEngine';
 
 const KIND_ICON = {
@@ -15,6 +16,7 @@ const KIND_ICON = {
   cashup: Coins,
   tasks: ClipboardList,
   claims: Coins,
+  delivery: PackageCheck,
 };
 
 // Per-severity styling: the row's left rail, icon tint, and money-chip colour.
@@ -35,6 +37,7 @@ export default function TodayActions({ onGo }) {
   const { todayEntry } = useTakings();
   const { tasks } = useTasks();
   const { claims } = useClaims();
+  const { deliveries } = useDeliveries();
 
   // Per-day "snooze": hides a reminder for today only. It NEVER changes the underlying records —
   // the action returns tomorrow if the condition still holds.
@@ -53,8 +56,8 @@ export default function TodayActions({ onGo }) {
 
   const taskExceptions = useMemo(() => exceptionCount(tasks), [tasks]);
   const actions = useMemo(
-    () => buildActions({ products, records, todayEntry, taskExceptions, claims, now: new Date() }).filter((a) => !dismissed.has(a.id)),
-    [products, records, todayEntry, taskExceptions, claims, dismissed],
+    () => buildActions({ products, records, todayEntry, taskExceptions, claims, deliveries, now: new Date() }).filter((a) => !dismissed.has(a.id)),
+    [products, records, todayEntry, taskExceptions, claims, deliveries, dismissed],
   );
 
   // Nothing to do — but only celebrate once there's actually stock to reason about.

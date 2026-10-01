@@ -25,9 +25,25 @@ const andMore = (list) => (list.length > 1 ? ` +${list.length - 1} more` : '');
  * Build the prioritised action list.
  * @returns Array<{ id, severity, kind, title, detail, money?, go, cta }>
  */
-export function buildActions({ products = [], records = [], todayEntry = null, taskExceptions = 0, claims = [], now = new Date() } = {}) {
+export function buildActions({ products = [], records = [], todayEntry = null, taskExceptions = 0, claims = [], deliveries = [], now = new Date() } = {}) {
   const actions = [];
   const inStock = products.filter((p) => qtyOf(p) > 0);
+
+  // 0a) WARN — a delivery check was started (draft with lines) but never booked into stock. Until it's
+  //     received, that stock isn't counted and any shortage/overcharge isn't claimed — so surface it.
+  const openDrafts = (deliveries || []).filter((d) => d && d.status === 'draft' && Array.isArray(d.lines) && d.lines.length > 0);
+  if (openDrafts.length) {
+    const draftLabel = (openDrafts[0].supplierName || openDrafts[0].reference || '').trim();
+    actions.push({
+      id: 'delivery-draft',
+      severity: 'warn',
+      kind: 'delivery',
+      title: openDrafts.length === 1 ? 'Finish receiving a delivery' : `Finish receiving ${openDrafts.length} deliveries`,
+      detail: `Started but not booked into stock yet${draftLabel ? ` — ${draftLabel}` : ''}. Check it in so your counts and any claim are right.`,
+      go: { screen: 'receive' },
+      cta: 'Finish delivery',
+    });
+  }
 
   // 0b) WARN — supplier claims past their follow-up date (Phase 2 reminders). Uses the EXISTING follow-up
   //     date + claim outstanding; snoozing just moves the date (in Supplier claims).
