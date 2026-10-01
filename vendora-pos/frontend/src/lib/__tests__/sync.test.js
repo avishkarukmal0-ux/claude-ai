@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as storage from '../storage';
 import * as sync from '../sync';
+import { listConflicts } from '../conflictBackup';
 
 // A fake sync server that mirrors pwaSyncService.js semantics (rev + last-write-wins by mtime), driven
 // through the pluggable transport. Lets us exercise the whole client reconcile loop in jsdom.
@@ -156,6 +157,46 @@ describe('sync — concurrency hardening (audit 2026-10-01)', () => {
     sync.markStoreDirty('tasks_v1', 200); // simulate the write-event marking it dirty
     await sync.syncNow();
     expect(server.blobs.get('tasks_v1').value).toBe(''); // cleared propagated as empty
+  });
+});
+
+describe('sync — conflict recovery (Phase 1.1g: no silent loss)', () => {
+  it('keeps a recovery copy when a newer server change replaces a dirty local edit (pull path)', async () => {
+    await sync.syncNow(); // bootstrap
+    server.blobs.set('waste_v1', { value: JSON.stringify([{ id: 'server-win' }]), rev: 3, mtime: 99999 });
+    storage.writeJSON('waste_v1', [{ id: 'my-unsynced' }], ws);
+    sync.markStoreDirty('waste_v1', 100); // older than the server's copy → server wins
+
+    let fired = 0;
+    const on = () => { fired += 1; };
+    window.addEventListener(sync.CONFLICT_EVENT, on);
+    const res = await sync.syncNow();
+    window.removeEventListener(sync.CONFLICT_EVENT, on);
+
+    expect(res.ok).toBe(true);
+    expect(storage.readJSON('waste_v1', null, ws)).toEqual([{ id: 'server-win' }]); // server won
+    const kept = listConflicts(ws).find((k) => k.name === 'waste_v1');
+    expect(kept && kept.value).toBe(JSON.stringify([{ id: 'my-unsynced' }])); // our copy preserved
+    expect(sync.getSyncState().conflicts).toBeGreaterThanOrEqual(1);
+    expect(fired).toBe(1); // user was told
+  });
+
+  it('stashes the losing local value on a push conflict (another device pushed first)', async () => {
+    await sync.syncNow(); // bootstrap (empty)
+    storage.writeJSON('orders_v1', [{ id: 'mine' }], ws);
+    sync.markStoreDirty('orders_v1', 100);
+    // A different device creates orders_v1 with a newer mtime AFTER our pull but BEFORE our push.
+    sync.__setSyncTransport(async (path, opts) => {
+      if (path === '/push' && !server.blobs.has('orders_v1')) {
+        server.blobs.set('orders_v1', { value: JSON.stringify([{ id: 'theirs' }]), rev: 5, mtime: 9999 });
+      }
+      return server.transport(path, opts);
+    });
+
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(true);
+    expect(storage.readJSON('orders_v1', null, ws)).toEqual([{ id: 'theirs' }]); // server won
+    expect(listConflicts(ws).some((k) => k.name === 'orders_v1' && k.value === JSON.stringify([{ id: 'mine' }]))).toBe(true);
   });
 });
 

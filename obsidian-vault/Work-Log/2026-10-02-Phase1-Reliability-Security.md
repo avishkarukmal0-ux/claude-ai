@@ -37,6 +37,24 @@ server-side, cross-shop tests).**
 - Pre-existing: the till/back-office DB suites (`products`, `sales`, …) fail without Mongo in the sandbox —
   unrelated to these changes; PWA integration suites skip cleanly without a URI.
 
+## 1.1 — Save & sync status ✅
+**Already solid:** write-failure detection (localStorage→IDB fallback, `STORAGE_ERROR_EVENT`), safe auto-
+retries, `operationId` idempotency, SW update prompt. **Gaps closed:**
+- **Pilot had no status:** `SyncStatus` only rendered when logged in, so the accounts-off pilot saw nothing.
+  New `saveStatus.js` (device-save state from the storage events) + `SaveSyncStatus.jsx` show "Saved on this
+  phone" always, with the sync line beneath when signed in. Rendered in More→Settings for every mode.
+- **Failed save was only a toast:** `saveStatus` now holds a persistent per-store "couldn't save" state
+  (cleared when that store next saves), shown in `SaveSyncStatus` — not just a disappearing toast.
+- **Logout/switch pending work:** handled by `session.signOut()` (flush + final push, reports `remaining`
+  unsynced) + the AccountView sign-out warning (from 1.4).
+- **Silent conflict loss (key):** `conflictBackup.js` stashes the losing local value on BOTH conflict paths
+  in `sync.js` (pull-over-dirty + push-conflict); sync state gains a `conflicts` count + `CONFLICT_EVENT`;
+  `HomePage` toasts; new `ConflictRecovery` screen (More→Data→Recovered changes) lets the owner review,
+  download, and clear their replaced copies. Nothing is lost silently.
+
+### Verification (1.1)
+- FE **235/235** (+5: sync conflict-recovery ×2, saveStatus ×3). Build clean.
+
 ## Follow-ups
-- 1.1 save/sync status, 1.2 traceability, 1.3 backup/recovery — next commits (see checklist).
+- 1.2 traceability, 1.3 backup/recovery — next commits (see checklist).
 </content>

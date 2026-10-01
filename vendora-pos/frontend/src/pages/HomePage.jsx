@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog, Bell,
+  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -43,7 +43,9 @@ import { canSeeScreen, can } from '../lib/permissions';
 import StaffView from '../components/account/StaffView';
 import NotificationsView from '../components/account/NotificationsView';
 import { maybeNotify } from '../lib/notifications';
-import SyncStatus from '../components/account/SyncStatus';
+import SaveSyncStatus from '../components/account/SaveSyncStatus';
+import ConflictRecovery from '../components/account/ConflictRecovery';
+import { useSyncStatus, CONFLICT_EVENT } from '../lib/sync';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
@@ -61,6 +63,8 @@ export default function HomePage() {
   const saved = getSavedShopType();
   const { role } = useSession(); // 'owner' for guest/accounts-off; 'manager'/'staff' for signed-in members
   const isStaff = role === 'staff';
+  const syncState = useSyncStatus();
+  const conflicts = syncState.conflicts || 0; // edits replaced by another device, kept for recovery
   const [tab, setTab] = useState('today');
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
@@ -77,6 +81,17 @@ export default function HomePage() {
   // Opportunistic device digest — at most once/day, only in the chosen window, only if something's due.
   // The reliable channel is the server email; this just surfaces the same summary when the app is opened.
   useEffect(() => { maybeNotify().catch(() => {}); }, []);
+
+  // Two-device conflict: a newer change from another device replaced one of ours. Sync kept the replaced
+  // copy; tell the owner so it's never a silent loss (Phase 1.1g). They can review it in More → Data.
+  useEffect(() => {
+    const onConflict = () => {
+      toast('A newer change from another device replaced one of yours. Your copy is saved — see More → Data → Recovered changes.',
+        { id: 'sync-conflict', icon: '🔀', duration: 7000 });
+    };
+    window.addEventListener(CONFLICT_EVENT, onConflict);
+    return () => window.removeEventListener(CONFLICT_EVENT, onConflict);
+  }, []);
 
   async function onExport() {
     const shared = await shareBackup();
@@ -167,6 +182,7 @@ export default function HomePage() {
         {screen === 'weekly-report' && canSeeScreen(role, 'weekly-report') && <WeeklyReportView onBack={() => setScreen(null)} />}
         {screen === 'staff-admin' && canSeeScreen(role, 'staff-admin') && <StaffView onBack={() => setScreen(null)} />}
         {screen === 'notifications' && <NotificationsView onBack={() => setScreen(null)} />}
+        {screen === 'recovered' && <ConflictRecovery onBack={() => setScreen(null)} />}
         {screen === 'overview' && canSeeScreen(role, 'overview') && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -272,6 +288,9 @@ export default function HomePage() {
               <Row icon={Download} label="Export backup" sub="Save your data to a file (or share it)" onClick={onExport} />
               <Row icon={Upload} label="Restore from backup" sub="Load a backup file — replaces current data" onClick={() => restoreInputRef.current?.click()} />
               <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
+              {conflicts > 0 && (
+                <Row icon={GitMerge} label="Recovered changes" sub="Edits replaced by another device — kept safe" onClick={() => setScreen('recovered')} badge={conflicts} />
+              )}
             </MoreGroup>
             <MoreGroup title="Settings">
               <Row icon={Bell} label="Notifications" sub="Daily heads-up: expiry, claims, tasks" onClick={() => setScreen('notifications')} />
@@ -280,7 +299,7 @@ export default function HomePage() {
               {ACCOUNTS_ENABLED && isLoggedIn() && can(role, 'manageStaff') && (
                 <Row icon={UserCog} label="Staff access" sub="Give your team their own logins" onClick={() => setScreen('staff-admin')} />
               )}
-              {ACCOUNTS_ENABLED && isLoggedIn() && <SyncStatus />}
+              <SaveSyncStatus />
             </MoreGroup>
             <p className="px-1 text-center text-xs text-gray-400">Set up as {shopLabel} · Vendora</p>
           </div>

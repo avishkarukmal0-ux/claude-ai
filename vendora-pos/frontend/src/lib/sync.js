@@ -23,6 +23,9 @@ import {
   STORE_NAMES, STORAGE_WRITE_EVENT, WORKSPACE_EVENT, getActiveWorkspace, keyFor, read, write,
 } from './storage';
 import { currentSession, refresh as refreshSession, ACCOUNTS_ENABLED } from './account';
+import { stashConflict, conflictCount } from './conflictBackup';
+
+export const CONFLICT_EVENT = 'vendora:conflict';
 
 const API_BASE = (() => {
   try { return (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, ''); }
@@ -58,7 +61,7 @@ let _transport = fetchTransport;
 export function __setSyncTransport(t) { _transport = t || fetchTransport; }
 
 // --- state -----------------------------------------------------------------
-const state = { status: 'idle', lastSyncedAt: 0, pending: 0, error: null };
+const state = { status: 'idle', lastSyncedAt: 0, pending: 0, error: null, conflicts: 0 };
 function isOffline() { try { return typeof navigator !== 'undefined' && navigator.onLine === false; } catch { return false; } }
 function setState(patch) {
   Object.assign(state, patch);
@@ -152,6 +155,7 @@ export async function syncNow() {
     const rejected = [];       // names the server refused for this role (financial stores for staff)
     const adopted = new Set(); // stores we took from the server this run — never push them back
     let writeFailed = false;
+    let stashed = 0;           // local edits preserved to recovery because another device's copy won
 
     // 1) PULL — adopt anything the server has that we haven't seen.
     const pull = await authedRequest('/pull', { method: 'GET' }, ctx);
@@ -166,6 +170,12 @@ export async function syncNow() {
       else if (b.rev > (lm.rev || 0)) take = !(lm.dirty && (lm.mtime || 0) > (b.mtime || 0));
       else take = false;
       if (take) {
+        // If we're discarding a DIRTY local edit (our unsynced change lost LWW to the server's newer
+        // copy), keep a recovery copy first so the owner's work is never silently lost (Phase 1.1g).
+        if (lm.dirty) {
+          const mine = read(b.name, null, ws);
+          if (mine != null && mine !== b.value) { stashConflict(ws, { name: b.name, value: mine }); stashed += 1; }
+        }
         const res = applyRemote(ws, b.name, b.value);
         if (res && res.ok) { adoptions.push({ name: b.name, rev: b.rev, mtime: b.mtime }); adopted.add(b.name); }
         else writeFailed = true;
@@ -201,6 +211,9 @@ export async function syncNow() {
       guard();
       for (const a of res.applied || []) applied.push({ name: a.name, rev: a.rev, sentMtime: sentMtime[a.name] });
       for (const c of res.conflicts || []) {
+        // Our pushed value lost LWW — stash it before adopting the server's winner (Phase 1.1g).
+        const sent = changes.find((ch) => ch.name === c.name);
+        if (sent && sent.value != null && sent.value !== c.value) { stashConflict(ws, { name: c.name, value: sent.value }); stashed += 1; }
         const r = applyRemote(ws, c.name, c.value); // server's copy won — adopt it
         if (r && r.ok) conflicts.push({ name: c.name, rev: c.rev, mtime: c.mtime });
         else writeFailed = true;
@@ -235,12 +248,17 @@ export async function syncNow() {
     if (changedLocal) {
       try { window.dispatchEvent(new CustomEvent(WORKSPACE_EVENT, { detail: { synced: true } })); } catch { /* ignore */ }
     }
+    const conflictsN = conflictCount(ws);
+    if (stashed > 0) {
+      // Tell the UI a newer change from another device replaced one of theirs — and that we kept a copy.
+      try { window.dispatchEvent(new CustomEvent(CONFLICT_EVENT, { detail: { count: conflictsN, added: stashed } })); } catch { /* ignore */ }
+    }
     if (writeFailed) {
-      setState({ status: 'error', error: 'Some changes couldn’t be saved on this device', pending: countDirty(fresh) });
+      setState({ status: 'error', error: 'Some changes couldn’t be saved on this device', pending: countDirty(fresh), conflicts: conflictsN });
       return { ok: false, writeFailed: true };
     }
-    setState({ status: 'synced', lastSyncedAt: Date.now(), pending: countDirty(fresh), error: null });
-    return { ok: true, changedLocal };
+    setState({ status: 'synced', lastSyncedAt: Date.now(), pending: countDirty(fresh), error: null, conflicts: conflictsN });
+    return { ok: true, changedLocal, stashed };
   } catch (err) {
     if (err && err.message === '__aborted__') { setState({ status: 'idle' }); return { ok: false, aborted: true }; }
     setState({ status: isOffline() ? 'offline' : 'error', error: (err && err.message) || 'Sync failed' });
@@ -318,7 +336,7 @@ export function __resetSyncForTest() {
   started = false; syncing = false; applyingRemote = false;
   if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
   if (pollId) { clearInterval(pollId); pollId = null; }
-  Object.assign(state, { status: 'idle', lastSyncedAt: 0, pending: 0, error: null });
+  Object.assign(state, { status: 'idle', lastSyncedAt: 0, pending: 0, error: null, conflicts: 0 });
 }
 
 // --- React hook ------------------------------------------------------------
