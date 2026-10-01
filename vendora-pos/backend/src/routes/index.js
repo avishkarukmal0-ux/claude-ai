@@ -20,6 +20,11 @@ router.use('/pwa-lookup', pwaLookupRoutes);
 const pwaInvoiceOcrRoutes = require('./pwaInvoiceOcrRoutes');
 router.use('/pwa-invoice-ocr', pwaInvoiceOcrRoutes);
 
+// ── PWA daily digest notifications (optional; email off unless configured). Prefs/preview need a PWA
+//    token; POST /run is gated by a shared secret for an external scheduler. ──
+const pwaNotifyRoutes = require('./pwaNotifyRoutes');
+router.use('/pwa-notify', pwaNotifyRoutes);
+
 // ── Till / back-office API (DEFERRED). Mounted only when TILL_ENABLED=true. In the PWA-only pilot the
 //    whole till surface — auth, sales, refunds, self-checkout, staff, customers, stocktake, billing,
 //    sockets — is simply not mounted, so every till/financial/auth route returns 404 and none of the

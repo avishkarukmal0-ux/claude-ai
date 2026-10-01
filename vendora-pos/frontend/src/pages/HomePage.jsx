@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog,
+  FileSpreadsheet, TrendingUp, UserCog, Bell,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -40,6 +40,8 @@ import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ACCOUNTS_ENABLED, isLoggedIn, useSession } from '../lib/account';
 import { canSeeScreen, can } from '../lib/permissions';
 import StaffView from '../components/account/StaffView';
+import NotificationsView from '../components/account/NotificationsView';
+import { maybeNotify } from '../lib/notifications';
 import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
 import SuggestionsInbox from '../components/worker/SuggestionsInbox';
@@ -70,6 +72,10 @@ export default function HomePage() {
     else if (target.screen) setScreen(target.screen);
   }
   function dismissPromises() { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* ignore */ } setShowPromises(false); }
+
+  // Opportunistic device digest — at most once/day, only in the chosen window, only if something's due.
+  // The reliable channel is the server email; this just surfaces the same summary when the app is opened.
+  useEffect(() => { maybeNotify().catch(() => {}); }, []);
 
   async function onExport() {
     const shared = await shareBackup();
@@ -159,6 +165,7 @@ export default function HomePage() {
         {screen === 'price-history' && canSeeScreen(role, 'price-history') && <PriceHistoryView onBack={() => setScreen(null)} />}
         {screen === 'weekly-report' && canSeeScreen(role, 'weekly-report') && <WeeklyReportView onBack={() => setScreen(null)} />}
         {screen === 'staff-admin' && canSeeScreen(role, 'staff-admin') && <StaffView onBack={() => setScreen(null)} />}
+        {screen === 'notifications' && <NotificationsView onBack={() => setScreen(null)} />}
         {screen === 'overview' && canSeeScreen(role, 'overview') && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -266,6 +273,7 @@ export default function HomePage() {
               <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
             </MoreGroup>
             <MoreGroup title="Settings">
+              <Row icon={Bell} label="Notifications" sub="Daily heads-up: expiry, claims, tasks" onClick={() => setScreen('notifications')} />
               <RowLink to="/" icon={Settings} label="Change shop type" />
               {ACCOUNTS_ENABLED && <RowLink to="/account" icon={LogIn} label="Your shop account" />}
               {ACCOUNTS_ENABLED && isLoggedIn() && can(role, 'manageStaff') && (

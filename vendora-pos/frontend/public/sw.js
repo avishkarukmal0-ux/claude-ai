@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v4';
+const CACHE_VERSION = 'vendora-v5';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -58,6 +58,19 @@ self.addEventListener('message', (event) => {
       )),
     );
   }
+});
+
+// Tapping a digest notification focuses an open Vendora tab (or opens one). Local notifications are raised
+// via registration.showNotification from the page (see lib/notifications.js).
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const c of clients) { if ('focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow('/');
+      return undefined;
+    }),
+  );
 });
 
 self.addEventListener('fetch', (event) => {

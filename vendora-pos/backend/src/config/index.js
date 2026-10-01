@@ -19,6 +19,20 @@ module.exports = {
     ocrSpaceKey: process.env.OCR_SPACE_API_KEY || null,
   },
 
+  // PWA owner/staff daily digest notifications (optional, off by default). Email is the reliable,
+  // not-app-open-dependent channel — it reads the shop's synced data server-side. It only sends when a
+  // provider is configured; otherwise the service reports `configured:false` and never claims it works.
+  //   NOTIFY_EMAIL_PROVIDER=sendgrid  + SENDGRID_API_KEY   → turns the email channel on
+  //   NOTIFY_RUN_TOKEN=<secret>       → protects POST /api/pwa-notify/run for an external scheduler
+  //   NOTIFY_CRON=true                → also run an in-process 15-min sweep (only reliable if the
+  //                                     instance stays awake; on a sleeping dyno use the external trigger)
+  notify: {
+    emailProvider: process.env.NOTIFY_EMAIL_PROVIDER || null,
+    from: process.env.NOTIFY_FROM_EMAIL || process.env.SENDGRID_FROM_EMAIL || 'noreply@vendora.co.uk',
+    runToken: process.env.NOTIFY_RUN_TOKEN || null,
+    cronEnabled: process.env.NOTIFY_CRON === 'true',
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },
