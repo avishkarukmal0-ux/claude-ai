@@ -3,6 +3,8 @@
 // Estimated/opportunity figures (e.g. "rescued" savings) are reported separately and never mixed
 // into the actuals. Pure functions, unit-testable.
 
+import { creditReceivedInPeriod, creditOutstanding } from './creditReport';
+
 export function sameMonth(ts, now = Date.now()) {
   if (!ts) return false;
   const a = new Date(ts); const b = new Date(now);
@@ -30,17 +32,17 @@ export function monthlyOutcomes(input = {}) {
   const monthSaved = Number(input.monthSaved) || 0;
   const now = input.now || Date.now();
 
-  // Supplier credit ACTUALLY received (settled this month).
-  const settled = claims.filter((c) => c.status === 'settled' && sameMonth(statusAt(c, 'settled'), now));
-  const creditReceived = settled.reduce((n, c) => n + (Number(c.receivedAmount) || 0), 0);
+  // Supplier credit ACTUALLY received this month — each confirmed allocation counted in the period of its
+  // own received date, across ALL claims (partials on still-open claims included), reversal-safe. See
+  // lib/creditReport. This is the one honest "credit received" figure (never "settled = paid").
+  const creditReceived = creditReceivedInPeriod(claims, now);
 
   // Discrepancies resolved = claims reaching a terminal state (settled or rejected) this month.
   const resolved = claims.filter((c) => (c.status === 'settled' || c.status === 'rejected') && sameMonth(statusAt(c, c.status), now));
 
-  // Credit still outstanding (requested but not yet received) — shown as in-progress, not actual.
-  const outstanding = claims
-    .filter((c) => ['submitted', 'acknowledged', 'approved'].includes(c.status))
-    .reduce((n, c) => n + (Number(c.approvedAmount != null ? c.approvedAmount : (c.requestedAmount || 0)) || 0), 0);
+  // Credit still outstanding (chasing) = Σ max(0, approved/requested − already received) over open claims —
+  // received allocations are SUBTRACTED, so a partial credit lowers what's still outstanding.
+  const outstanding = creditOutstanding(claims);
 
   // Tasks completed this month (a completed/acknowledged entry dated in-month).
   const tasksCompleted = tasks.filter((t) => (t.history || []).some((h) => (h.action === 'completed' || h.action === 'acknowledged') && sameMonth(h.at, now))).length;

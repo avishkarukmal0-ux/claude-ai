@@ -5,6 +5,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { round2 as r2, sumMoney } from './money';
+// claimOutstanding is defined once in creditReport (the canonical credit-accounting module) and re-exported
+// here so existing importers (CreditNotesView, actionEngine, notifications, report) keep their import path.
+import { claimOutstanding } from './creditReport';
+
+export { claimOutstanding };
 
 const NAME = 'credit_notes_v1';
 
@@ -32,15 +37,6 @@ export function creditNoteFingerprint(cn) {
 export function findDuplicateCreditNote(cn, existing = []) {
   const fp = creditNoteFingerprint(cn);
   return existing.find((x) => x.id !== cn.id && creditNoteFingerprint(x) === fp) || null;
-}
-
-/** Outstanding on a claim = approved (or requested) − already received. Only positive values can be credited. */
-export function claimOutstanding(claim) {
-  const target = claim.approvedAmount != null ? Number(claim.approvedAmount)
-    : (claim.requestedAmount != null ? Number(claim.requestedAmount)
-      : sumMoney((claim.items || []).map((i) => i.amount)));
-  const received = Number(claim.receivedAmount) || 0;
-  return r2(Math.max(0, (Number(target) || 0) - received));
 }
 
 /**

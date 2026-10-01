@@ -50,7 +50,49 @@ return v === undefined ? fallback : v;
   param that has a default and expect to branch on it. Always pass the real fallback to `readJSON`.
 
 ## Commit(s)
-- (this commit) — fix(pwa): null-safe stocktake history + screen error recovery (Phase 1a)
+- `6d54bba` — fix(pwa): null-safe stocktake history + screen error recovery (Phase 1a)
+
+---
+
+# Phase 1b — correct credit reporting
+
+## Finding — monthly outcomes mis-counted credit
+`monthlyOutcomes` counted only fully-`settled` claims' `receivedAmount` at their *settled* date, and summed
+open-claim `approved||requested` as outstanding **without subtracting received**. So: partial credits on open
+claims were invisible; a credit received in one month but settled in another landed in the wrong period;
+outstanding ignored money already banked.
+
+## Changes
+- **`src/lib/creditReport.js` (new, pure)** — single source of truth for credit accounting:
+  - `claimTarget` (approved→requested→items), `claimReceived` (sum of dated `credits[]`, else legacy
+    `receivedAmount`), `claimOutstanding` (max(0, target−received)).
+  - `allocationsOf` — confirmed dated allocations; legacy rolled-up amounts attributed to the settled date.
+  - `creditReceivedInPeriod` — each allocation counted in the month of its own `at`, across ALL claims
+    (partials on open claims included), accumulated in integer pence.
+  - `creditOutstanding` — Σ max(0, target−received) over open claims (received subtracted).
+  - `creditSummary` — requested/approved/received kept distinct.
+- **`src/lib/creditNoteStore.js`** — removed its divergent local `claimOutstanding`; now imports + re-exports
+  the canonical one (import path unchanged for CreditNotesView/actionEngine/notifications/report).
+- **`src/lib/outcomes.js`** — `monthlyOutcomes` uses `creditReceivedInPeriod` + `creditOutstanding`.
+
+## How each requirement is met
+- *Count each allocation in the period received* → `creditReceivedInPeriod` uses `credit.at`.
+- *Include partials on open claims* → iterates all claims, not just settled.
+- *Subtract received from outstanding* → `claimOutstanding = target − received`.
+- *Keep requested/approved/received distinct* → separate fields in `creditSummary`/`claimTotals`.
+- *Corrections & reversals without double counting* → received summed from `credits[]`, which void/unapply
+  remove (claimStore.removeCredit); re-allocating a note replaces its slice.
+- *Historical compatibility* → legacy claims with only `receivedAmount` still counted (dated to settle).
+- *Decimal-safe + explicit rounding* → all via `lib/money` (integer pence, half-away-from-zero).
+
+## Verification
+- `src/lib/__tests__/creditreport.test.js` (12) proving each requirement above.
+- Full suite **286/286**; build clean. Existing creditnotes/scenarios/report/notifications suites still green
+  (behaviour preserved through the re-export).
+
+## Commit(s)
+- (this commit) — fix(pwa): correct credit reporting — received-period, partials, netted outstanding (Phase 1b)
 
 ## Follow-ups
-- [ ] Phase 1b — correct credit reporting (received-period, partials, reversals, rounding).
+- [ ] Surface the distinct requested/approved/received in the UI (Phase 5 payment calendar can reuse
+      `creditSummary`).
