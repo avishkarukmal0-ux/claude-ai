@@ -32,6 +32,7 @@ import RequestsView from '../components/requests/RequestsView';
 import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
 import SalesImportView from '../components/salesimport/SalesImportView';
 import ScanIdentifyView from '../components/scan/ScanIdentifyView';
+import CategoryInsightsView from '../components/insights/CategoryInsightsView';
 import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
 import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
@@ -136,6 +137,7 @@ export default function HomePage() {
         {screen === 'outcomes' && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
         {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
+        {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
         {screen === 'overview' && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -199,6 +201,7 @@ export default function HomePage() {
               <Chip icon={ClipboardCheck} label="Count" onClick={() => setScreen('stocktake')} />
               <Chip icon={PackageOpen} label="Refill" onClick={() => setScreen('refill')} />
               <Chip icon={Hourglass} label="Slow stock" onClick={() => setScreen('deadstock')} />
+              <Chip icon={BadgePercent} label="By category" onClick={() => setScreen('category-insights')} />
             </div>
             <InventoryView onOpenSuppliers={() => setScreen('suppliers')} onOpenImport={() => setScreen('import')} />
           </>

@@ -15,10 +15,12 @@ import { lookupBarcode } from '../../lib/productLookup';
 export default function ScanIdentifyView({ onBack }) {
   const inv = useInventory();
   const { products, matchByBarcode } = inv;
-  const [mode, setMode] = useState('idle');     // 'idle' | 'camera' | 'result' | 'add'
+  const [mode, setMode] = useState('idle');     // 'idle' | 'camera' | 'result' | 'add' | 'rapid'
   const [match, setMatch] = useState(null);     // { product, unit, multiplier }
   const [unknownCode, setUnknownCode] = useState('');
   const [typed, setTyped] = useState('');
+  const [rapidLog, setRapidLog] = useState([]); // [{ name, added, at }] during rapid book-in
+  const rapidMissRef = React.useRef(new Set());
 
   const categorySuggestions = useMemo(() => {
     const family = getFamily(getSavedShopType());
@@ -38,6 +40,22 @@ export default function ScanIdentifyView({ onBack }) {
 
   function reset() { setMatch(null); setUnknownCode(''); setTyped(''); setMode('idle'); }
 
+  function startRapid() { setRapidLog([]); rapidMissRef.current = new Set(); setMode('rapid'); }
+
+  // Rapid book-in: each scan of a known product adds stock (a case barcode adds ×packSize). Unknown codes
+  // are flagged once (add them in Identify mode first). Camera stays open for the whole delivery.
+  function handleRapid(code) {
+    const m = matchByBarcode(code);
+    if (!m) {
+      const c = String(code || '').trim();
+      if (!rapidMissRef.current.has(c)) { rapidMissRef.current.add(c); toast(`Unknown barcode — add it in Identify first`, { icon: '❓' }); }
+      return;
+    }
+    const units = m.unit === 'case' ? (m.multiplier || 1) : 1;
+    const res = inv.bookIn(m.product.id, units);
+    if (res.ok) setRapidLog((log) => [{ name: m.product.name, added: res.added, at: Date.now() }, ...log]);
+  }
+
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -46,6 +64,27 @@ export default function ScanIdentifyView({ onBack }) {
 
       {mode === 'camera' && (
         <BarcodeScanner onScan={(code) => resolve(code)} onClose={() => setMode('idle')} />
+      )}
+
+      {mode === 'rapid' && (
+        <div>
+          <BarcodeScanner continuous onScan={handleRapid} onClose={reset} />
+          <div className="mt-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900">Booking in…</h3>
+            <span className="text-xs text-gray-400">{rapidLog.reduce((n, r) => n + r.added, 0)} units · {rapidLog.length} scans</span>
+          </div>
+          <p className="mb-2 text-[11px] text-gray-400">Keep scanning — each item adds to stock (a case barcode adds a full case). Beeps on each scan.</p>
+          <ul className="max-h-64 space-y-1 overflow-y-auto">
+            {rapidLog.length === 0 && <li className="rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-400">Nothing scanned yet.</li>}
+            {rapidLog.map((r, i) => (
+              <li key={`${r.at}-${i}`} className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm">
+                <span className="truncate text-gray-800">{r.name}</span>
+                <span className="shrink-0 font-semibold text-success">+{r.added}</span>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={reset} className="mt-3 w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]">Done</button>
+        </div>
       )}
 
       {mode === 'idle' && (
@@ -58,9 +97,14 @@ export default function ScanIdentifyView({ onBack }) {
             Point the camera at a barcode to see the product, its price and stock — and whether it’s a single or a case.
           </p>
           {barcodeScanSupported ? (
-            <button type="button" onClick={() => setMode('camera')} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]">
-              <ScanLine className="h-4 w-4" /> Open camera
-            </button>
+            <>
+              <button type="button" onClick={() => setMode('camera')} className="mb-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]">
+                <ScanLine className="h-4 w-4" /> Open camera
+              </button>
+              <button type="button" onClick={startRapid} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary-50 px-4 py-3 text-sm font-semibold text-primary active:scale-[0.99]">
+                <PackageCheck className="h-4 w-4" /> Rapid book-in (scan a whole delivery)
+              </button>
+            </>
           ) : (
             <p className="mb-3 rounded-xl bg-warning-light px-3 py-2 text-xs text-warning-dark">This browser can’t use the camera scanner — type the barcode below instead.</p>
           )}

@@ -107,6 +107,34 @@ export default function ReorderView({ onBack }) {
     toast.success('Order placed — track it in Orders');
   }
 
+  // The whole buy list as text, grouped by supplier (unbought items only).
+  function buildFullListText() {
+    const unbought = items.filter((i) => !i.bought);
+    if (unbought.length === 0) return '';
+    const bySupplier = new Map();
+    for (const i of unbought) {
+      const name = (i.supplierId && supplierNameById[i.supplierId]) || 'No supplier yet';
+      if (!bySupplier.has(name)) bySupplier.set(name, []);
+      bySupplier.get(name).push(`• ${i.name} x${i.qty}`);
+    }
+    const blocks = [...bySupplier.entries()].map(([sup, lines]) => `${sup}:\n${lines.join('\n')}`);
+    return `Buy list\n\n${blocks.join('\n\n')}\n\n— via Vendora`;
+  }
+
+  async function shareAll() {
+    const text = buildFullListText();
+    if (!text) { toast('Nothing to order yet'); return; }
+    try { if (navigator.share) { await navigator.share({ title: 'Buy list', text }); return; } } catch { /* cancelled */ }
+    try { await navigator.clipboard.writeText(text); toast.success('Buy list copied — paste it to your supplier'); return; } catch { /* blocked */ }
+    toast('Couldn’t copy automatically', { icon: 'ℹ️' });
+  }
+
+  function whatsappAll() {
+    const text = buildFullListText();
+    if (!text) { toast('Nothing to order yet'); return; }
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  }
+
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -114,7 +142,18 @@ export default function ReorderView({ onBack }) {
       </button>
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Buy list</h2>
-      <p className="mb-4 text-xs text-gray-400">Low stock becomes your cash-&-carry list. Tick items off as you shop.</p>
+      <p className="mb-3 text-xs text-gray-400">Low stock becomes your cash-&-carry list. Tick items off as you shop.</p>
+
+      {items.length > 0 && (
+        <div className="mb-4 flex gap-2">
+          <button type="button" onClick={shareAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 active:scale-[0.98]">
+            <Share2 className="h-3.5 w-3.5" /> Share list
+          </button>
+          <button type="button" onClick={whatsappAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-3 py-2 text-xs font-semibold text-white active:scale-[0.98]">
+            <Share2 className="h-3.5 w-3.5" /> WhatsApp
+          </button>
+        </div>
+      )}
 
       {/* Suggestions */}
       {suggestions.length > 0 && (

@@ -8,9 +8,30 @@
 //    owner knows how much to trust them.
 
 import { margin, isSlowStock, costKnown } from './inventoryStore';
-import { velocity, topMovers, salesCoverage } from './movementStore';
+import { velocity, topMovers, salesCoverage, salesUnits } from './movementStore';
 
 const qtyOf = (p) => Number(p.qty) || 0;
+
+/**
+ * Per-category performance (now that products carry a category). For each category: product count, capital
+ * on the shelf (qty × known cost), confirmed units sold in the window, and sales value (units × price).
+ * Sorted by sales value, highest first. "Uncategorised" is included so nothing is hidden.
+ */
+export function categoryBreakdown(products, records, windowDays = 28, now = Date.now()) {
+  const map = new Map();
+  for (const p of products) {
+    const cat = p.category || 'Uncategorised';
+    if (!map.has(cat)) map.set(cat, { category: cat, products: 0, stockValue: 0, unitsSold: 0, salesValue: 0 });
+    const row = map.get(cat);
+    row.products += 1;
+    if (costKnown(p) && qtyOf(p) > 0) row.stockValue += qtyOf(p) * Number(p.cost);
+    const sold = salesUnits(records, p.id, windowDays, now);
+    row.unitsSold += sold;
+    const price = Number(p.price);
+    if (Number.isFinite(price) && price > 0) row.salesValue += sold * price;
+  }
+  return [...map.values()].sort((a, b) => b.salesValue - a.salesValue || b.stockValue - a.stockValue);
+}
 
 /** Capital sitting on the shelves (qty × cost), counting only known-cost stock. */
 export function stockValue(products) {

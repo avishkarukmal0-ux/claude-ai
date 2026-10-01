@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2 } from 'lucide-react';
-import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES } from '../../lib/inventoryStore';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil } from 'lucide-react';
+import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
@@ -12,6 +12,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const { suppliers } = useSuppliers();
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null); // product being edited, or null
   const supplierNameById = useMemo(() => Object.fromEntries(suppliers.map((s) => [s.id, s.name])), [suppliers]);
 
   const filtered = useMemo(() => {
@@ -85,6 +86,16 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
       {adding && <AddForm suppliers={suppliers} categorySuggestions={categorySuggestions} onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}
 
+      {editing && (
+        <EditForm
+          product={editing}
+          suppliers={suppliers}
+          categorySuggestions={categorySuggestions}
+          onSave={(patch) => { updateProduct(editing.id, patch); setEditing(null); }}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
       {products.length > 0 && (
         <div className="relative mb-3">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -109,7 +120,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
               </div>
               <ul className="space-y-2">
                 {items.map((p) => (
-                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} />
+                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} onEdit={() => setEditing(p)} />
                 ))}
               </ul>
             </div>
@@ -122,7 +133,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
 // One product row. Shows category + pack ("Case of N") alongside the existing barcode/price/margin so
 // the shopkeeper can see at a glance what the item is and how it's bought.
-function ProductRow({ p, suppliers, updateProduct, removeProduct }) {
+function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit }) {
   const m = margin(p);
   const low = isLowStock(p);
   return (
@@ -176,9 +187,14 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct }) {
             ); })()}
           </div>
         </div>
-        <button type="button" onClick={() => removeProduct(p.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete">
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" onClick={onEdit} className="p-1 text-gray-300 hover:text-primary" aria-label="Edit product">
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => removeProduct(p.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       <div className="mt-2 flex items-center justify-between">
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
@@ -240,6 +256,60 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
 
       <div className="flex gap-2">
         <button type="button" disabled={!canSave} onClick={() => onAdd(f)} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save item</button>
+        <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// Edit an existing product — set/fix anything, including the category + pack size + case barcode that
+// previously could only be set when adding. Saves via updateProduct (packSize normalised, blanks → null).
+function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestions = [] }) {
+  const toStr = (v) => (v == null ? '' : String(v));
+  const [f, setF] = useState({
+    name: toStr(product.name), barcode: toStr(product.barcode), category: toStr(product.category),
+    cost: toStr(product.cost), price: toStr(product.price), supplierId: toStr(product.supplierId),
+    packSize: toStr(product.packSize), caseBarcode: toStr(product.caseBarcode),
+  });
+  const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
+  const canSave = f.name.trim().length > 0;
+
+  function save() {
+    onSave({
+      name: f.name.trim() || 'Unnamed item',
+      barcode: f.barcode.trim(),
+      category: f.category.trim() || null,
+      cost: f.cost === '' ? null : Number(f.cost),
+      price: f.price === '' ? null : Number(f.price),
+      supplierId: f.supplierId || null,
+      packSize: normalisePackSize(f.packSize),
+      caseBarcode: f.caseBarcode.trim() || null,
+    });
+  }
+
+  return (
+    <div className="mb-3 rounded-2xl border border-gray-300 bg-white p-3 shadow-sm">
+      <h3 className="mb-2 text-sm font-bold text-gray-900">Edit product</h3>
+      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode" aria-label="Barcode" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category" aria-label="Category" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <datalist id="vendora-category-list">{categorySuggestions.map((c) => <option key={c} value={c} />)}</datalist>
+      {suppliers.length > 0 && (
+        <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
+          <option value="">Supplier (optional)</option>
+          {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      )}
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      </div>
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      </div>
+      <div className="flex gap-2">
+        <button type="button" disabled={!canSave} onClick={save} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save changes</button>
         <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
       </div>
     </div>
