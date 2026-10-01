@@ -31,6 +31,7 @@ import ImportView from '../components/import/ImportView';
 import RequestsView from '../components/requests/RequestsView';
 import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
 import SalesImportView from '../components/salesimport/SalesImportView';
+import ScanIdentifyView from '../components/scan/ScanIdentifyView';
 import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
 import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
@@ -134,6 +135,7 @@ export default function HomePage() {
         {screen === 'requests' && <RequestsView onBack={() => setScreen(null)} />}
         {screen === 'outcomes' && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
+        {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
         {screen === 'overview' && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -182,7 +184,8 @@ export default function HomePage() {
 
         {/* ── SCAN (hub) ── */}
         {!screen && tab === 'scan' && (
-          <Hub title="Scan & check" subtitle="Book in, count, or record waste — camera or type.">
+          <Hub title="Scan & check" subtitle="Identify a product, book in, count, or record waste.">
+            <HubTile icon={ScanLine} accent={accent} label="Scan to identify" desc="What is it? Price, stock, single or case" onClick={() => setScreen('scan-identify')} />
             <HubTile icon={PackageCheck} accent={accent} label="Receive a delivery" desc="Cases/units, discrepancies, drafts" onClick={() => setScreen('receive')} />
             <HubTile icon={ClipboardCheck} accent={accent} label="Count stock" desc="Quick counts, catch shrinkage" onClick={() => setScreen('stocktake')} />
             <HubTile icon={CalendarClock} accent={accent} label="Expiry & waste" desc="Sell-first, bin the right batch" onClick={() => setScreen('waste')} />

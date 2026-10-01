@@ -413,6 +413,21 @@ export function useInventory() {
   // so a scan of the outer case barcode is understood as a full case.
   const matchByBarcode = useCallback((barcode) => matchBarcode(load(), barcode), []);
 
+  /** Book in `units` of a known product by id (scan-in). Increases stock and logs GOODS_RECEIVED. Used by
+   *  the Scan tab, where scanning a case books in units = count × packSize. Returns { ok, added }. */
+  const bookIn = useCallback((id, units) => {
+    const add = Math.max(0, Math.round(Number(units) || 0));
+    if (add <= 0) return { ok: false, error: 'Quantity must be positive' };
+    const prev = load();
+    const p = prev.find((x) => x.id === id);
+    if (!p) return { ok: false, error: 'Product not found' };
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + add, updatedAt: Date.now() } : x));
+    persist(next);
+    setProducts(next);
+    recordMovement({ productId: id, type: MOVEMENT_TYPES.GOODS_RECEIVED, delta: add, reason: 'scan-in' });
+    return { ok: true, added: add };
+  }, []);
+
   /** Apply a goods-in delivery: lines = [{ barcode, name, cost, qty }]. Logs GOODS_RECEIVED. */
   const receiveLines = useCallback((lines) => {
     const prev = load();
@@ -616,6 +631,6 @@ export function useInventory() {
     sellUnits, recordWaste, reverseWaste,
     addBatch, wasteBatch, reverseBatchWaste,
     setCounts, applyCounts, setShelfQty, transferStock,
-    findByBarcode, matchByBarcode, receiveLines, applyDelivery, importProducts, commit,
+    findByBarcode, matchByBarcode, bookIn, receiveLines, applyDelivery, importProducts, commit,
   };
 }
