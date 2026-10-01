@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet,
+  FileSpreadsheet, TrendingUp,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -35,6 +35,8 @@ import ScanIdentifyView from '../components/scan/ScanIdentifyView';
 import CategoryInsightsView from '../components/insights/CategoryInsightsView';
 import InvoiceCaptureView from '../components/invoices/InvoiceCaptureView';
 import CreditNotesView from '../components/invoices/CreditNotesView';
+import PriceHistoryView from '../components/invoices/PriceHistoryView';
+import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
 import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
@@ -142,6 +144,8 @@ export default function HomePage() {
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
         {screen === 'invoices' && <InvoiceCaptureView onBack={() => setScreen(null)} />}
         {screen === 'credit-notes' && <CreditNotesView onBack={() => setScreen(null)} />}
+        {screen === 'price-history' && <PriceHistoryView onBack={() => setScreen(null)} />}
+        {screen === 'weekly-report' && <WeeklyReportView onBack={() => setScreen(null)} />}
         {screen === 'overview' && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -221,6 +225,7 @@ export default function HomePage() {
             <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />
             <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />
             <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />
+            <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />
             <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
           </Hub>
         )}
@@ -232,6 +237,7 @@ export default function HomePage() {
               <Row icon={Coins} label="Takings & cash-up" onClick={() => setScreen('takings')} />
               <Row icon={LayoutDashboard} label="Owner glance" onClick={() => setScreen('overview')} />
               <Row icon={CalendarClock} label="This month" sub="Actual credits, tasks & coverage" onClick={() => setScreen('outcomes')} />
+              <Row icon={FileSpreadsheet} label="Weekly report" sub="Checking, waste, claims & price changes" onClick={() => setScreen('weekly-report')} />
             </MoreGroup>
             <MoreGroup title="Team">
               <Row icon={ClipboardList} label="Team tasks" onClick={() => setScreen('tasks')} badge={taskExceptions} />
