@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2, Share2, Flame } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2, Share2, Flame, Mail } from 'lucide-react';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
@@ -135,6 +135,13 @@ export default function ReorderView({ onBack }) {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   }
 
+  function emailAll() {
+    const text = buildFullListText();
+    if (!text) { toast('Nothing to order yet'); return; }
+    // Opens the device's email app with the list ready to send to a supplier.
+    window.location.href = `mailto:?subject=${encodeURIComponent('Buy list')}&body=${encodeURIComponent(text)}`;
+  }
+
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -146,11 +153,14 @@ export default function ReorderView({ onBack }) {
 
       {items.length > 0 && (
         <div className="mb-4 flex gap-2">
-          <button type="button" onClick={shareAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 active:scale-[0.98]">
-            <Share2 className="h-3.5 w-3.5" /> Share list
+          <button type="button" onClick={shareAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold text-gray-700 active:scale-[0.98]">
+            <Share2 className="h-3.5 w-3.5" /> Share
           </button>
-          <button type="button" onClick={whatsappAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-3 py-2 text-xs font-semibold text-white active:scale-[0.98]">
+          <button type="button" onClick={whatsappAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-2.5 py-2 text-xs font-semibold text-white active:scale-[0.98]">
             <Share2 className="h-3.5 w-3.5" /> WhatsApp
+          </button>
+          <button type="button" onClick={emailAll} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-xs font-semibold text-gray-700 active:scale-[0.98]">
+            <Mail className="h-3.5 w-3.5" /> Email
           </button>
         </div>
       )}

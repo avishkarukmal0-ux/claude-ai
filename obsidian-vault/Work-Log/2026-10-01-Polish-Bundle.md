@@ -26,8 +26,8 @@ the categories added earlier.
 
 ## 4. Share the buy list
 `ReorderView` already had per-supplier share; added **share-the-whole-list** (grouped by supplier) via
-`navigator.share` → clipboard fallback, plus a direct **WhatsApp** button (`wa.me/?text=`). Two buttons at
-the top of the Buy list when it's non-empty.
+`navigator.share` → clipboard fallback, plus a direct **WhatsApp** (`wa.me/?text=`) and **Email**
+(`mailto:?subject=&body=`) button. Three buttons at the top of the Buy list when it's non-empty.
 
 ## Verification
 FE full **128/128** (+2 `categoryBreakdown` tests: aggregation + Uncategorised/sort; inventory 12/12,
