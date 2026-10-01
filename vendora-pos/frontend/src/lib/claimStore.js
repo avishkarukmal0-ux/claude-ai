@@ -126,9 +126,11 @@ export function useClaims() {
       if (c.id !== id) return c;
       if (!nextStates(c.status).includes(to)) return c; // ignore illegal jumps
       const patch = { status: to, updatedAt: Date.now(), history: [...(c.history || []), { status: to, at: Date.now() }] };
-      // Sensible defaults so the honest amounts line up.
+      // 'approved' may default to the requested amount (the supplier agreeing a figure is a reasonable
+      // default the owner can edit). 'settled' must NOT auto-set receivedAmount: money is only "received"
+      // when the owner confirms the actual credit (Phase 0 / credit-note matching). Treating settled as
+      // paid is exactly what we must not do — leave receivedAmount for explicit confirmation.
       if (to === 'approved' && c.approvedAmount == null) patch.approvedAmount = claimTotals(c).requested;
-      if (to === 'settled' && c.receivedAmount == null) patch.receivedAmount = c.approvedAmount != null ? c.approvedAmount : claimTotals(c).requested;
       return { ...c, ...patch };
     }));
   }, []);

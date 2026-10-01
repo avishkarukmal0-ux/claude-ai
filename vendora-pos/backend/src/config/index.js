@@ -11,6 +11,14 @@ module.exports = {
   // after the till's audit findings are fixed and verified.
   till: { enabled: process.env.TILL_ENABLED === 'true' },
 
+  // Invoice OCR is OPTIONAL and off unless a provider is configured. With none, the PWA uses manual
+  // review (no fabricated data). Supported provider: 'ocrspace' (needs OCR_SPACE_API_KEY). Secrets stay
+  // server-side; the client only ever learns whether OCR is `configured`.
+  invoiceOcr: {
+    provider: process.env.INVOICE_OCR_PROVIDER || null,
+    ocrSpaceKey: process.env.OCR_SPACE_API_KEY || null,
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },

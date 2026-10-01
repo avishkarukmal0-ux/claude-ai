@@ -53,7 +53,11 @@ describe('claims — lifecycle & honest amounts', () => {
     act(() => { result.current.advance(id, 'settled'); });
     c = result.current.claims.find((x) => x.id === id);
     expect(c.status).toBe('settled');
-    expect(claimTotals(c).received).toBeCloseTo(10); // defaulted to approved on settle
+    // Phase 0: settling does NOT assume the credit was received — stays null until explicitly confirmed.
+    expect(claimTotals(c).received).toBeNull();
+    act(() => { result.current.updateClaim(id, { receivedAmount: 9.5 }); }); // owner confirms actual credit
+    c = result.current.claims.find((x) => x.id === id);
+    expect(claimTotals(c).received).toBeCloseTo(9.5);
   });
 
   it('ignores illegal transitions', () => {

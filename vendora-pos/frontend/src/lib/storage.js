@@ -50,7 +50,11 @@ export const STORE_NAMES = [
   'handovers_v1',
   'requests_v1',
   'sales_imports_v1',
+  'invoices_v1',
 ];
+// Large binary-ish stores kept on-device only (NOT synced or backed up through STORE_NAMES): raw invoice
+// files (photos/PDFs) can be multi-MB, so only their metadata (in invoices_v1) syncs. See invoiceStore.js.
+export const LOCAL_ONLY_STORE_NAMES = ['invoice_files_v1'];
 
 export const WORKSPACE_EVENT = 'vendora:workspace';
 export const STORAGE_ERROR_EVENT = 'vendora:storage-error';

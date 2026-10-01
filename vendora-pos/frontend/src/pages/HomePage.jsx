@@ -33,6 +33,7 @@ import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
 import SalesImportView from '../components/salesimport/SalesImportView';
 import ScanIdentifyView from '../components/scan/ScanIdentifyView';
 import CategoryInsightsView from '../components/insights/CategoryInsightsView';
+import InvoiceCaptureView from '../components/invoices/InvoiceCaptureView';
 import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
 import SyncStatus from '../components/account/SyncStatus';
 import WorkerBoard from '../components/worker/WorkerBoard';
@@ -138,6 +139,7 @@ export default function HomePage() {
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
         {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
+        {screen === 'invoices' && <InvoiceCaptureView onBack={() => setScreen(null)} />}
         {screen === 'overview' && (
           <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
         )}
@@ -213,6 +215,7 @@ export default function HomePage() {
             <HubTile icon={ShoppingCart} accent={accent} label="Buy list" desc="Low stock → cash-&-carry list" onClick={() => setScreen('reorder')} />
             <HubTile icon={Truck} accent={accent} label="Orders" desc="Track what you’ve ordered" onClick={() => setScreen('orders')} />
             <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />
+            <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />
             <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />
             <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />
             <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
