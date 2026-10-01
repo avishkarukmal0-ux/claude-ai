@@ -11,6 +11,7 @@ import { useClaims } from '../../lib/claimStore';
 import { extractInvoiceText } from '../../lib/invoiceOcr';
 import { reconcile, discrepanciesToClaimItems } from '../../lib/reconcile';
 import { parseInvoiceText } from '../../lib/parseInvoiceText';
+import { downscaleImage } from '../../lib/image';
 
 // Supplier invoice capture + review (Phase 1). Capture a photo/PDF (or enter manually), REVIEW every field
 // before committing. Matches lines to existing products, flags unmatched, warns on likely duplicates.
@@ -44,7 +45,10 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
     const { isPdf } = check;
     const reader = new FileReader();
     reader.onload = async () => {
-      const dataUrl = String(reader.result || '');
+      const raw = String(reader.result || '');
+      // Shrink photos before we hold them in state/localStorage or send them (Phase 3.9h) — keeps the UI
+      // responsive and avoids the quota risk of a full ~8MB base64. PDFs are left as-is.
+      const dataUrl = isPdf ? raw : ((await downscaleImage(raw, { maxDim: 1600, quality: 0.7 })) || raw);
       setFile({ dataUrl, type: isPdf ? 'pdf' : 'image' });
       setDraft({ supplierId: '', supplierName: '', reference: '', date: Date.now(), lines: [blankInvoiceLine()], source: 'manual' });
       setMode('review');

@@ -3,6 +3,7 @@ import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Penc
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
 import ProductHistory from './ProductHistory';
 import MergeView from './MergeView';
+import { useFormDraft } from '../../lib/formDraft';
 import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
@@ -238,10 +239,13 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
 }
 
 function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) {
-  const [f, setF] = useState({ name: '', barcode: '', category: '', cost: '', price: '', qty: '', supplierId: '', packSize: '', caseBarcode: '' });
+  // Draft-backed so a half-typed product survives a tab switch (Phase 3.9f).
+  const [f, setF, clearDraft] = useFormDraft('add-product', { name: '', barcode: '', category: '', cost: '', price: '', qty: '', supplierId: '', packSize: '', caseBarcode: '' });
   const [showPack, setShowPack] = useState(false);
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
+  const save = () => { clearDraft(); onAdd(f); };
+  const cancel = () => { clearDraft(); onCancel(); };
   return (
     <div className="mb-3 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
       <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
@@ -278,8 +282,8 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
       )}
 
       <div className="flex gap-2">
-        <button type="button" disabled={!canSave} onClick={() => onAdd(f)} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save item</button>
-        <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
+        <button type="button" disabled={!canSave} onClick={save} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save item</button>
+        <button type="button" onClick={cancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
       </div>
     </div>
   );
