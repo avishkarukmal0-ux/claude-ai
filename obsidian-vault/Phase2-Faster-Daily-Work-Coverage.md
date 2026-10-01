@@ -47,12 +47,12 @@ no parallel screens, no mock data presented as complete.
 
 | # | Requirement | Existing evidence | Status | Change | Acceptance |
 |---|---|---|---|---|---|
-| 2.8a | Show when last physically counted | `countedAt` + `stockStatus` shown only in StocktakeView | 🟡→ | show "counted/recorded" + last-counted on the main Inventory row | stock list shows count confidence |
-| 2.8b | Distinguish recorded/estimated vs verified | `stockStatus` counted/calculated; velocity sales/estimated | ✅ | surface on the row (with 2.8a) | — |
-| 2.8c | Quick counts by shelf or category | **MISSING** — StocktakeView only free-text search | 🔲→ | a category (and shelf, where tracked) filter in StocktakeView | count a single category subset (test on the filter) |
+| 2.8a | Show when last physically counted | now shown on the main Inventory row ("counted {date}" / "not counted") via `p.countedAt` (`InventoryView.jsx`), as well as StocktakeView | ✅ (2.8) | — | **done** |
+| 2.8b | Distinguish recorded/estimated vs verified | `stockStatus` counted/calculated; velocity sales/estimated; now visible on the row | ✅ | — | — |
+| 2.8c | Quick counts by shelf or category | now a category chip filter scopes the count list in StocktakeView (`cat` state, `CatChip`); shelf isn't a named product field so category is the scope | ✅ (2.8) | — | **done** — count one category at a time |
 | 2.8d | Explain expected vs counted differences | `buildSummary` variance + £ shrinkage/overage; `reconcileQty` | ✅ | — | — |
-| 2.8e | Require a reason for material adjustments | reason plumbed but **optional**, no threshold | 🟡→ | require a reason when a count variance (or manual edit) is material (by value/units) | a large variance can't apply without a reason (test) |
-| 2.8f | Reuse existing stock-count; no parallel flow | StocktakeView is the one flow; `setCounts` is a dead, unsafe legacy mutator | 🟡→ | remove/neutralise `setCounts` (bypasses `countedAt`/snapshot-safety) | no unsafe count path remains |
+| 2.8e | Require a reason for material adjustments | `isMaterialVariance` (≥£10 at cost OR ≥5 units) flags lines; `buildSummary.materialWithoutReason` gates apply; StocktakeView blocks apply + flags the inputs (`MATERIAL_VALUE`/`MATERIAL_UNITS`) | ✅ (2.8) | — | **done** — `stocktake.test.js`: a big variance can't apply without a reason |
+| 2.8f | Reuse existing stock-count; no parallel flow | StocktakeView is the one flow; the dead `setCounts` now routes through `applyCounts` (snapshot-safe, sets `countedAt`) — the unsafe blind-overwrite path is gone | ✅ (2.8) | — | **done** — `inventory.test.js` setCounts still logs a stock_adjustment |
 | 2.8g | Don't claim accurate live stock when movements missing | `salesConnected:false`, honest `velocity` null, `reconcileQty` | ✅ | — | — |
 
 ---

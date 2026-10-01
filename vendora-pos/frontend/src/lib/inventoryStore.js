@@ -666,25 +666,14 @@ export function useInventory() {
   }, []);
 
   /**
-   * Apply stocktake counts: set exact qty for each id. A count is a CORRECTION, logged as a
-   * STOCK_ADJUSTMENT (never a sale), so velocity stays clean after a stocktake.
+   * Apply stocktake counts by id→target-qty. Thin wrapper over applyCounts (Phase 2.8f): the old blind
+   * overwrite bypassed snapshot-safety and never set countedAt, so it's gone — this routes through the one
+   * safe path (correction logged as STOCK_ADJUSTMENT, marks countedAt). Kept for API/back-compat.
    */
   const setCounts = useCallback((counts) => {
-    const prev = load();
-    const changes = [];
-    const next = prev.map((p) => {
-      if (counts[p.id] == null) return p;
-      const target = Math.max(0, Number(counts[p.id]) || 0);
-      const delta = target - (Number(p.qty) || 0);
-      if (delta !== 0) changes.push({ id: p.id, delta });
-      return { ...p, qty: target, updatedAt: Date.now() };
-    });
-    persist(next);
-    setProducts(next);
-    for (const c of changes) {
-      recordMovement({ productId: c.id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta: c.delta, reason: 'stocktake' });
-    }
-  }, []);
+    const items = Object.keys(counts || {}).map((id) => ({ id, counted: counts[id] }));
+    return applyCounts(items);
+  }, [applyCounts]);
 
   const commit = useCallback((nextProducts) => {
     persist(nextProducts);

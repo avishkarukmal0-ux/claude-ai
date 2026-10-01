@@ -155,6 +155,12 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
                 <Package2 className="h-3 w-3" /> Case of {p.packSize}
               </span>
             )}
+            {/* Stock confidence (Phase 2.8): has this number been physically counted? */}
+            {p.countedAt ? (
+              <span className="text-success">counted {new Date(p.countedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+            ) : (
+              <span className="text-gray-400">not counted</span>
+            )}
           </div>
           {suppliers.length > 0 && (
             <select

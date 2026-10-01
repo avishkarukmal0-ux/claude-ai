@@ -16,8 +16,15 @@ export default function StocktakeView({ onBack }) {
   const { products, applyCounts } = useInventory();
   const { session, history, start, countItem, bumpItem, setReason, cancel, saveSummary } = useStocktake();
   const [query, setQuery] = useState('');
+  const [cat, setCat] = useState('all'); // quick-count scope by category (Phase 2.8c)
   const [scanning, setScanning] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+
+  const categories = useMemo(() => {
+    const set = new Set();
+    for (const p of products) if (p.category) set.add(p.category);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [products]);
 
   const summary = useMemo(
     () => (session ? buildSummary(session, products) : null),
@@ -27,16 +34,18 @@ export default function StocktakeView({ onBack }) {
   const countedIds = session ? Object.keys(session.counts) : [];
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q
-      ? products.filter((p) => p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q))
-      : products;
+    const list = products.filter((p) => {
+      if (cat !== 'all' && (p.category || '') !== cat) return false;        // scope the count to one category
+      if (!q) return true;
+      return p.name.toLowerCase().includes(q) || (p.barcode || '').includes(q);
+    });
     // Uncounted first, then counted — so it's obvious what's left to do.
     return [...list].sort((a, b) => {
       const ac = session?.counts[a.id] != null ? 1 : 0;
       const bc = session?.counts[b.id] != null ? 1 : 0;
       return ac - bc;
     });
-  }, [products, query, session]);
+  }, [products, query, cat, session]);
 
   function onScan(code) {
     setScanning(false);
@@ -48,6 +57,12 @@ export default function StocktakeView({ onBack }) {
 
   function applyAndFinish() {
     if (!summary) return;
+    // A big difference must carry a reason before it's applied (Phase 2.8e) — a fat-finger or a theft
+    // shouldn't change stock with no explanation. Small miscounts aren't gated.
+    if (summary.materialWithoutReason && summary.materialWithoutReason.length) {
+      toast.error(`Add a reason for ${summary.materialWithoutReason.length} big difference${summary.materialWithoutReason.length === 1 ? '' : 's'} before applying.`);
+      return;
+    }
     // Snapshot-safe: apply the count's correction (counted − expectedAt) to CURRENT stock, so a
     // sale/delivery that happened during the count isn't overwritten by a stale total.
     const items = Object.keys(session.counts).map((id) => ({
@@ -149,13 +164,20 @@ export default function StocktakeView({ onBack }) {
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${l.variance < 0 ? 'text-danger' : 'text-success'}`} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{l.name}</span>
-                  <span className="block text-[11px] text-gray-500">Expected {l.expected} · counted {l.counted}</span>
-                  <input
-                    value={session.reasons?.[l.productId] || ''}
-                    onChange={(e) => setReason(l.productId, e.target.value)}
-                    placeholder="Reason (optional) — e.g. damaged, miscount, theft"
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-900 focus:border-primary focus:outline-none"
-                  />
+                  <span className="block text-[11px] text-gray-500">Expected {l.expected} · counted {l.counted}{l.material && <span className="ml-1 font-semibold text-danger">· big difference</span>}</span>
+                  {(() => {
+                    const needsReason = l.material && !String(session.reasons?.[l.productId] || '').trim();
+                    return (
+                      <input
+                        value={session.reasons?.[l.productId] || ''}
+                        onChange={(e) => setReason(l.productId, e.target.value)}
+                        placeholder={l.material ? 'Reason required — e.g. damaged, miscount, theft' : 'Reason (optional) — e.g. damaged, miscount'}
+                        aria-label={`Reason for ${l.name}`}
+                        aria-required={l.material || undefined}
+                        className={`mt-1 w-full rounded-lg border px-2 py-1 text-[11px] text-gray-900 focus:outline-none ${needsReason ? 'border-danger focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
+                      />
+                    );
+                  })()}
                 </span>
                 <span className={`shrink-0 self-start text-sm font-bold tabular-nums ${l.variance < 0 ? 'text-danger' : 'text-success'}`}>
                   {l.variance > 0 ? '+' : ''}{l.variance}
@@ -210,6 +232,16 @@ export default function StocktakeView({ onBack }) {
           className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
+
+      {/* Quick-count scope: count one category at a time (Phase 2.8c). */}
+      {categories.length > 1 && (
+        <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+          <CatChip label="All" active={cat === 'all'} onClick={() => setCat('all')} />
+          {categories.map((c) => (
+            <CatChip key={c} label={c} active={cat === c} onClick={() => setCat(c)} />
+          ))}
+        </div>
+      )}
 
       <ul className="space-y-2">
         {filtered.map((p) => {
@@ -268,6 +300,18 @@ export default function StocktakeView({ onBack }) {
         </button>
       )}
     </div>
+  );
+}
+
+function CatChip({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}
+    >
+      {label}
+    </button>
   );
 }
 

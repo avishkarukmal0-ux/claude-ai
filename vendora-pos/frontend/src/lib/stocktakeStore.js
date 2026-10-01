@@ -24,6 +24,16 @@ function newId(prefix = 's') {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// A count difference is "material" (needs a reason before it's applied, Phase 2.8e) when it moves real
+// money or a real number of units — so a fat-finger or a theft isn't applied with no explanation, while a
+// 1-unit miscount isn't nagged. Either threshold trips it.
+export const MATERIAL_VALUE = 10;  // £ at cost
+export const MATERIAL_UNITS = 5;   // units
+export function isMaterialVariance(variance, cost) {
+  const v = Number(variance) || 0;
+  return Math.abs(v) >= MATERIAL_UNITS || Math.abs(v * (Number(cost) || 0)) >= MATERIAL_VALUE;
+}
+
 /**
  * Build the count summary: expected (current stock) vs counted, per line, plus the
  * headline shrinkage/overage figures. Call this BEFORE applying counts to stock.
@@ -43,9 +53,12 @@ export function buildSummary(session, products) {
     const counted = Number(countedRaw) || 0;
     const variance = counted - expected;          // negative = missing
     const cost = Number(p.cost) || 0;
-    lines.push({ productId, name: p.name, barcode: p.barcode, expected, counted, variance, value: variance * cost, reason: reasons[productId] || '' });
+    const reason = reasons[productId] || '';
+    lines.push({ productId, name: p.name, barcode: p.barcode, expected, counted, variance, value: variance * cost, reason, material: isMaterialVariance(variance, cost) });
   }
   const discrepancies = lines.filter((l) => l.variance !== 0);
+  // Material discrepancies that still have no reason — the apply step must block on these (Phase 2.8e).
+  const materialWithoutReason = discrepancies.filter((l) => l.material && !String(l.reason).trim()).map((l) => l.productId);
   const shrinkageValue = lines.filter((l) => l.variance < 0).reduce((n, l) => n - l.value, 0); // positive £ lost
   const shrinkageUnits = lines.filter((l) => l.variance < 0).reduce((n, l) => n - l.variance, 0);
   const overageValue = lines.filter((l) => l.variance > 0).reduce((n, l) => n + l.value, 0);
@@ -57,6 +70,7 @@ export function buildSummary(session, products) {
     shrinkageValue,
     overageValue,
     netValue,
+    materialWithoutReason,
     discrepancies: discrepancies.sort((a, b) => a.value - b.value), // biggest loss first
   };
 }
