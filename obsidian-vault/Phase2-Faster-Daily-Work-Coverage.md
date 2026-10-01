@@ -24,11 +24,11 @@ no parallel screens, no mock data presented as complete.
 
 | # | Requirement | Existing evidence | Status | Change | Acceptance |
 |---|---|---|---|---|---|
-| 2.6a | One useful action without a full catalogue | guest workspace usable instantly (`NichePicker`→`/home`); waste quick-log is zero-catalogue but not surfaced first-run | 🟡→ | a first-run "quick win" card (try a delivery / expiry check / load demo) for an empty shop | empty shop sees a guided first action |
+| 2.6a | One useful action without a full catalogue | new `FirstRunCard` on Today for an empty shop: receive a delivery / record a waste-expiry check / explore sample data — all doable with no catalogue | ✅ (2.6) | — | **done** — card hides once stock exists or in demo |
 | 2.6b | Reuse guest/account workflow | `LOCAL_WORKSPACE` guest + explicit `migrateGuestIntoShop` | ✅ | — | — |
-| 2.6c | Demo data clearly separated from real | **MISSING** — no demo seed; `ImportView` "Try sample" writes unflagged into real guest data | 🔲→ | a dedicated `demo` workspace loaded/cleared on demand, visibly labelled, never mixed with real data | load demo → isolated; clear demo → gone; real data untouched (test) |
-| 2.6d | Contextual PWA install guidance | **MISSING** — no `beforeinstallprompt`/A2HS UI (manifest fine) | 🔲→ | capture `beforeinstallprompt` + an Install card; iOS Safari A2HS instructions | install prompt offered where supported; iOS gets instructions |
-| 2.6e | Explain camera & notification permissions | notifications explained before prompt ✅; camera prompts with no primer | 🟡→ | a one-line camera primer before `getUserMedia` | scanner explains why before asking |
+| 2.6c | Demo data clearly separated from real | new `demo.js`: `loadDemo`/`exitDemo` seed + purge a dedicated `demo` workspace (never mixed); an amber "Demo data" banner + Exit in `HomePage` | ✅ (2.6) | — | **done** — `demo.test.js`: demo isolated; exit purges; real data untouched |
+| 2.6d | Contextual PWA install guidance | new `install.js` captures `beforeinstallprompt`; `InstallCard` offers a real Install (Android/desktop) or iOS Safari A2HS steps; dismissible, hidden when standalone (More→Settings) | ✅ (2.6) | — | **done** — `demo.test.js` install defaults; manifest already installable |
+| 2.6e | Explain camera & notification permissions | notifications explained before prompt ✅; now a first-use camera primer in `BarcodeScanner` ("only reads barcodes — never records/uploads") before `getUserMedia` | ✅ (2.6) | — | **done** — primer gates the camera request on first use |
 | 2.6f | Preserve progress through interruptions + account creation | shop type persisted instantly; local-first durability; migration on sign-up | ✅ | — | — |
 
 ## 2.7 Product & pack matching
@@ -68,6 +68,15 @@ no parallel screens, no mock data presented as complete.
   isolated in a `demo` workspace (load/clear). Any notable flag added here will be listed in [[Deployment-Config]].
 
 ## Phase gate status
-- ⏳ **In progress.** Delivered as reviewable commits per area (2.5 → 2.8 → 2.7 → 2.6), each with tests; this
-  checklist updated as each lands.
+- ✅ **Phase 2 complete.** Delivered as reviewable commits per area, each with tests + checklist + Work-Log:
+  - **2.5 daily actions** (`d783ee7`) — unfinished-delivery signal added to the action list.
+  - **2.8 stock confidence** (`48c0de4`) — last-counted on the row, category quick-count scope, reason
+    required for material adjustments, unsafe `setCounts` routed through `applyCounts`.
+  - **2.7 product/pack matching** (`57bab8e`) — multiple barcodes, supplier aliases, duplicate detect +
+    merge with full history ref-remap.
+  - **2.6 onboarding** (this commit) — first-run quick-win card, isolated demo workspace, PWA install
+    guidance, camera primer.
+- **Verification:** FE **259/259**; build clean. No backend changes in Phase 2.
+- **Deployment** left to the operator (mandate). No new backend flags; demo data is user-initiated and
+  isolated in its own workspace (purged on exit).
 </content>

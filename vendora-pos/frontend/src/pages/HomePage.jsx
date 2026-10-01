@@ -6,13 +6,16 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog,
+  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
 import { getQuickToolsForFamily } from '../config/quickTools';
 import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
+import FirstRunCard from '../components/home/FirstRunCard';
+import InstallCard from '../components/account/InstallCard';
+import { isDemoActive, exitDemo } from '../lib/demo';
 import InventoryView from '../components/inventory/InventoryView';
 import DeliveryReceivingView from '../components/delivery/DeliveryReceivingView';
 import WasteView from '../components/waste/WasteView';
@@ -66,6 +69,13 @@ export default function HomePage() {
   const isStaff = role === 'staff';
   const syncState = useSyncStatus();
   const conflicts = syncState.conflicts || 0; // edits replaced by another device, kept for recovery
+  const [, bumpWs] = useState(0); // re-render on workspace switch (e.g. entering/leaving demo)
+  useEffect(() => {
+    const h = () => bumpWs((n) => n + 1);
+    window.addEventListener('vendora:workspace', h);
+    return () => window.removeEventListener('vendora:workspace', h);
+  }, []);
+  const demo = isDemoActive();
   const [tab, setTab] = useState('today');
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
@@ -135,6 +145,12 @@ export default function HomePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
+      {demo && (
+        <div className="flex items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-xs font-medium text-amber-900" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.5rem)' }}>
+          <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Demo data — a pretend shop. Your real data is safe.</span>
+          <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="shrink-0 font-semibold underline">Exit demo</button>
+        </div>
+      )}
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-white px-4 py-3 shadow-sm" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary">
           <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">
@@ -194,6 +210,7 @@ export default function HomePage() {
         {/* ── TODAY ── */}
         {!screen && tab === 'today' && (
           <>
+            <FirstRunCard onGo={go} />
             <TodayActions onGo={go} />
             <TodayAtShop familyId={saved.familyId} />
 
@@ -300,6 +317,7 @@ export default function HomePage() {
               )}
             </MoreGroup>
             <MoreGroup title="Settings">
+              <InstallCard />
               <Row icon={Bell} label="Notifications" sub="Daily heads-up: expiry, claims, tasks" onClick={() => setScreen('notifications')} />
               <RowLink to="/" icon={Settings} label="Change shop type" />
               {ACCOUNTS_ENABLED && <RowLink to="/account" icon={LogIn} label="Your shop account" />}

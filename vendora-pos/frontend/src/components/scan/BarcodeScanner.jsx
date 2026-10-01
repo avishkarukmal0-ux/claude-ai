@@ -32,9 +32,13 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
   const [error, setError] = useState(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState(false);
+  // Explain the camera BEFORE the browser's permission prompt (Phase 2.6e). First-ever use shows a short
+  // primer; after the owner taps "Turn on camera" we remember it and go straight to the camera next time.
+  const [primed, setPrimed] = useState(() => { try { return localStorage.getItem('vendora:camera-primed') === '1'; } catch { return false; } });
 
   useEffect(() => {
     if (!supported) { setError('unsupported'); return undefined; }
+    if (!primed) return undefined; // wait for the primer; don't request the camera yet
     let cancelled = false;
     let detector;
     try {
@@ -101,7 +105,12 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
     }
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [continuous]);
+  }, [continuous, primed]);
+
+  function allowCamera() {
+    try { localStorage.setItem('vendora:camera-primed', '1'); } catch { /* ignore */ }
+    setPrimed(true);
+  }
 
   async function toggleTorch() {
     try {
@@ -111,6 +120,21 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
       await track.applyConstraints({ advanced: [{ torch: next }] });
       setTorchOn(next);
     } catch { /* torch toggle failed */ }
+  }
+
+  // First-use primer: explain the camera before the browser asks for permission (Phase 2.6e).
+  if (supported && !primed && !error) {
+    return (
+      <div className="rounded-2xl bg-gray-50 p-5 text-center">
+        <Camera className="mx-auto mb-2 h-8 w-8 text-primary" />
+        <p className="text-sm font-semibold text-gray-900">Use your camera to scan barcodes?</p>
+        <p className="mx-auto mt-1 max-w-xs text-xs text-gray-500">Vendora only reads barcodes on your device — it never records or uploads video. You can also type codes by hand.</p>
+        <div className="mt-3 flex justify-center gap-2">
+          <button type="button" onClick={allowCamera} className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white active:scale-95">Turn on camera</button>
+          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600">Not now</button>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
