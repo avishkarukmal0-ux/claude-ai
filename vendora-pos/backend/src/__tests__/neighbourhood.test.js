@@ -122,6 +122,23 @@ describe('network layer (stubbed transport)', () => {
     expect(bd.rows[0]).toMatchObject({ label: 'Aged 25 to 64', value: 600, pct: 60 });
   });
 
+  test('parseBreakdown keeps only top-level categories for a HIERARCHICAL table (TS066-shaped)', () => {
+    // FIXTURE: nested economic-activity dimension — top level + overlapping children (colon-separated).
+    const obs = [
+      { geography: { description: 'E01' }, eastat: { description: 'Total' }, obs_value: { value: 1161 } },
+      { geography: { description: 'E01' }, eastat: { description: 'Economically active (excluding full-time students)' }, obs_value: { value: 718 } },
+      { geography: { description: 'E01' }, eastat: { description: 'Economically active (excluding full-time students):In employment' }, obs_value: { value: 671 } },
+      { geography: { description: 'E01' }, eastat: { description: 'Economically active (excluding full-time students):In employment:Employee' }, obs_value: { value: 507 } },
+      { geography: { description: 'E01' }, eastat: { description: 'Economically inactive' }, obs_value: { value: 404 } },
+      { geography: { description: 'E01' }, eastat: { description: 'Economically inactive:Retired' }, obs_value: { value: 157 } },
+    ];
+    const bd = svc.parseBreakdown(obs);
+    expect(bd.total).toBe(1161);
+    // Only the two depth-0 (no colon) categories remain — nested children dropped, no double-count.
+    expect(bd.rows.map((r) => r.label)).toEqual(['Economically active (excluding full-time students)', 'Economically inactive']);
+    expect(bd.rows.every((r) => r.pct <= 100)).toBe(true);
+  });
+
   test('fetchFigureNomis builds a breakdown figure with rows + provenance', async () => {
     svc.__setTransport(async (url) => {
       expect(url).toMatch(/NM_age_1\.data\.json\?geography=E01000036/);

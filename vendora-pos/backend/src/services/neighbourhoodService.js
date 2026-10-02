@@ -49,16 +49,22 @@ function parseBreakdown(obs) {
   let dim = null; let best = 1;
   for (const [k, set] of Object.entries(distinct)) { if (set.size > best) { best = set.size; dim = k; } }
   if (!dim) return null;
-  const cats = []; let total = null;
+  let totalRow = null; const cats = [];
   for (const o of rows) {
     const label = o[dim] && o[dim].description;
     const value = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value));
     if (!label || !Number.isFinite(value)) continue;
-    if (/^total\b/i.test(label)) { total = value; continue; }
+    if (/^total\b/i.test(label)) { totalRow = value; continue; }
     cats.push({ label, value });
   }
-  if (total == null) total = cats.reduce((s, r) => s + r.value, 0);
-  const out = cats
+  // Some Census tables (e.g. TS066 economic activity) are HIERARCHICAL — the dimension lists a top-level
+  // category and its nested children ("…:In employment:Employee"), which overlap. Keep only the top level
+  // (minimum colon-depth) so the rows are mutually exclusive and the %s sum to ~100.
+  const depth = (l) => (l.match(/:/g) || []).length;
+  let top = cats;
+  if (cats.length) { const min = Math.min(...cats.map((c) => depth(c.label))); top = cats.filter((c) => depth(c.label) === min); }
+  const total = totalRow != null ? totalRow : top.reduce((s, r) => s + r.value, 0);
+  const out = top
     .map((r) => ({ label: r.label, value: r.value, pct: total > 0 ? Math.round((r.value / total) * 1000) / 10 : null }))
     .sort((a, b) => b.value - a.value);
   return { total, rows: out };

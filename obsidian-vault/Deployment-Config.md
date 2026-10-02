@@ -460,3 +460,31 @@ node scripts/neighbourhood-live-check.js "RM10 8AA"
 ```
 Breakdowns are fetched via Nomis in this build (ONS path stays population/count-only). ONS breakdown parsing
 is a documented follow-up.
+
+### Step 2 — live-verified dataset ids (2026-10-02, E01000036 / RM10 8AA)
+All fetched 200 from Nomis; figures sane and de-duplicated:
+| Figure | Table | Dataset id | Live result (E01000036) |
+|---|---|---|---|
+| Households | TS041 | **NM_2059_1** | 471 households |
+| Age (5-yr bands) | TS007A | **NM_2020_1** | total 1,471 (≈ pop 1,470) |
+| Economic activity | TS066 | **NM_2083_1** | total 1,161 (top-level mix only) |
+| Household deprivation | TS011 | **NM_2031_1** | total 474 households |
+| Qualifications | TS067 | **NM_2084_1** | total 1,158 |
+
+Economic activity (TS066) is HIERARCHICAL — parseBreakdown keeps only the top-level (min colon-depth) categories
+so nested children aren't double-listed. Age differs from population by 1 (ONS per-table disclosure control) —
+expected; figures are labelled estimates.
+
+**Render env to go live:**
+```
+NEIGHBOURHOOD_ENABLED=true
+NEIGHBOURHOOD_SOURCE=nomis
+NEIGHBOURHOOD_POP_DATASET=NM_2021_1
+NEIGHBOURHOOD_DS_HOUSEHOLDS=NM_2059_1
+NEIGHBOURHOOD_DS_AGE=NM_2020_1
+NEIGHBOURHOOD_DS_ECON=NM_2083_1
+NEIGHBOURHOOD_DS_DEPRIVATION=NM_2031_1
+NEIGHBOURHOOD_DS_QUALS=NM_2084_1
+ONS_USER_AGENT=vendora/1.0.0 (ops@yourdomain +https://claude-ai-indol.vercel.app)
+```
+Frontend (Vercel): `VITE_NEIGHBOURHOOD_ENABLED=true`.

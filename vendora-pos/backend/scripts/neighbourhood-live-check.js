@@ -102,10 +102,13 @@ async function fetchNomisFigure(area, fig) {
   for (const o of res.body.obs) for (const [k, v] of Object.entries(o)) { if (k !== 'obs_value' && v && typeof v === 'object' && typeof v.description === 'string') (distinct[k] = distinct[k] || new Set()).add(v.description); }
   let dim = null; let best = 1; for (const [k, s] of Object.entries(distinct)) if (s.size > best) { best = s.size; dim = k; }
   if (!dim) return null;
-  const cats = []; let total = null;
-  for (const o of res.body.obs) { const label = o[dim] && o[dim].description; const v = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value)); if (!label || !Number.isFinite(v)) continue; if (/^total\b/i.test(label)) { total = v; continue; } cats.push({ label, value: v }); }
-  if (total == null) total = cats.reduce((s, r) => s + r.value, 0);
-  const rows = cats.map((r) => ({ ...r, pct: total > 0 ? Math.round((r.value / total) * 1000) / 10 : null })).sort((a, b) => b.value - a.value);
+  const cats = []; let totalRow = null;
+  for (const o of res.body.obs) { const label = o[dim] && o[dim].description; const v = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value)); if (!label || !Number.isFinite(v)) continue; if (/^total\b/i.test(label)) { totalRow = v; continue; } cats.push({ label, value: v }); }
+  // Keep only top-level categories (min colon-depth) for hierarchical tables like TS066.
+  const depth = (l) => (l.match(/:/g) || []).length;
+  let top = cats; if (cats.length) { const min = Math.min(...cats.map((c) => depth(c.label))); top = cats.filter((c) => depth(c.label) === min); }
+  const total = totalRow != null ? totalRow : top.reduce((s, r) => s + r.value, 0);
+  const rows = top.map((r) => ({ ...r, pct: total > 0 ? Math.round((r.value / total) * 1000) / 10 : null })).sort((a, b) => b.value - a.value);
   return { value: total, rows };
 }
 
