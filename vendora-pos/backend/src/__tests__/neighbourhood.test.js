@@ -7,6 +7,7 @@
 process.env.NEIGHBOURHOOD_ENABLED = 'true';
 process.env.NEIGHBOURHOOD_SOURCE = 'nomis';
 process.env.NEIGHBOURHOOD_POP_DATASET = 'NM_test_1';
+process.env.NEIGHBOURHOOD_DS_AGE = 'NM_age_1'; // Step 2 breakdown figure
 
 const svc = require('../services/neighbourhoodService');
 
@@ -105,6 +106,46 @@ describe('network layer (stubbed transport)', () => {
     expect(svc.pickTotalCount([{ x: { description: 'Total' }, obs_value: { value: 1470 } }, { obs_value: { value: 1450 } }])).toBe(1470);
     expect(svc.pickTotalCount([{ obs_value: { value: 30 } }, { obs_value: { value: 1450 } }])).toBe(1450); // max fallback
     expect(svc.pickTotalCount([])).toBe(null);
+  });
+
+  test('parseBreakdown groups the varying dimension, drops Total, computes % biggest-first', () => {
+    // FIXTURE: an age-breakdown shaped response (geography constant, the age dim varies).
+    const obs = [
+      { geography: { description: 'E01000036' }, c2021_age_6: { description: 'Total' }, obs_value: { value: 1000 } },
+      { geography: { description: 'E01000036' }, c2021_age_6: { description: 'Aged 16 to 24' }, obs_value: { value: 200 } },
+      { geography: { description: 'E01000036' }, c2021_age_6: { description: 'Aged 25 to 64' }, obs_value: { value: 600 } },
+      { geography: { description: 'E01000036' }, c2021_age_6: { description: 'Aged 65+' }, obs_value: { value: 200 } },
+    ];
+    const bd = svc.parseBreakdown(obs);
+    expect(bd.total).toBe(1000);
+    expect(bd.rows.map((r) => r.label)).toEqual(['Aged 25 to 64', 'Aged 16 to 24', 'Aged 65+']); // Total dropped, sorted desc
+    expect(bd.rows[0]).toMatchObject({ label: 'Aged 25 to 64', value: 600, pct: 60 });
+  });
+
+  test('fetchFigureNomis builds a breakdown figure with rows + provenance', async () => {
+    svc.__setTransport(async (url) => {
+      expect(url).toMatch(/NM_age_1\.data\.json\?geography=E01000036/);
+      return { status: 200, headers: {}, body: { obs: [
+        { geography: { description: 'E01000036' }, age: { description: 'Total' }, obs_value: { value: 100 } },
+        { geography: { description: 'E01000036' }, age: { description: 'Under 16' }, obs_value: { value: 40 } },
+        { geography: { description: 'E01000036' }, age: { description: '16 and over' }, obs_value: { value: 60 } },
+      ] } };
+    });
+    const ageDef = svc.FIGURE_DEFS.find((d) => d.key === 'age');
+    const fig = await svc.fetchFigureNomis({ lsoa21: 'E01000036' }, ageDef);
+    expect(fig.kind).toBe('breakdown');
+    expect(fig.value).toBe(100);
+    expect(fig.rows).toHaveLength(2);
+    expect(fig.rows[0]).toMatchObject({ label: '16 and over', value: 60, pct: 60 });
+    expect(fig.source).toBe('Nomis');
+    expect(fig.datasetId).toBe('NM_age_1');
+  });
+
+  test('configuredFigureDefs only includes figures whose dataset id is set', () => {
+    const keys = svc.configuredFigureDefs().map((d) => d.key);
+    expect(keys).toContain('population'); // NM_test_1
+    expect(keys).toContain('age');        // NM_age_1
+    expect(keys).not.toContain('qualifications'); // no id set → skipped (never fabricated)
   });
 
   test('no configured dataset → returns null (never a guessed number)', async () => {

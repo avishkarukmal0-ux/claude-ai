@@ -158,6 +158,20 @@ module.exports = {
     userAgent: process.env.ONS_USER_AGENT || 'vendora-pos/1.0.0 (neighbourhood data; +https://claude-ai-indol.vercel.app)',
     nomisUid: process.env.NOMIS_UID || null,
     populationDataset: process.env.NEIGHBOURHOOD_POP_DATASET || null,
+    // Step 2 figures — each dataset id is configurable and VERIFIED before use (we never hardcode a guess).
+    // Confirm each NM_ id with scripts/neighbourhood-live-check.js, then set these. Blank = figure skipped.
+    //   households     TS041  NEIGHBOURHOOD_DS_HOUSEHOLDS
+    //   age            TS007A NEIGHBOURHOOD_DS_AGE
+    //   economic       TS066  NEIGHBOURHOOD_DS_ECON
+    //   deprivation    TS011  NEIGHBOURHOOD_DS_DEPRIVATION
+    //   qualifications TS067  NEIGHBOURHOOD_DS_QUALS
+    figuresConfig: {
+      households: process.env.NEIGHBOURHOOD_DS_HOUSEHOLDS || null,
+      age: process.env.NEIGHBOURHOOD_DS_AGE || null,
+      economicActivity: process.env.NEIGHBOURHOOD_DS_ECON || null,
+      deprivation: process.env.NEIGHBOURHOOD_DS_DEPRIVATION || null,
+      qualifications: process.env.NEIGHBOURHOOD_DS_QUALS || null,
+    },
     ttlHours: parseInt(process.env.NEIGHBOURHOOD_TTL_HOURS, 10) || 168,
     timeoutMs: parseInt(process.env.NEIGHBOURHOOD_TIMEOUT_MS, 10) || 55000, // Render cold start can be ~50s
     maxConcurrent: parseInt(process.env.NEIGHBOURHOOD_MAX_CONCURRENT, 10) || 2,

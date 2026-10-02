@@ -14,8 +14,11 @@ const figureSchema = new mongoose.Schema(
   {
     key: { type: String, required: true },        // e.g. 'population'
     label: { type: String, default: null },
-    value: { type: Number, required: true },
+    kind: { type: String, default: 'count' },     // 'count' (single total) | 'breakdown' (categories)
+    value: { type: Number, required: true },      // the total (residents / households / sum of the breakdown)
     unit: { type: String, default: null },
+    // For a breakdown figure: the category rows (Total excluded), biggest first, with a share %.
+    rows: { type: [{ _id: false, label: String, value: Number, pct: Number }], default: undefined },
     geography: { type: String, default: null },   // the geography the figure is for, e.g. 'lsoa21'
     geographyCode: { type: String, default: null },
     source: { type: String, required: true },     // 'ONS' | 'Nomis'

@@ -26,6 +26,14 @@ const SOURCE = (process.env.NEIGHBOURHOOD_SOURCE || 'ons').toLowerCase();
 const UA = process.env.ONS_USER_AGENT || 'vendora/1.0.0 (neighbourhood live-check; set ONS_USER_AGENT)';
 const DATASET = process.env.NEIGHBOURHOOD_POP_DATASET || null;
 const NOMIS_UID = process.env.NOMIS_UID || null;
+// Step 2 figures (optional) — set the ones you want to verify.
+const STEP2 = [
+  { key: 'households', label: 'Households', kind: 'count', dataset: process.env.NEIGHBOURHOOD_DS_HOUSEHOLDS || null },
+  { key: 'age', label: 'Age', kind: 'breakdown', dataset: process.env.NEIGHBOURHOOD_DS_AGE || null },
+  { key: 'economicActivity', label: 'Economic activity', kind: 'breakdown', dataset: process.env.NEIGHBOURHOOD_DS_ECON || null },
+  { key: 'deprivation', label: 'Household deprivation', kind: 'breakdown', dataset: process.env.NEIGHBOURHOOD_DS_DEPRIVATION || null },
+  { key: 'qualifications', label: 'Qualifications', kind: 'breakdown', dataset: process.env.NEIGHBOURHOOD_DS_QUALS || null },
+].filter((f) => f.dataset);
 const POSTCODES_BASE = (process.env.POSTCODES_IO_BASE || 'https://api.postcodes.io').replace(/\/+$/, '');
 const ONS_BASE = (process.env.ONS_API_BASE || 'https://api.beta.ons.gov.uk/v1').replace(/\/+$/, '');
 const NOMIS_BASE = (process.env.NOMIS_API_BASE || 'https://www.nomisweb.co.uk/api/v01').replace(/\/+$/, '');
@@ -76,6 +84,29 @@ async function fetchNomis(area) {
   }
   const value = total != null ? total : max;
   return value == null ? null : { value, source: 'Nomis', datasetId: DATASET, edition: null, version: null, referenceDate: 'Census 2021', lastUpdated: null };
+}
+
+// Fetch a Step 2 figure from Nomis (count or breakdown) for the live check.
+async function fetchNomisFigure(area, fig) {
+  const uid = NOMIS_UID ? `&uid=${encodeURIComponent(NOMIS_UID)}` : '';
+  const res = await get(`${NOMIS_BASE}/dataset/${fig.dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`);
+  if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
+  if (fig.kind === 'count') {
+    let total = null; let max = null;
+    for (const o of res.body.obs) { const v = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value)); if (!Number.isFinite(v)) continue; max = max == null ? v : Math.max(max, v); if (Object.values(o).some((d) => d && typeof d === 'object' && /^total\b/i.test(d.description || ''))) total = v; }
+    const value = total != null ? total : max;
+    return value == null ? null : { value };
+  }
+  // breakdown: find the varying dimension, drop Total, compute %
+  const distinct = {};
+  for (const o of res.body.obs) for (const [k, v] of Object.entries(o)) { if (k !== 'obs_value' && v && typeof v === 'object' && typeof v.description === 'string') (distinct[k] = distinct[k] || new Set()).add(v.description); }
+  let dim = null; let best = 1; for (const [k, s] of Object.entries(distinct)) if (s.size > best) { best = s.size; dim = k; }
+  if (!dim) return null;
+  const cats = []; let total = null;
+  for (const o of res.body.obs) { const label = o[dim] && o[dim].description; const v = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value)); if (!label || !Number.isFinite(v)) continue; if (/^total\b/i.test(label)) { total = v; continue; } cats.push({ label, value: v }); }
+  if (total == null) total = cats.reduce((s, r) => s + r.value, 0);
+  const rows = cats.map((r) => ({ ...r, pct: total > 0 ? Math.round((r.value / total) * 1000) / 10 : null })).sort((a, b) => b.value - a.value);
+  return { value: total, rows };
 }
 
 async function fetchOns(area) {
@@ -131,6 +162,24 @@ async function main() {
     console.log(`    last_updated : ${fig.lastUpdated || '(not provided by source)'}`);
     console.log(`    fetchedAt    : ${fetchedAt.toISOString()}`);
     console.log(`    attribution  : ${OGL}`);
+
+    if (SOURCE === 'nomis' && STEP2.length) {
+      console.log(`\n[3] Step 2 figures (${STEP2.length})`);
+      for (const fig of STEP2) {
+        try {
+          const out = await fetchNomisFigure(area, fig);
+          if (!out) { console.log(`    ${fig.label}: ✗ no usable data (check id ${fig.dataset})`); continue; }
+          if (fig.kind === 'count') { console.log(`    ${fig.label}: ${Number(out.value).toLocaleString('en-GB')}  (${fig.dataset})`); }
+          else {
+            console.log(`    ${fig.label} (${fig.dataset}) — total ${Number(out.value).toLocaleString('en-GB')}:`);
+            for (const r of out.rows.slice(0, 6)) console.log(`        ${String(r.value).padStart(8)}  ${r.pct != null ? `${r.pct}%`.padStart(6) : '      '}  ${r.label}`);
+          }
+        } catch (e) { console.log(`    ${fig.label}: ✗ ${e.message}`); }
+      }
+    } else if (SOURCE !== 'nomis' && STEP2.length) {
+      console.log('\n[3] Step 2 breakdowns are fetched via Nomis in this build — set NEIGHBOURHOOD_SOURCE=nomis to verify them.');
+    }
+
     console.log('\n✓ End-to-end live check OK — this is what the deployed route will return + cache.\n');
   } catch (err) {
     console.error(`\n✗ Live check failed: ${err.message}`);

@@ -434,3 +434,29 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer <PWA_TOKEN>" } `
 - **Nomis dataset (population)**: **`NM_2021_1`** = Census 2021 **TS001** "Number of usual residents in households and communal establishments". Set `NEIGHBOURHOOD_SOURCE=nomis` + `NEIGHBOURHOOD_POP_DATASET=NM_2021_1`.
 - **Count-table handling**: TS001 returns a "Total" row PLUS components (Total = Σ components), so the fetch takes the **Total** row (else the max) — it never sums (fixed after the first live run showed a doubled 2,940 for E01000036; the true total is the Total row).
 - **Figure confirmed**: E01000036 → **1,470** usual residents (Nomis NM_2021_1 / TS001). Raw obs rows 1470/1470/0 (Total / household / communal) confirm the fix takes the Total row, not the sum. Step 1 end-to-end live-verified from the owner's PC on 2026-10-02.
+
+### Step 2 — more area figures (2026-10-02; code shipped, dataset ids owner-verified)
+Added households + age mix + economic activity + household deprivation + qualifications, each via the same
+route/cache/offline path, with provenance + freshness. Breakdown figures group the varying Census dimension,
+drop the "Total" row, and show each category's share; count figures use the Total-row rule. Dataset ids are
+configurable and only fetched when set (never fabricated):
+
+| Figure | Table | Env var |
+|---|---|---|
+| Households | TS041 | `NEIGHBOURHOOD_DS_HOUSEHOLDS` |
+| Age (bands) | TS007A | `NEIGHBOURHOOD_DS_AGE` |
+| Economic activity | TS066 | `NEIGHBOURHOOD_DS_ECON` |
+| Household deprivation | TS011 | `NEIGHBOURHOOD_DS_DEPRIVATION` |
+| Qualifications | TS067 | `NEIGHBOURHOOD_DS_QUALS` |
+
+Confirm each `NM_` id with the live-check (it now prints every configured figure), e.g.:
+```powershell
+$env:NEIGHBOURHOOD_SOURCE="nomis"; $env:NEIGHBOURHOOD_POP_DATASET="NM_2021_1"
+$cat = Invoke-RestMethod "https://www.nomisweb.co.uk/api/v01/dataset/def.sdmx.json"
+$cat.structure.keyfamilies.keyfamily | ? { $_.name.value -match "TS041|TS007A|TS066|TS011|TS067" } | select id,@{n='name';e={$_.name.value}} | ft -AutoSize
+# set the ids you find:
+$env:NEIGHBOURHOOD_DS_HOUSEHOLDS="NM_...."; $env:NEIGHBOURHOOD_DS_AGE="NM_...."   # etc.
+node scripts/neighbourhood-live-check.js "RM10 8AA"
+```
+Breakdowns are fetched via Nomis in this build (ONS path stays population/count-only). ONS breakdown parsing
+is a documented follow-up.

@@ -33,6 +33,50 @@ function pickTotalCount(obs) {
   }
   return total != null ? total : max;
 }
+
+// Parse a BREAKDOWN table (e.g. age, economic activity) into category rows. The breakdown dimension is the one
+// whose description VARIES across the obs rows (geography/measures/time are constant for one LSOA). We drop the
+// "Total" row, compute each category's share of the total, and sort biggest-first. Pure + testable.
+function parseBreakdown(obs) {
+  const rows = Array.isArray(obs) ? obs : [];
+  const distinct = {};
+  for (const o of rows) {
+    for (const [k, v] of Object.entries(o)) {
+      if (k === 'obs_value') continue;
+      if (v && typeof v === 'object' && typeof v.description === 'string') { (distinct[k] = distinct[k] || new Set()).add(v.description); }
+    }
+  }
+  let dim = null; let best = 1;
+  for (const [k, set] of Object.entries(distinct)) { if (set.size > best) { best = set.size; dim = k; } }
+  if (!dim) return null;
+  const cats = []; let total = null;
+  for (const o of rows) {
+    const label = o[dim] && o[dim].description;
+    const value = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value));
+    if (!label || !Number.isFinite(value)) continue;
+    if (/^total\b/i.test(label)) { total = value; continue; }
+    cats.push({ label, value });
+  }
+  if (total == null) total = cats.reduce((s, r) => s + r.value, 0);
+  const out = cats
+    .map((r) => ({ label: r.label, value: r.value, pct: total > 0 ? Math.round((r.value / total) * 1000) / 10 : null }))
+    .sort((a, b) => b.value - a.value);
+  return { total, rows: out };
+}
+
+// The figures we offer, each mapped to its Census 2021 table. Dataset ids are read from config (never
+// hardcoded) and a figure is only fetched when its id is set — so nothing is ever fabricated.
+const FIGURE_DEFS = [
+  { key: 'population', label: 'Usual residents', table: 'TS001', kind: 'count', unit: 'people', cfg: 'population' },
+  { key: 'households', label: 'Households', table: 'TS041', kind: 'count', unit: 'households', cfg: 'households' },
+  { key: 'age', label: 'Age', table: 'TS007A', kind: 'breakdown', cfg: 'age' },
+  { key: 'economicActivity', label: 'Economic activity', table: 'TS066', kind: 'breakdown', cfg: 'economicActivity' },
+  { key: 'deprivation', label: 'Household deprivation', table: 'TS011', kind: 'breakdown', cfg: 'deprivation' },
+  { key: 'qualifications', label: 'Qualifications', table: 'TS067', kind: 'breakdown', cfg: 'qualifications' },
+];
+function datasetFor(def) { return def.cfg === 'population' ? C().populationDataset : (C().figuresConfig[def.cfg] || null); }
+function configuredFigureDefs() { return FIGURE_DEFS.filter((d) => !!datasetFor(d)); }
+
 function isValidPostcode(pc) { return /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/.test(normalisePostcode(pc)); }
 
 /** Parse a Retry-After header (delta-seconds or HTTP-date) into a delay in ms (clamped). */
@@ -74,7 +118,8 @@ function shapeResponse(record, { online = true, now = Date.now() } = {}) {
     postcode: record.postcode,
     area: { lsoa21: record.lsoa21, msoa21: record.msoa21, ward: record.ward, district: record.district, country: record.country },
     figures: (record.figures || []).map((f) => ({
-      key: f.key, label: f.label, value: f.value, unit: f.unit,
+      key: f.key, label: f.label, kind: f.kind || 'count', value: f.value, unit: f.unit,
+      rows: f.rows || undefined,
       geography: f.geography, geographyCode: f.geographyCode,
       source: f.source, datasetId: f.datasetId, edition: f.edition, version: f.version,
       referenceDate: f.referenceDate, lastUpdated: f.lastUpdated, fetchedAt: f.fetchedAt,
@@ -150,58 +195,59 @@ async function resolvePostcode(postcode) {
   };
 }
 
-/** Fetch ONE real population figure for an LSOA from Nomis. Requires a configured dataset id. */
-async function fetchPopulationNomis(area) {
-  const dataset = C().populationDataset;
+function baseFigure(def, area, dataset, extra) {
+  return {
+    key: def.key, label: def.label, kind: def.kind, unit: def.unit || null,
+    geography: 'lsoa21', geographyCode: area.lsoa21,
+    source: C().source === 'nomis' ? 'Nomis' : 'ONS', datasetId: dataset, edition: null, version: null,
+    referenceDate: 'Census 2021', lastUpdated: null, attribution: OGL, ...extra,
+  };
+}
+
+/** Fetch one figure (count or breakdown) for an LSOA from Nomis. Requires a configured dataset id. */
+async function fetchFigureNomis(area, def) {
+  const dataset = datasetFor(def);
   if (!dataset) return null; // we do NOT guess a dataset id
   const uid = C().nomisUid ? `&uid=${encodeURIComponent(C().nomisUid)}` : '';
   const url = `${C().nomisBase}/dataset/${dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`;
   const res = await getJson(url);
   if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
-  const value = pickTotalCount(res.body.obs);
-  if (value == null) return null;
-  return {
-    key: 'population', label: 'Usual residents', value, unit: 'people',
-    geography: 'lsoa21', geographyCode: area.lsoa21,
-    source: 'Nomis', datasetId: dataset, edition: null, version: null,
-    referenceDate: 'Census 2021', lastUpdated: null, attribution: OGL,
-  };
+  if (def.kind === 'count') {
+    const value = pickTotalCount(res.body.obs);
+    return value == null ? null : baseFigure(def, area, dataset, { value });
+  }
+  const bd = parseBreakdown(res.body.obs);
+  if (!bd || !bd.rows.length) return null;
+  return baseFigure(def, area, dataset, { value: bd.total, rows: bd.rows });
 }
 
-/** Fetch ONE real population figure from the ONS Beta API. Requires a configured dataset id; discovers the
- *  latest edition/version + last_updated. The exact observation query is dataset-specific — if the response
- *  can't be parsed into a clean number we return null (never a guess). */
-async function fetchPopulationOns(area) {
-  const dataset = C().populationDataset;
-  if (!dataset) return null;
+/** Fetch one figure from the ONS Beta API (count only; breakdown parsing for ONS is not implemented, so we
+ *  return null rather than a guess). Discovers the latest edition/version + last_updated. */
+async function fetchFigureOns(area, def) {
+  const dataset = datasetFor(def);
+  if (!dataset || def.kind !== 'count') return null;
   const meta = await getJson(`${C().onsBase}/datasets/${encodeURIComponent(dataset)}`);
   if (meta.status !== 200 || !meta.body) return null;
   const lastUpdated = meta.body.last_updated || null;
   const links = meta.body.links || {};
-  const latestVersionHref = links.latest_version && links.latest_version.href;
-  if (!latestVersionHref) return null;
-  // The latest version carries the observation endpoint + dimensions; a geography-filtered observation gives
-  // the value for this LSOA. Dimension names vary by dataset, so we read the value defensively.
-  const obs = await getJson(`${latestVersionHref}/observations?geography=${encodeURIComponent(area.lsoa21)}`);
+  const href = links.latest_version && links.latest_version.href;
+  if (!href) return null;
+  const obs = await getJson(`${href}/observations?geography=${encodeURIComponent(area.lsoa21)}`);
   if (obs.status !== 200 || !obs.body) return null;
   const list = obs.body.observations || (Array.isArray(obs.body) ? obs.body : null);
   if (!Array.isArray(list) || !list.length) return null;
-  const raw = list[0].observation != null ? list[0].observation : list[0].value;
-  const value = Number(raw);
+  const value = Number(list[0].observation != null ? list[0].observation : list[0].value);
   if (!Number.isFinite(value)) return null;
-  return {
-    key: 'population', label: 'Usual residents', value, unit: 'people',
-    geography: 'lsoa21', geographyCode: area.lsoa21,
-    source: 'ONS', datasetId: dataset,
-    edition: (links.latest_version && links.latest_version.id) || null,
-    version: latestVersionHref.split('/').pop() || null,
-    referenceDate: 'Census 2021', lastUpdated, attribution: OGL,
-  };
+  return baseFigure(def, area, dataset, { value, edition: (links.latest_version && links.latest_version.id) || null, version: href.split('/').pop() || null, lastUpdated });
 }
 
-async function fetchPopulation(area) {
-  return C().source === 'nomis' ? fetchPopulationNomis(area) : fetchPopulationOns(area);
-}
+function fetchFigure(area, def) { return C().source === 'nomis' ? fetchFigureNomis(area, def) : fetchFigureOns(area, def); }
+
+// Back-compat wrappers (population only) kept for existing callers/tests.
+const POP_DEF = FIGURE_DEFS[0];
+function fetchPopulationNomis(area) { return fetchFigureNomis(area, POP_DEF); }
+function fetchPopulationOns(area) { return fetchFigureOns(area, POP_DEF); }
+function fetchPopulation(area) { return fetchFigure(area, POP_DEF); }
 
 /**
  * Get the area profile for a store postcode. Returns a SHAPED response (never throws for "no data"):
@@ -219,16 +265,19 @@ async function getAreaProfile(postcode, { force = false, now = Date.now() } = {}
 
   try {
     const area = await resolvePostcode(pc);
-    const figure = await fetchPopulation(area);
-    if (!figure) {
-      // Upstream reachable but no usable figure (e.g. dataset not configured). Don't invent — serve stale if any.
+    const defs = configuredFigureDefs();
+    // Fetch every configured figure; the concurrency limiter throttles the upstream calls. A figure that fails
+    // or returns nothing is simply omitted (never fabricated).
+    const fetched = (await Promise.all(defs.map((d) => fetchFigure(area, d).catch(() => null)))).filter(Boolean);
+    if (!fetched.length) {
+      // Upstream reachable but no usable figures (e.g. no dataset configured). Don't invent — serve stale if any.
       if (existing) return { ...shapeResponse(existing, { online: true, now }), note: 'Showing last known data; a fresh figure isn’t available yet.' };
-      return { available: false, reason: C().populationDataset ? 'No figure available for this area yet.' : 'Neighbourhood data isn’t fully configured on the server yet.', area, attribution: OGL };
+      return { available: false, reason: defs.length ? 'No figures available for this area yet.' : 'Neighbourhood data isn’t fully configured on the server yet.', area, attribution: OGL };
     }
-    figure.fetchedAt = new Date(now);
+    const stamped = fetched.map((f) => ({ ...f, fetchedAt: new Date(now) }));
     const doc = await NeighbourhoodArea.findOneAndUpdate(
       { postcode: pc },
-      { postcode: pc, lsoa21: area.lsoa21, msoa21: area.msoa21, ward: area.ward, district: area.district, country: area.country, figures: [figure], fetchedAt: new Date(now) },
+      { postcode: pc, lsoa21: area.lsoa21, msoa21: area.msoa21, ward: area.ward, district: area.district, country: area.country, figures: stamped, fetchedAt: new Date(now) },
       { upsert: true, new: true },
     ).lean();
     return shapeResponse(doc, { online: true, now });
@@ -245,7 +294,9 @@ async function getAreaProfile(postcode, { force = false, now = Date.now() } = {}
 function isEnabled() { return !!C().enabled; }
 
 module.exports = {
-  isEnabled, getAreaProfile, resolvePostcode, fetchPopulation, fetchPopulationOns, fetchPopulationNomis,
-  normalisePostcode, isValidPostcode, parseRetryAfter, decideRefresh, freshnessOf, shapeResponse, pickTotalCount, OGL,
+  isEnabled, getAreaProfile, resolvePostcode, fetchFigure, fetchFigureNomis, fetchFigureOns,
+  fetchPopulation, fetchPopulationOns, fetchPopulationNomis, configuredFigureDefs, FIGURE_DEFS,
+  normalisePostcode, isValidPostcode, parseRetryAfter, decideRefresh, freshnessOf, shapeResponse,
+  pickTotalCount, parseBreakdown, OGL,
   __setTransport,
 };
