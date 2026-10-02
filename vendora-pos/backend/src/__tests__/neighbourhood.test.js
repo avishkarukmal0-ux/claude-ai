@@ -89,6 +89,24 @@ describe('network layer (stubbed transport)', () => {
     expect(fig.attribution).toMatch(/Open Government Licence/);
   });
 
+  test('a count table with Total + components is NOT summed (takes the Total row, no double-count)', async () => {
+    // FIXTURE: TS001-shaped response — Total (1470) + lives-in-household (1450) + communal (20). Σ would be 2940.
+    svc.__setTransport(async () => ({ status: 200, headers: {}, body: { obs: [
+      { geography: { description: 'E01000036' }, c2021_resident_3: { description: 'Total: All usual residents' }, obs_value: { value: 1470 } },
+      { geography: { description: 'E01000036' }, c2021_resident_3: { description: 'Lives in a household' }, obs_value: { value: 1450 } },
+      { geography: { description: 'E01000036' }, c2021_resident_3: { description: 'Lives in a communal establishment' }, obs_value: { value: 20 } },
+    ] } }));
+    const fig = await svc.fetchPopulationNomis({ lsoa21: 'E01000036' });
+    expect(fig.value).toBe(1470); // the Total row — NOT 2940
+  });
+
+  test('pickTotalCount prefers the Total row, falls back to max, never sums', () => {
+    expect(svc.pickTotalCount([{ obs_value: { value: 1500 } }])).toBe(1500);
+    expect(svc.pickTotalCount([{ x: { description: 'Total' }, obs_value: { value: 1470 } }, { obs_value: { value: 1450 } }])).toBe(1470);
+    expect(svc.pickTotalCount([{ obs_value: { value: 30 } }, { obs_value: { value: 1450 } }])).toBe(1450); // max fallback
+    expect(svc.pickTotalCount([])).toBe(null);
+  });
+
   test('no configured dataset → returns null (never a guessed number)', async () => {
     const saved = process.env.NEIGHBOURHOOD_POP_DATASET;
     // Simulate "unset" by pointing the service at a transport that would error if called; with the dataset

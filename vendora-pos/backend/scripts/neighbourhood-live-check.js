@@ -65,8 +65,16 @@ async function fetchNomis(area) {
   const uid = NOMIS_UID ? `&uid=${encodeURIComponent(NOMIS_UID)}` : '';
   const res = await get(`${NOMIS_BASE}/dataset/${DATASET}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`);
   if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
-  let value = null;
-  for (const o of res.body.obs) { const v = o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value); if (Number.isFinite(Number(v))) value = (value || 0) + Number(v); }
+  // A count table returns a "Total" row PLUS its components (Total = Σ components) — summing double-counts.
+  // Take the row labelled "Total"; else the max (which equals the total for a count table). Never sum.
+  let total = null; let max = null;
+  for (const o of res.body.obs) {
+    const v = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value));
+    if (!Number.isFinite(v)) continue;
+    max = max == null ? v : Math.max(max, v);
+    if (Object.values(o).some((d) => d && typeof d === 'object' && typeof d.description === 'string' && /^total\b/i.test(d.description))) total = v;
+  }
+  const value = total != null ? total : max;
   return value == null ? null : { value, source: 'Nomis', datasetId: DATASET, edition: null, version: null, referenceDate: 'Census 2021', lastUpdated: null };
 }
 

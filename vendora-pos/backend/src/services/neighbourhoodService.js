@@ -18,6 +18,21 @@ const OGL = 'Source: Office for National Statistics licensed under the Open Gove
 
 // ── pure helpers ────────────────────────────────────────────────────────────
 function normalisePostcode(pc) { return String(pc || '').toUpperCase().replace(/\s+/g, ''); }
+
+// For a COUNT table (e.g. TS001) Nomis returns a "Total" row AND its breakdown components, with
+// Total = Σ components — so summing every row double-counts. Pick the row the source labels "Total"; if none
+// is labelled, fall back to the max value (which equals the total for a count table). We NEVER sum here.
+function pickTotalCount(obs) {
+  let total = null; let max = null;
+  for (const o of (obs || [])) {
+    const v = Number(o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value));
+    if (!Number.isFinite(v)) continue;
+    max = max == null ? v : Math.max(max, v);
+    const isTotalRow = Object.values(o).some((d) => d && typeof d === 'object' && typeof d.description === 'string' && /^total\b/i.test(d.description));
+    if (isTotalRow) total = v;
+  }
+  return total != null ? total : max;
+}
 function isValidPostcode(pc) { return /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/.test(normalisePostcode(pc)); }
 
 /** Parse a Retry-After header (delta-seconds or HTTP-date) into a delay in ms (clamped). */
@@ -143,12 +158,7 @@ async function fetchPopulationNomis(area) {
   const url = `${C().nomisBase}/dataset/${dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`;
   const res = await getJson(url);
   if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
-  // Sum the observation value(s) for the LSOA (a single total row for a count table).
-  let value = null;
-  for (const o of res.body.obs) {
-    const v = o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value);
-    if (Number.isFinite(Number(v))) value = (value || 0) + Number(v);
-  }
+  const value = pickTotalCount(res.body.obs);
   if (value == null) return null;
   return {
     key: 'population', label: 'Usual residents', value, unit: 'people',
@@ -236,6 +246,6 @@ function isEnabled() { return !!C().enabled; }
 
 module.exports = {
   isEnabled, getAreaProfile, resolvePostcode, fetchPopulation, fetchPopulationOns, fetchPopulationNomis,
-  normalisePostcode, isValidPostcode, parseRetryAfter, decideRefresh, freshnessOf, shapeResponse, OGL,
+  normalisePostcode, isValidPostcode, parseRetryAfter, decideRefresh, freshnessOf, shapeResponse, pickTotalCount, OGL,
   __setTransport,
 };
