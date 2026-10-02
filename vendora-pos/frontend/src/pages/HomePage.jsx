@@ -56,6 +56,8 @@ import SuggestionsInbox from '../components/worker/SuggestionsInbox';
 import { getOpenSuggestionCount } from '../lib/suggestionsStore';
 import { getOpenExceptionCount } from '../lib/taskStore';
 import ErrorBoundary from '../components/ErrorBoundary';
+import BuyingJourneyView from '../components/buy/BuyingJourneyView';
+import { Route } from 'lucide-react';
 
 const ONBOARDED_KEY = 'vendora:onboarded';
 function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return true; } }
@@ -187,6 +189,7 @@ export default function HomePage() {
         {screen === 'deadstock' && <DeadStockView onBack={() => setScreen(null)} />}
         {screen === 'stocktake' && <StocktakeView onBack={() => setScreen(null)} />}
         {screen === 'refill' && <RefillView onBack={() => setScreen(null)} />}
+        {screen === 'journey' && canSeeScreen(role, 'journey') && <BuyingJourneyView onBack={() => setScreen(null)} onGo={go} />}
         {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
         {screen === 'claims' && canSeeScreen(role, 'claims') && <ClaimsView onBack={() => setScreen(null)} />}
         {screen === 'price-alerts' && canSeeScreen(role, 'price-alerts') && <PriceAlertsView onBack={() => setScreen(null)} />}
@@ -283,6 +286,7 @@ export default function HomePage() {
         {/* ── BUY (hub) ── */}
         {!screen && tab === 'buy' && (
           <Hub title="Buy & suppliers" subtitle="What to order, track orders, and recover credit.">
+            {!isStaff && <HubTile icon={Route} accent={accent} label="Buying journey" desc="Order → delivery → invoice → claim → credit" onClick={() => setScreen('journey')} />}
             <HubTile icon={ShoppingCart} accent={accent} label="Buy list" desc="Low stock → cash-&-carry list" onClick={() => setScreen('reorder')} />
             <HubTile icon={Truck} accent={accent} label="Orders" desc="Track what you’ve ordered" onClick={() => setScreen('orders')} />
             <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />

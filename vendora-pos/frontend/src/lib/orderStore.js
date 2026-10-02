@@ -79,13 +79,18 @@ export function useOrders() {
 
   const persistAll = (next) => { persist(next); setOrders(next); try { window.dispatchEvent(new CustomEvent('vendora:orders')); } catch { /* ignore */ } };
 
-  /** Place an order (status 'ordered'). lines: [{productId,barcode,name,qty,unitCost}]. */
-  const createOrder = useCallback(({ supplierId = null, supplierName = '', lines = [], note = '' }) => {
+  /**
+   * Create an order. `sent` distinguishes RECORDING an order (a draft — `orderedAt` null, you have not
+   * told the supplier) from SENDING it (placed — `orderedAt` set). Default `sent: true` keeps existing
+   * callers' behaviour. Nothing is ever transmitted to a supplier here; "sent" only records that YOU sent it.
+   * lines: [{productId,barcode,name,qty,unitCost}].
+   */
+  const createOrder = useCallback(({ supplierId = null, supplierName = '', lines = [], note = '', sent = true }) => {
     const order = {
       id: newId(),
-      status: 'ordered',
+      status: sent ? 'ordered' : 'draft',
       supplierId, supplierName, note,
-      createdAt: Date.now(), orderedAt: Date.now(), receivedAt: null,
+      createdAt: Date.now(), orderedAt: sent ? Date.now() : null, receivedAt: null,
       lines: lines.filter((l) => num(l.qty) > 0).map((l) => ({
         id: newId('ol'), productId: l.productId || null, barcode: l.barcode || '', name: l.name || 'Item',
         qty: num(l.qty), receivedQty: 0, unitCost: l.unitCost === '' || l.unitCost == null ? null : num(l.unitCost),
@@ -93,6 +98,16 @@ export function useOrders() {
     };
     persistAll([order, ...load()]);
     return order;
+  }, []);
+
+  /** Record an order WITHOUT sending it to the supplier (a draft). */
+  const createDraftOrder = useCallback((o) => createOrder({ ...o, sent: false }), [createOrder]);
+
+  /** Mark a recorded draft order as sent to the supplier (an explicit, manual action — never automatic). */
+  const sendOrder = useCallback((id) => {
+    persistAll(load().map((o) => (o.id === id && o.orderedAt == null
+      ? { ...o, status: 'ordered', orderedAt: Date.now(), updatedAt: Date.now() }
+      : o)));
   }, []);
 
   const cancelOrder = useCallback((id) => {
@@ -127,5 +142,5 @@ export function useOrders() {
       : o)));
   }, []);
 
-  return { orders, createOrder, cancelOrder, removeOrder, receiveAgainst, markReceived };
+  return { orders, createOrder, createDraftOrder, sendOrder, cancelOrder, removeOrder, receiveAgainst, markReceived };
 }

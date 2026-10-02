@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ShoppingCart, Plus, Minus, Check, X, Share2, Building2, Truck } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Plus, Minus, Check, X, Share2, Building2, Truck, Send } from 'lucide-react';
 import { useOrders, orderTotals, statusFor, OPEN_STATUSES } from '../../lib/orderStore';
 
 const STATUS_LABEL = {
@@ -23,12 +23,15 @@ async function shareOrder(order) {
 // Stage 5a — purchase orders with a lifecycle. Receiving stock happens on the Scan tab (a
 // delivery can be linked to an order); here you can also tick off what's arrived line by line.
 export default function OrdersView({ onBack }) {
-  const { orders, cancelOrder, removeOrder, receiveAgainst, markReceived } = useOrders();
+  const { orders, cancelOrder, removeOrder, receiveAgainst, markReceived, sendOrder } = useOrders();
 
+  // Recorded-but-not-sent drafts are kept separate from orders actually placed with a supplier.
+  const drafts = useMemo(() => orders.filter((o) => statusFor(o) === 'draft'), [orders]);
   const open = useMemo(() => orders.filter((o) => OPEN_STATUSES.includes(statusFor(o))), [orders]);
-  const done = useMemo(() => orders.filter((o) => !OPEN_STATUSES.includes(statusFor(o))).sort((a, b) => (b.receivedAt || b.createdAt) - (a.receivedAt || a.createdAt)).slice(0, 12), [orders]);
+  const done = useMemo(() => orders.filter((o) => { const s = statusFor(o); return s !== 'draft' && !OPEN_STATUSES.includes(s); })
+    .sort((a, b) => (b.receivedAt || b.createdAt) - (a.receivedAt || a.createdAt)).slice(0, 12), [orders]);
 
-  function OrderCard({ o, interactive }) {
+  function OrderCard({ o, interactive, draft }) {
     const t = orderTotals(o);
     const st = statusFor(o);
     const meta = STATUS_LABEL[st] || STATUS_LABEL.ordered;
@@ -59,6 +62,13 @@ export default function OrdersView({ onBack }) {
             );
           })}
         </ul>
+        {draft && (
+          <div className="mt-3 flex items-center gap-2">
+            <button type="button" onClick={() => { sendOrder(o.id); toast.success('Marked as sent — remember to actually send it to the supplier'); }} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><Send className="h-3.5 w-3.5" /> Mark as sent</button>
+            <button type="button" onClick={() => shareOrder(o)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share to supplier</button>
+            <button type="button" onClick={() => { if (confirm('Delete this draft order?')) removeOrder(o.id); }} className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-gray-400 hover:text-danger"><X className="h-3.5 w-3.5" /> Delete</button>
+          </div>
+        )}
         {interactive && (
           <div className="mt-3 flex items-center gap-2">
             <button type="button" onClick={() => shareOrder(o)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
@@ -76,9 +86,9 @@ export default function OrdersView({ onBack }) {
         <ArrowLeft className="h-4 w-4" /> Home
       </button>
       <h2 className="mb-1 text-base font-bold text-gray-900">Orders</h2>
-      <p className="mb-4 text-xs text-gray-400">Place orders from your buy list, then tick off what arrives. Receiving stock happens on the Scan tab.</p>
+      <p className="mb-4 text-xs text-gray-400">Recording an order just tracks it here — it does <strong>not</strong> message the supplier. Use “Mark as sent” / “Share” when you’ve actually placed it. Receiving stock happens on the Scan tab.</p>
 
-      {open.length === 0 && done.length === 0 ? (
+      {drafts.length === 0 && open.length === 0 && done.length === 0 ? (
         <div className="mt-6 flex flex-col items-center text-center">
           <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary"><ShoppingCart className="h-7 w-7" strokeWidth={1.75} /></span>
           <p className="text-sm font-semibold text-gray-900">No orders yet</p>
@@ -86,6 +96,12 @@ export default function OrdersView({ onBack }) {
         </div>
       ) : (
         <>
+          {drafts.length > 0 && (
+            <section className="mb-5">
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400"><ShoppingCart className="h-3.5 w-3.5" /> Recorded — not sent yet</h3>
+              <ul className="space-y-2">{drafts.map((o) => <OrderCard key={o.id} o={o} draft />)}</ul>
+            </section>
+          )}
           {open.length > 0 && (
             <section className="mb-5">
               <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400"><Truck className="h-3.5 w-3.5" /> Open orders</h3>
