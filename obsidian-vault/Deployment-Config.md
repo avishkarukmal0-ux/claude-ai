@@ -261,3 +261,81 @@ owner chooses to send it.
 - Backend (DB-gated integration, incl. isolation): set `VENDORA_TEST_URI` to a test Mongo and run
   `npx jest --testPathPattern="integration"`. These cover auth/roles, sync + role store-access, notify prefs
   and cross-tenant isolation.
+
+---
+
+## Real integrations — completed 2026-10-02 (test-mode / provider-gated; not deployed)
+
+Turns the product-image and Neighbourhood Insights seams into real integrations. Everything stays OFF by
+default; the core PWA is unaffected. See [[Work-Log/2026-10-02-Real-Integrations]].
+
+### 1) Product-picture storage — now with durable backup + explicit states
+
+- **Durability:** backup goes to **GridFS inside MongoDB/Atlas**, never the Render disk — it survives
+  restart/redeploy. multer uses memory storage; nothing is written to local disk.
+- **Backend flag:** `PRODUCT_IMAGES=true` (+ `PRODUCT_IMAGE_MAX_MB`, default 5). **Frontend flag:**
+  `VITE_PRODUCT_IMAGES=true`. Local photos work with both off.
+- **States (per device):** `local` → `pending` → `backed-up` / `failed`, shown on the photo. Failed uploads
+  are queued and retried automatically on regaining network/focus, or via the "retry" affordance.
+- **Catalogue (approved) images:** confirming an Open Food Facts suggestion stores it as a `catalogue`
+  image (attributed) and backs it up like an owner photo.
+- **Authorised retrieval + deletion:** every route is scoped by the shop token; delete removes the GridFS
+  copy. A second authorised device recovers photos via `GET /api/pwa-images/:id`.
+
+### 2) Neighbourhood Insights — real ONS Census 2021 (England & Wales) via Nomis
+
+- **Flags/config:** `INSIGHTS_ENABLED=true`, `INSIGHTS_DATA_PROVIDER=nomis`, `INSIGHTS_CENTROIDS_PATH=<file>`.
+  Optional: `NOMIS_API_BASE`, `INSIGHTS_NOMIS_TABLES_PATH`, `INSIGHTS_CACHE_TTL`, `INSIGHTS_FETCH_TIMEOUT_MS`,
+  `INSIGHTS_MAX_OA`. Location via postcodes.io (`INSIGHTS_LOCATION_PROVIDER=postcodes_io`).
+- **OA centroids (required, operator downloads once — ~190k rows, not bundled):** ONS Open Geography Portal,
+  *"Output Areas (2021) Population Weighted Centroids"*, England & Wales, OGL v3.0. Export as CSV
+  (`OA21CD,lat,long`) or NDJSON and point `INSIGHTS_CENTROIDS_PATH` at it.
+- **Method:** centroid-in-radius ("best-fit") — a whole OA is included when its population-weighted centroid
+  is within the radius. Different radii select different OAs → genuinely different totals. Population = Σ age
+  breakdown; households = Σ household-composition. Small cells suppressed ("fewer than 10"); every figure
+  labelled *estimated* with source/year/coverage/method + OGL attribution. Results cached per point+radius.
+- **Tables:** TS021 ethnic group, TS024 main language, TS007A age, TS003 household composition. The Nomis
+  dataset ids / dimension names in `services/insightsData/nomis.js` are **documented defaults to verify** —
+  run the verify script against a known location and reconcile with the published ONS figures before trusting
+  numbers; override via `INSIGHTS_NOMIS_TABLES_PATH` if the catalogue differs.
+- **Verify script (operator env, needs network + centroids):**
+  `INSIGHTS_DATA_PROVIDER=nomis INSIGHTS_CENTROIDS_PATH=/data/oa21_pwc.csv node scripts/verify-insights.js "EC1A 1BB" 1000`
+- **Scotland/NI:** explicitly `supported:false` (separate censuses) until implemented.
+- With no centroids file / no data provider the profile returns `configured:false` — honest "not set up",
+  never fabricated numbers.
+
+### 3) Billing — real Stripe (TEST MODE), add-on + optional core, idempotent signed webhook
+
+- **Separate from the till subscription** (own endpoint, own webhook secret, own prices). Till stays disabled.
+- **Flags/config:** `INSIGHTS_BILLING_PROVIDER=stripe`, `STRIPE_SECRET_KEY=sk_test_…`,
+  `INSIGHTS_STRIPE_WEBHOOK_SECRET=whsec_…`, `INSIGHTS_SALE_MODE=off|one_off|subscription`, price ids
+  `INSIGHTS_STRIPE_PRICE_CORE` / `_ADDON` / `_ONEOFF`, `INSIGHTS_PRICE_CURRENCY`, `INSIGHTS_REPORT_VALID_DAYS`,
+  success/cancel URLs. **Safety:** an `sk_live_` key is refused unless `BILLING_ALLOW_LIVE=true`.
+- **Model:** one Stripe subscription carries the Vendora Shop core item **and** the optional Insights add-on
+  item → one invoice, one billing date. Cancelling the add-on item leaves the core subscription running.
+- **Proposed prices (test):** core £19/mo, add-on £5/mo (combined £24), or a one-off report. Set as price ids
+  in the Stripe dashboard — no commercial terms are hard-coded.
+- **Recurring guard:** a recurring Insights subscription is only offered once the census data is configured;
+  otherwise the sale falls back to a one-off report (or off). So we never take a recurring charge for data
+  that isn't delivered yet.
+- **Webhook:** `POST /api/pwa-insights/billing/stripe/webhook` — raw body, signature verified with the
+  dedicated secret; entitlement is granted ONLY from the verified webhook reflecting the real subscription
+  state (add-on item present), never from the checkout redirect. Duplicate deliveries are no-ops (idempotency
+  ledger `ProcessedBillingEvent`), and out-of-order deliveries are ignored (created-time guard). Customer /
+  subscription ids are mapped to the shop server-side.
+- **Stripe dashboard steps (owner):** create the 3 test prices; add a webhook endpoint to the URL above and
+  copy its signing secret into `INSIGHTS_STRIPE_WEBHOOK_SECRET`; set the price ids + `INSIGHTS_SALE_MODE`.
+
+### Running the (previously skipped) integration tests — operator's disposable test DB
+
+They are DB-gated and skip unless `VENDORA_TEST_URI` points at a **disposable** Mongo (never production):
+
+```
+cd vendora-pos/backend
+VENDORA_TEST_URI=mongodb://localhost:27017/vendora_test npx jest --testPathPattern="integration"
+```
+
+Covered: product-image cross-shop isolation + second-device recovery + authorised delete; entitlement
+enforcement (402 without it); the signed Stripe webhook granting access + rejecting a forged body; duplicate
+and out-of-order webhook handling; payment-failure revocation; core PWA access remaining available without the
+add-on. (They could not run in the build sandbox: no local Mongo + egress blocked — see the Work-Log.)
