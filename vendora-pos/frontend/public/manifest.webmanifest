@@ -1,7 +1,7 @@
 {
-  "name": "Vendora POS",
+  "name": "Vendora — Shop management",
   "short_name": "Vendora",
-  "description": "Vendora — inventory, goods-in scanning, waste and MTD-ready books for UK convenience stores. Runs on your phone, alongside your till.",
+  "description": "Vendora — inventory, goods-in scanning, deliveries, waste and supplier claims for UK shops. Runs on your phone, alongside your existing till.",
   "id": "/",
   "start_url": "/?source=pwa",
   "scope": "/",
