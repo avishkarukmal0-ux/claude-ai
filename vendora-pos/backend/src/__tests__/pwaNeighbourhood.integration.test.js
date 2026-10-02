@@ -26,7 +26,8 @@ beforeAll(async () => {
   Account = require('../models/Account');
   svc = require('../services/neighbourhoodService');
   NeighbourhoodArea = require('../models/NeighbourhoodArea');
-  // Stub upstream: postcodes.io → area codes; Nomis → one obs value. No network.
+  // FIXTURE (test-only): stub the upstream so no network is needed — postcodes.io → area codes; Nomis → one obs
+  // value. This mock lives ONLY in this test file; no production path contains sample/mock data.
   svc.__setTransport(async (url) => {
     if (/postcodes/.test(url)) {
       return { status: 200, headers: {}, body: { result: { postcode: 'RM10 8AA', country: 'England', admin_ward: 'Alibon', admin_district: 'Barking and Dagenham', codes: { lsoa: 'E01000036', msoa: 'E02000011' } } } };

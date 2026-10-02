@@ -380,3 +380,51 @@ labelled offline.
 
 **DB tests (disposable test DB only — never vendora_pilot):**
 `VENDORA_TEST_URI=mongodb://localhost:27017/vendora_test npx jest --testPathPattern="pwaNeighbourhood"`
+
+### Live-check script + Windows PowerShell + Render curl (owner-run; sandbox can't reach these)
+
+`vendora-pos/backend/scripts/neighbourhood-live-check.js` — run from a PC with network. Prints each upstream's
+HTTP status, the area codes, one real figure, and the freshness fields. No production path uses it.
+
+**Windows PowerShell — ONS source:**
+```powershell
+cd vendora-pos\backend
+$env:NEIGHBOURHOOD_SOURCE="ons"
+$env:ONS_USER_AGENT="vendora/1.0.0 (you@example.com +https://claude-ai-indol.vercel.app)"
+$env:NEIGHBOURHOOD_POP_DATASET="<ons-population-dataset-id>"   # discover first (below)
+node scripts/neighbourhood-live-check.js "RM10 8AA"
+```
+
+**Windows PowerShell — Nomis source (optional secret UID):**
+```powershell
+cd vendora-pos\backend
+$env:NEIGHBOURHOOD_SOURCE="nomis"
+$env:NEIGHBOURHOOD_POP_DATASET="NM_xxxx_1"
+$env:NOMIS_UID="<your-secret-uid>"      # optional; removes the 25k-cell guest cap
+node scripts/neighbourhood-live-check.js "RM10 8AA"
+```
+
+**Discover the dataset id (PowerShell):**
+```powershell
+# Nomis catalogue:
+Invoke-RestMethod "https://www.nomisweb.co.uk/api/v01/dataset/def.sdmx.json" | Out-File nomis-catalogue.json
+# ONS Beta datasets (send the User-Agent ONS asks for):
+Invoke-RestMethod -Headers @{ "User-Agent" = $env:ONS_USER_AGENT } "https://api.beta.ons.gov.uk/v1/datasets?limit=338"
+```
+
+**Quick raw checks (PowerShell):**
+```powershell
+Invoke-RestMethod "https://api.postcodes.io/postcodes/RM10 8AA"   # → result.codes.lsoa21 etc.
+```
+
+**curl against the deployed Render route (once NEIGHBOURHOOD_ENABLED + dataset are set and the backend is redeployed):**
+```bash
+curl "https://vendora-api-5pyt.onrender.com/api/pwa-neighbourhood/status" -H "Authorization: Bearer <PWA_TOKEN>"
+curl "https://vendora-api-5pyt.onrender.com/api/pwa-neighbourhood/area?postcode=RM10%208AA" -H "Authorization: Bearer <PWA_TOKEN>"
+# (first call can take ~50s if the free Render instance is asleep)
+```
+PowerShell equivalent of the route check:
+```powershell
+Invoke-RestMethod -Headers @{ Authorization = "Bearer <PWA_TOKEN>" } `
+  "https://vendora-api-5pyt.onrender.com/api/pwa-neighbourhood/area?postcode=RM10 8AA"
+```

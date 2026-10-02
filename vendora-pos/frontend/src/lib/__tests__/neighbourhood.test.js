@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getArea, getStored, __setFetch } from '../neighbourhoodClient';
 import { setActiveWorkspace, LOCAL_WORKSPACE, __resetMemForTest } from '../storage';
 
+// FIXTURE (test-only): a mocked backend response. No sample/mock data exists in any production path.
 const SAMPLE = { success: true, available: true, postcode: 'RM108AA', area: { ward: 'Alibon' }, figures: [{ key: 'population', label: 'Usual residents', value: 1500, source: 'Nomis', datasetId: 'NM_test_1', referenceDate: 'Census 2021', attribution: 'OGL', fetchedAt: Date.now() }], fetchedAt: Date.now(), freshness: 'fresh' };
 
 beforeEach(() => {

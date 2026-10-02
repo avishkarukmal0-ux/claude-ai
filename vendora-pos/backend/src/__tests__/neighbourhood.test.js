@@ -55,6 +55,8 @@ describe('pure helpers', () => {
   });
 });
 
+// The transports below are FIXTURES (test-only mocked upstream responses). Production never contains mock or
+// sample data — the service returns "unavailable" instead of inventing numbers.
 describe('network layer (stubbed transport)', () => {
   test('resolvePostcode maps postcodes.io → area codes (RM10 8AA example)', async () => {
     svc.__setTransport(async (url) => {
