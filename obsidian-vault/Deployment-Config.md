@@ -30,6 +30,10 @@ flag in the Render service env and redeploy.
 | `PRODUCT_IMAGES` | backend | off | `true` enables cross-device product-picture backup over `/api/pwa-images` (GridFS, shop-scoped, all roles). Off → photos stay on-device (still fully usable). |
 | `PRODUCT_IMAGE_MAX_MB` | backend | 5 | Per-image size cap (after client compression). |
 | `VITE_PRODUCT_IMAGES` | frontend | off | `true` lets the app back up/fetch product photos cross-device (needs backend `PRODUCT_IMAGES`). Off → taking/showing photos still works on the device that took them. Product pictures are a CORE feature, never behind the paid add-on. |
+| `INSIGHTS_ENABLED` | backend | off | `true` mounts the `/api/pwa-insights` routes (the paid add-on). Off → the whole add-on is absent and the core PWA is unaffected. |
+| `INSIGHTS_DATA_PROVIDER` | backend | off | The census DATA source (`nomis` once OA centroids + table ids are in place). Unset → profiles return `configured:false` (never fabricated numbers). |
+| `INSIGHTS_BILLING_PROVIDER` (+ `INSIGHTS_BILLING_WEBHOOK_SECRET`, `INSIGHTS_PRICE_*`) | backend | off | Entitlement/billing source. Unset → purchasing is unavailable and no account is entitled. |
+| `VITE_INSIGHTS_ENABLED` | frontend | off | `true` shows the Neighbourhood Insights tile/screen (owner/manager). Must match backend `INSIGHTS_ENABLED`. |
 | `SYNC_HISTORY_KEEP` | backend | 10 | Revisions kept per store when history is on. |
 | `SYNC_HISTORY_TTL_DAYS` | backend | 30 | History older than this self-expires (TTL index backstop). |
 
@@ -175,6 +179,58 @@ suggestion → placeholder**.
   never shown as the shop's own and never stored until the owner confirms. An owner photo is never
   overwritten automatically. No fabricated packaging, no arbitrary web images.
 - **Validation:** image types + size enforced client-side and server-side; deletion is recoverable (undo).
+
+## Neighbourhood Insights (optional PAID add-on)
+
+Aggregate residential-area profiles (ONS Census 2021) within a radius of the shop, to plan small product
+trials. **Entirely optional — the core PWA is fully usable without it.** Three independent switches, all
+default OFF; nothing shows numbers or takes payment until configured.
+
+### What it is / isn't
+- Uses **official aggregate statistics only** — no individual, household, name, face or behaviour profiling;
+  never infers an individual's ethnicity/religion/diet; nearby residents are **potential** customers, never
+  proof of demand. Every profile is labelled **estimated** with source/year/coverage/method/limitations and
+  the OGL attribution.
+
+### Data sources + licences (verified, England & Wales first)
+- **Location:** postcodes.io (`api.postcodes.io`) — postcode → lat/long + country + OA21/LSOA21 codes.
+  Data under **OGL v3.0** (ONS Postcode Directory incl. OS + Royal Mail — show all three attribution lines).
+- **Census counts:** **ONS Census 2021 via Nomis** (`nomisweb.co.uk`, bulk + REST API, free, OGL). Tables:
+  TS001/TS041 (population/households), TS021 (ethnic group), TS024 (main language), TS007A (age), TS003
+  (household composition). *The exact `NM_` ids + geography TYPE codes must be confirmed at
+  `nomisweb.co.uk/api/v01/help` before enabling.*
+- **Geography:** ONS Open Geography Portal — **Output Areas (Dec 2021) EW population-weighted centroids**
+  (OGL) — the file that drives OA selection.
+- **Scotland (NRS 2022) and NI (NISRA 2021) are SEPARATE** censuses/years/geographies — not derived from the
+  E&W data; a non-E&W postcode is returned `supported:false`.
+
+### Method (documented + defensible)
+- **Centroid-in-radius ("best-fit"):** a whole Output Area is included when its population-weighted centroid
+  is within the radius; counts are summed across included OAs. A circle never matches census areas, so the
+  result is **always an estimate**, marked as such with the OA count. Disclosure control is preserved: ONS
+  data is already perturbed (record swapping + cell-key perturbation), and small cells are shown as
+  "fewer than N" — never a precise tiny figure.
+
+### Enabling (operator)
+1. **Data:** load the OA 2021 population-weighted centroids, confirm the Nomis table ids/TYPE codes, implement
+   the provider adapter at `backend/src/services/insightsData/<name>.js` (exports `fetchAreaProfiles(point,
+   radiusM)`), then set `INSIGHTS_DATA_PROVIDER=<name>`. Until then profiles honestly say "not configured".
+2. **Billing (no commercial terms are set in code):** decide a price → set `INSIGHTS_BILLING_PROVIDER`,
+   `INSIGHTS_PRICE_MINOR`/`_CURRENCY`/`_INTERVAL`, `INSIGHTS_BILLING_WEBHOOK_SECRET`, and build the provider
+   adapter (checkout + normalised webhook events: purchased/renewed/payment_failed/cancelled/ended). Until
+   then `/checkout` returns "purchasing unavailable" and no account is entitled.
+3. **Frontend:** `VITE_INSIGHTS_ENABLED=true` (+ a map tiles provider later for an interactive confirm map).
+4. **Access policy:** entitlement is server-enforced on `/profile` (owner/manager, scoped to the shop account —
+   a client can't self-grant). Cancel keeps access until the period end; a failed payment (`past_due`) denies
+   access until a renewal restores it.
+
+### ⚠️ Not live-verified here
+No census data provider or billing provider is configured, and the sandbox can't reach ONS/Nomis/postcodes.io
+or a test Mongo — so **no real profile or purchase has been run**. The DB-gated integration test
+(`pwaInsights.integration.test.js`: entitlement enforcement, per-shop isolation, webhook lifecycle) and the
+Nomis/centroid wiring must be run against configured services before telling owners the add-on is live. Do
+not market a subscription as "continuously updated" data — the census updates only every ~10 years; the
+recurring value is the ongoing **trial tracking + decision support**.
 
 ## Monitoring & support (Phase 3.10)
 

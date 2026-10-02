@@ -40,4 +40,46 @@ async function setEntitlement(accountId, patch) {
   return acct.entitlements.neighbourhoodInsights;
 }
 
-module.exports = { isActive, getEntitlement, hasAccess, setEntitlement, DEFAULT };
+// --- billing lifecycle (provider-agnostic) ---------------------------------
+// A billing provider adapter normalises its events to one of these types and posts them to the webhook; we
+// translate to an entitlement patch here (pure + testable). Access policy (documented):
+//   purchased/renewed/resumed → active (+ currentPeriodEnd)
+//   payment_failed            → past_due  → access DENIED (strict; a later renewal restores it)
+//   cancelled                 → access CONTINUES until currentPeriodEnd (we only stamp cancelledAt)
+//   ended                     → cancelled → access denied immediately
+const EVENT_TYPES = ['purchased', 'renewed', 'resumed', 'payment_failed', 'cancelled', 'ended'];
+
+function entitlementPatchFor(event, current = DEFAULT, now = Date.now()) {
+  if (!event || !EVENT_TYPES.includes(event.type)) return null;
+  switch (event.type) {
+    case 'purchased':
+    case 'renewed':
+    case 'resumed':
+      return {
+        status: 'active',
+        source: event.source || current.source || null,
+        reference: event.reference || current.reference || null,
+        grantedAt: current.grantedAt || now,
+        currentPeriodEnd: event.currentPeriodEnd != null ? event.currentPeriodEnd : current.currentPeriodEnd,
+        cancelledAt: null,
+      };
+    case 'payment_failed':
+      return { status: 'past_due' };
+    case 'cancelled':
+      return { cancelledAt: now }; // keep status/currentPeriodEnd — access lapses at period end
+    case 'ended':
+      return { status: 'cancelled', currentPeriodEnd: now };
+    default:
+      return null;
+  }
+}
+
+/** Apply a normalised billing event to an account's entitlement. @returns the new entitlement or null. */
+async function applyBillingEvent(accountId, event, now = Date.now()) {
+  const current = await getEntitlement(accountId);
+  const patch = entitlementPatchFor(event, current, now);
+  if (!patch) return null;
+  return setEntitlement(accountId, patch);
+}
+
+module.exports = { isActive, getEntitlement, hasAccess, setEntitlement, entitlementPatchFor, applyBillingEvent, EVENT_TYPES, DEFAULT };

@@ -92,6 +92,8 @@ module.exports = {
     priceMinor: process.env.INSIGHTS_PRICE_MINOR ? parseInt(process.env.INSIGHTS_PRICE_MINOR, 10) : null,
     priceCurrency: process.env.INSIGHTS_PRICE_CURRENCY || 'GBP',
     priceInterval: process.env.INSIGHTS_PRICE_INTERVAL || null, // 'month' | 'year' | 'once' — operator sets
+    // Shared secret the billing provider adapter signs its normalised webhook with. Unset → the webhook is 404.
+    webhookSecret: process.env.INSIGHTS_BILLING_WEBHOOK_SECRET || null,
   },
 
   mongodb: {

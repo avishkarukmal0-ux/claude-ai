@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, Users, Home, Info, AlertTriangle, Lock, Loader2, BarChart3, Globe2,
 } from 'lucide-react';
-import { getStatus, getPreview, getProfile } from '../../lib/insightsClient';
+import { getStatus, getPreview, getProfile, startCheckout } from '../../lib/insightsClient';
 import TrialsPanel from './TrialsPanel';
 
 const RADII = [{ m: 500, label: '500 m' }, { m: 1000, label: '1 km' }, { m: 3000, label: '3 km' }];
@@ -104,7 +104,7 @@ function NotEntitled({ status, preview }) {
           ? 'Subscribe to see your own area profile and run product trials.'
           : 'Purchasing isn’t available yet — this is set up by the shop owner once billing is configured. The rest of Vendora works without it.'}</p>
         {status.purchasingAvailable && (
-          <button type="button" onClick={() => toast('Checkout will open here once billing is configured.', { icon: 'ℹ️' })} className="mt-3 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">Subscribe</button>
+          <button type="button" onClick={async () => { try { const r = await startCheckout(); if (r && r.url) window.location.href = r.url; } catch (e) { toast(e.message || 'Purchasing isn’t available yet.', { icon: 'ℹ️' }); } }} className="mt-3 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">Subscribe</button>
         )}
       </div>
 

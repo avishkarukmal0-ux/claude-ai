@@ -5,7 +5,7 @@
 // fabricated numbers).
 const insights = require('../services/insightsService');
 const loc = require('../services/insightsLocation');
-const { isActive } = require('../services/insightsEntitlementService');
+const { isActive, entitlementPatchFor } = require('../services/insightsEntitlementService');
 
 const EW = { status: 200, json: { result: { country: 'England', latitude: 51.5, longitude: -0.1, postcode: 'EC1A 1BB', admin_district: 'Islington', codes: { oa: 'E00000001', lsoa: 'E01000001' } } } };
 const SCOT = { status: 200, json: { result: { country: 'Scotland', latitude: 55.95, longitude: -3.19, postcode: 'EH1 1AA', codes: {} } } };
@@ -73,4 +73,30 @@ describe('insightsEntitlement.isActive (server-enforced)', () => {
   test('active with no period end → access', () => { expect(isActive({ status: 'active' }, now)).toBe(true); });
   test('active but period ended → no access', () => { expect(isActive({ status: 'active', currentPeriodEnd: now - 1 }, now)).toBe(false); });
   test('cancelled → no access', () => { expect(isActive({ status: 'cancelled' }, now)).toBe(false); });
+});
+
+describe('insightsEntitlement.entitlementPatchFor (billing lifecycle, consistent)', () => {
+  const now = 1000;
+  const cur = { status: 'none', grantedAt: null, currentPeriodEnd: null };
+  test('purchase → active with period end + grantedAt', () => {
+    const p = entitlementPatchFor({ type: 'purchased', currentPeriodEnd: 5000, source: 'stripe', reference: 'sub_1' }, cur, now);
+    expect(p).toMatchObject({ status: 'active', currentPeriodEnd: 5000, grantedAt: now, source: 'stripe' });
+  });
+  test('renewal extends the period and keeps the original grantedAt', () => {
+    const p = entitlementPatchFor({ type: 'renewed', currentPeriodEnd: 9000 }, { status: 'active', grantedAt: 500, currentPeriodEnd: 5000 }, now);
+    expect(p.currentPeriodEnd).toBe(9000);
+    expect(p.grantedAt).toBe(500);
+  });
+  test('failed payment → past_due (access denied until a renewal restores it)', () => {
+    expect(entitlementPatchFor({ type: 'payment_failed' }, cur, now)).toEqual({ status: 'past_due' });
+  });
+  test('cancel keeps access until period end (only stamps cancelledAt)', () => {
+    expect(entitlementPatchFor({ type: 'cancelled' }, { status: 'active', currentPeriodEnd: 9000 }, now)).toEqual({ cancelledAt: now });
+  });
+  test('ended → cancelled immediately', () => {
+    expect(entitlementPatchFor({ type: 'ended' }, { status: 'active' }, now)).toMatchObject({ status: 'cancelled' });
+  });
+  test('unknown event → null (ignored)', () => {
+    expect(entitlementPatchFor({ type: 'nonsense' }, cur, now)).toBe(null);
+  });
 });

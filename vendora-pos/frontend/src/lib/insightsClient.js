@@ -35,3 +35,6 @@ export async function getPreview() { return _t('/preview'); }
 
 /** The real area profile for a postcode + radius (server enforces entitlement; 402 if not entitled). */
 export async function getProfile({ postcode, radiusM }) { return _t('/profile', { method: 'POST', body: { postcode, radiusM } }); }
+
+/** Begin a purchase. Throws with a clear message when purchasing isn't configured (503) — never a fake flow. */
+export async function startCheckout() { return _t('/checkout', { method: 'POST' }); }
