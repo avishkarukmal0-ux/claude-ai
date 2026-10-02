@@ -339,3 +339,44 @@ Covered: product-image cross-shop isolation + second-device recovery + authorise
 enforcement (402 without it); the signed Stripe webhook granting access + rejecting a forged body; duplicate
 and out-of-order webhook handling; payment-failure revocation; core PWA access remaining available without the
 add-on. (They could not run in the build sandbox: no local Mongo + egress blocked — see the Work-Log.)
+
+---
+
+## Real neighbourhood area data (Step 1) — 2026-10-02 (OFF by default; not live-verified in sandbox)
+
+One real figure (area population) for the store's postcode, from official data, cached with provenance and
+offline-capable. The browser only calls OUR backend. See [[Work-Log/2026-10-02-Neighbourhood-Real-Data]].
+
+**Flags/config (Render backend unless noted):**
+- `NEIGHBOURHOOD_ENABLED=true` + frontend `VITE_NEIGHBOURHOOD_ENABLED=true`
+- `ONS_USER_AGENT="vendora/1.0.0 (ops@yourdomain +https://claude-ai-indol.vercel.app)"` (ONS asks for this)
+- `NEIGHBOURHOOD_SOURCE=ons` or `nomis`
+- `NEIGHBOURHOOD_POP_DATASET=<id>` — **confirm from the live catalogue first; we do not hardcode a guess.**
+  Nomis: `curl "https://www.nomisweb.co.uk/api/v01/dataset/def.sdmx.json" | grep -i population` →
+  the `NM_xxxx_1` id. ONS: `curl "https://api.beta.ons.gov.uk/v1/datasets?limit=338"` → the population slug.
+- `NOMIS_UID=<secret>` (optional; removes Nomis' 25k-cell guest cap) — env only, never in repo/chat.
+- `NEIGHBOURHOOD_TTL_HOURS` (default 168), `NEIGHBOURHOOD_TIMEOUT_MS` (55000), `NEIGHBOURHOOD_STALE_MAX_DAYS` (400).
+
+**Route:** `GET /api/pwa-neighbourhood/area?postcode=RM10%208AA` (PWA token, owner/manager) → figure + source,
+datasetId, edition/version, referenceDate ("Census 2021"), the dataset's last_updated, fetchedAt, freshness,
+OGL attribution. `GET /api/pwa-neighbourhood/status` → what's configured.
+
+**Freshness/refresh:** on-demand — re-fetches when the cached record is older than the TTL or the dataset's
+last_updated is newer. No in-process timer (Render free tier sleeps). A scheduled refresh would be a separate,
+costed proposal — not added.
+
+**Offline (PWA):** the client stores the last response per postcode in the durable localStorage+IndexedDB store;
+offline it shows that copy labelled "Last updated <date> (offline)". The service worker is unchanged — it
+intentionally bypasses `/api`, so offline is handled at the app layer (never blocks POS/till).
+
+**Verify live (owner env — sandbox egress is blocked, so this was NOT run here):**
+```
+curl "https://api.postcodes.io/postcodes/RM10%208AA"                 # → lsoa21 E01000036 …
+curl -H "User-Agent: $ONS_USER_AGENT" "https://api.beta.ons.gov.uk/v1/datasets?limit=1"
+curl "<backend>/api/pwa-neighbourhood/area?postcode=RM10%208AA" -H "Authorization: Bearer <token>"
+```
+Then in the app: load the figure, turn DevTools → Network → Offline, reload → the stored figure still shows,
+labelled offline.
+
+**DB tests (disposable test DB only — never vendora_pilot):**
+`VENDORA_TEST_URI=mongodb://localhost:27017/vendora_test npx jest --testPathPattern="pwaNeighbourhood"`
