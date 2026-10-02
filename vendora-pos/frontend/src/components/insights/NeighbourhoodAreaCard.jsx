@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle } from 'lucide-react';
+import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { getArea } from '../../lib/neighbourhoodClient';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 
@@ -10,7 +10,7 @@ import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 const fmtDate = (v) => { try { return new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
 const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-GB');
 
-export default function NeighbourhoodAreaCard({ defaultPostcode = '' }) {
+export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = null }) {
   const [postcode, setPostcode] = useState(defaultPostcode);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -26,6 +26,11 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '' }) {
 
   return (
     <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      {onBack && (
+        <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+          <ArrowLeft className="h-4 w-4" /> Home
+        </button>
+      )}
       <h3 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-900"><MapPin className="h-4 w-4 text-primary" /> Your area — official figures</h3>
       <p className="mb-3 text-[11px] text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
 
