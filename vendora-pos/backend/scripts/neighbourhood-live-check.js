@@ -2,89 +2,128 @@
 
 /*
  * Live check for the real neighbourhood data pipeline — RUN FROM A MACHINE WITH NETWORK ACCESS (your PC).
- * It is NOT part of any production path and ships no sample data: it calls the real upstreams and prints what
- * they actually return. The build/CI sandbox cannot reach these hosts, so this is how the end-to-end path and
- * the real dataset id get verified.
  *
- * It prints, for a postcode you give it:
- *   - postcodes.io   : HTTP status + the area codes (lsoa21/msoa21/ward/district/country)
- *   - ONS or Nomis   : HTTP status + ONE real figure (population)
- *   - freshness fields: source, datasetId, edition/version, referenceDate, dataset last_updated, fetchedAt
+ * STANDALONE: no npm install, no repo build, no app imports — just Node 18+ (global fetch). You can run it from
+ * inside the repo OR save this single file anywhere and run it. It is a DIAGNOSTIC: it calls the real upstreams
+ * and prints what they actually return. It ships no sample data and is not part of any production path.
  *
- * Usage (PowerShell examples are in obsidian-vault/Deployment-Config.md):
- *   # ONS source:
+ * Prints, for a postcode you give it:
+ *   - postcodes.io : HTTP status + area codes (lsoa21/msoa21/ward/district/country)
+ *   - ONS or Nomis : HTTP status + ONE real figure (population) + freshness fields
+ *
+ * Windows PowerShell:
  *   $env:NEIGHBOURHOOD_SOURCE="ons"
  *   $env:ONS_USER_AGENT="vendora/1.0.0 (you@example.com +https://claude-ai-indol.vercel.app)"
- *   $env:NEIGHBOURHOOD_POP_DATASET="<ons-population-dataset-id>"
- *   node scripts/neighbourhood-live-check.js "RM10 8AA"
+ *   $env:NEIGHBOURHOOD_POP_DATASET="<dataset-id>"     # leave unset on the first run to just verify postcodes.io
+ *   node neighbourhood-live-check.js "RM10 8AA"
  *
- *   # Nomis source (optional secret UID removes the 25k-cell guest cap):
+ *   # Nomis instead (optional secret UID removes the 25k-cell guest cap):
  *   $env:NEIGHBOURHOOD_SOURCE="nomis"; $env:NEIGHBOURHOOD_POP_DATASET="NM_xxxx_1"; $env:NOMIS_UID="<secret>"
- *   node scripts/neighbourhood-live-check.js "RM10 8AA"
- *
- * If NEIGHBOURHOOD_POP_DATASET is unset, it still verifies postcodes.io and prints how to discover the id.
  */
 /* eslint-disable no-console */
 
-process.env.NEIGHBOURHOOD_ENABLED = process.env.NEIGHBOURHOOD_ENABLED || 'true';
+const SOURCE = (process.env.NEIGHBOURHOOD_SOURCE || 'ons').toLowerCase();
+const UA = process.env.ONS_USER_AGENT || 'vendora/1.0.0 (neighbourhood live-check; set ONS_USER_AGENT)';
+const DATASET = process.env.NEIGHBOURHOOD_POP_DATASET || null;
+const NOMIS_UID = process.env.NOMIS_UID || null;
+const POSTCODES_BASE = (process.env.POSTCODES_IO_BASE || 'https://api.postcodes.io').replace(/\/+$/, '');
+const ONS_BASE = (process.env.ONS_API_BASE || 'https://api.beta.ons.gov.uk/v1').replace(/\/+$/, '');
+const NOMIS_BASE = (process.env.NOMIS_API_BASE || 'https://www.nomisweb.co.uk/api/v01').replace(/\/+$/, '');
+const TIMEOUT_MS = parseInt(process.env.NEIGHBOURHOOD_TIMEOUT_MS, 10) || 55000;
+const OGL = 'Source: Office for National Statistics licensed under the Open Government Licence v3.0';
 
-const svc = require('../src/services/neighbourhoodService');
-const config = require('../src/config');
-
-async function main() {
-  const postcode = process.argv.slice(2).join(' ').trim();
-  if (!postcode) { console.error('Usage: node scripts/neighbourhood-live-check.js "<postcode>"'); process.exit(2); }
-
-  const C = config.neighbourhood;
-  console.log('\n=== Neighbourhood live check ===');
-  console.log(`source            : ${C.source}`);
-  console.log(`dataset (pop)     : ${C.populationDataset || '(unset — discovery steps below)'}`);
-  console.log(`ONS User-Agent    : ${C.userAgent}`);
-  console.log(`Nomis UID         : ${C.nomisUid ? '(set, hidden)' : '(not set — guest, 25k-cell cap)'}`);
-
-  // Wrap the real transport so every upstream call prints its HTTP status (transparency for the report).
-  const realFetch = (url, opts = {}) => fetch(url, opts);
-  svc.__setTransport(async (url, { headers = {} } = {}) => {
-    const t0 = Date.now();
-    const res = await realFetch(url, { headers: { 'User-Agent': C.userAgent, ...headers } });
+async function get(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': UA } });
     const text = await res.text();
     let body = null; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
     console.log(`  → ${res.status}  ${url.split('?')[0]}  (${Date.now() - t0}ms)`);
-    return { status: res.status, headers: { 'retry-after': res.headers.get('retry-after') }, body };
-  });
+    // Respect a 429 once (rate-limit etiquette).
+    if (res.status === 429) {
+      const ra = Number(res.headers.get('retry-after')) || 2;
+      console.log(`     (429 — waiting ${ra}s then retrying once)`);
+      await new Promise((r) => setTimeout(r, Math.min(ra, 120) * 1000));
+      return get(url);
+    }
+    return { status: res.status, body };
+  } finally { clearTimeout(timer); }
+}
+
+function normalise(pc) { return String(pc || '').toUpperCase().replace(/\s+/g, ''); }
+
+async function resolvePostcode(pc) {
+  const res = await get(`${POSTCODES_BASE}/postcodes/${encodeURIComponent(pc)}`);
+  if (res.status !== 200 || !res.body || !res.body.result) throw new Error(`postcodes.io returned ${res.status}`);
+  const r = res.body.result; const codes = r.codes || {};
+  return { postcode: r.postcode, lsoa21: codes.lsoa || r.lsoa || null, msoa21: codes.msoa || r.msoa || null, ward: r.admin_ward || null, district: r.admin_district || null, country: r.country || null };
+}
+
+async function fetchNomis(area) {
+  const uid = NOMIS_UID ? `&uid=${encodeURIComponent(NOMIS_UID)}` : '';
+  const res = await get(`${NOMIS_BASE}/dataset/${DATASET}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`);
+  if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
+  let value = null;
+  for (const o of res.body.obs) { const v = o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value); if (Number.isFinite(Number(v))) value = (value || 0) + Number(v); }
+  return value == null ? null : { value, source: 'Nomis', datasetId: DATASET, edition: null, version: null, referenceDate: 'Census 2021', lastUpdated: null };
+}
+
+async function fetchOns(area) {
+  const meta = await get(`${ONS_BASE}/datasets/${encodeURIComponent(DATASET)}`);
+  if (meta.status !== 200 || !meta.body) return null;
+  const lastUpdated = meta.body.last_updated || null;
+  const href = meta.body.links && meta.body.links.latest_version && meta.body.links.latest_version.href;
+  if (!href) { console.log('     (no latest_version link — check the dataset id)'); return null; }
+  const obs = await get(`${href}/observations?geography=${encodeURIComponent(area.lsoa21)}`);
+  if (obs.status !== 200 || !obs.body) return null;
+  const list = obs.body.observations || (Array.isArray(obs.body) ? obs.body : null);
+  if (!Array.isArray(list) || !list.length) return null;
+  const value = Number(list[0].observation != null ? list[0].observation : list[0].value);
+  return Number.isFinite(value) ? { value, source: 'ONS', datasetId: DATASET, edition: (meta.body.links.latest_version && meta.body.links.latest_version.id) || null, version: href.split('/').pop(), referenceDate: 'Census 2021', lastUpdated } : null;
+}
+
+async function main() {
+  const pcIn = process.argv.slice(2).join(' ').trim();
+  if (!pcIn) { console.error('Usage: node neighbourhood-live-check.js "<postcode>"'); process.exit(2); }
+  const pc = normalise(pcIn);
+
+  console.log('\n=== Neighbourhood live check (standalone) ===');
+  console.log(`source         : ${SOURCE}`);
+  console.log(`dataset (pop)  : ${DATASET || '(unset — will verify postcodes.io then show discovery steps)'}`);
+  console.log(`ONS User-Agent : ${UA}`);
+  console.log(`Nomis UID      : ${NOMIS_UID ? '(set, hidden)' : '(not set — guest, 25k-cell cap)'}`);
 
   try {
     console.log('\n[1] postcodes.io — resolve area codes');
-    const area = await svc.resolvePostcode(postcode);
-    console.log('    area codes:', JSON.stringify(area, null, 0));
+    const area = await resolvePostcode(pc);
+    console.log('    area codes:', JSON.stringify(area));
 
-    if (!C.populationDataset) {
+    if (!DATASET) {
       console.log('\n[2] No NEIGHBOURHOOD_POP_DATASET set — discover the id, then re-run:');
-      console.log('    Nomis: curl "https://www.nomisweb.co.uk/api/v01/dataset/def.sdmx.json"  (find the population NM_xxxx_1)');
-      console.log('    ONS  : curl "https://api.beta.ons.gov.uk/v1/datasets?limit=338"          (find the population dataset slug)');
+      console.log('    Nomis: Invoke-RestMethod "https://www.nomisweb.co.uk/api/v01/dataset/def.sdmx.json" | Out-File nomis.json');
+      console.log('    ONS  : Invoke-RestMethod -Headers @{ "User-Agent" = $env:ONS_USER_AGENT } "https://api.beta.ons.gov.uk/v1/datasets?limit=338"');
       process.exit(0);
     }
 
-    console.log(`\n[2] ${C.source.toUpperCase()} — fetch one real figure`);
-    const fig = await svc.fetchPopulation(area);
-    if (!fig) {
-      console.log('    ✗ No usable figure returned. Check the dataset id / dimensions for this source, then re-run.');
-      process.exit(1);
-    }
-    fig.fetchedAt = new Date();
+    console.log(`\n[2] ${SOURCE.toUpperCase()} — fetch one real figure for ${area.lsoa21}`);
+    const fig = SOURCE === 'nomis' ? await fetchNomis(area) : await fetchOns(area);
+    if (!fig) { console.log('    ✗ No usable figure. Check the dataset id / dimensions for this source, then re-run.'); process.exit(1); }
+
+    const fetchedAt = new Date();
     console.log('\n=== RESULT (real figure + freshness) ===');
-    console.log(`    ${fig.label}: ${Number(fig.value).toLocaleString('en-GB')} ${fig.unit || ''}`.trim());
-    console.log(`    source        : ${fig.source}`);
-    console.log(`    datasetId     : ${fig.datasetId}`);
-    console.log(`    edition       : ${fig.edition || '-'}`);
-    console.log(`    version       : ${fig.version || '-'}`);
-    console.log(`    geography     : ${fig.geography} ${fig.geographyCode}`);
-    console.log(`    referenceDate : ${fig.referenceDate}`);
-    console.log(`    last_updated  : ${fig.lastUpdated || '(not provided by source)'}`);
-    console.log(`    fetchedAt     : ${fig.fetchedAt.toISOString()}`);
-    console.log(`    freshness     : ${svc.freshnessOf({ fetchedAt: fig.fetchedAt })}`);
-    console.log(`    attribution   : ${fig.attribution}`);
-    console.log('\n✓ End-to-end live check OK. These are the real figures the deployed route will return + cache.\n');
+    console.log(`    population   : ${Number(fig.value).toLocaleString('en-GB')}`);
+    console.log(`    source       : ${fig.source}`);
+    console.log(`    datasetId    : ${fig.datasetId}`);
+    console.log(`    edition      : ${fig.edition || '-'}`);
+    console.log(`    version      : ${fig.version || '-'}`);
+    console.log(`    geography    : lsoa21 ${area.lsoa21}`);
+    console.log(`    referenceDate: ${fig.referenceDate}`);
+    console.log(`    last_updated : ${fig.lastUpdated || '(not provided by source)'}`);
+    console.log(`    fetchedAt    : ${fetchedAt.toISOString()}`);
+    console.log(`    attribution  : ${OGL}`);
+    console.log('\n✓ End-to-end live check OK — this is what the deployed route will return + cache.\n');
   } catch (err) {
     console.error(`\n✗ Live check failed: ${err.message}`);
     process.exit(1);
