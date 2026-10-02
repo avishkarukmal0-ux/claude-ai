@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Trash2, TrendingDown, PiggyBank, AlertTriangle, CalendarClock, CalendarPlus } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingDown, PiggyBank, AlertTriangle, CalendarClock, CalendarPlus, BadgePercent, Printer, Share2, Check } from 'lucide-react';
 import { useWaste } from '../../lib/wasteStore';
 import { useInventory, DATE_TYPES, fefo, undatedQty } from '../../lib/inventoryStore';
+import { useMarkdowns, markdownLabelText, markdownTotals } from '../../lib/markdownStore';
 
 function newOpId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -16,9 +17,85 @@ const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
 export default function WasteView({ onBack }) {
   const { entries, addEntry, removeEntry, monthWasted, monthSaved } = useWaste();
   const { products, recordWaste, reverseWaste, wasteBatch, reverseBatchWaste, addBatch } = useInventory();
+  const { markdowns, createMarkdown, recordOutcome, removeMarkdown } = useMarkdowns();
 
   const [form, setForm] = useState({ name: '', value: '', qty: '1' });
   const [dc, setDc] = useState({ open: false, productId: '', qty: '', expiry: '', dateType: 'best-before' });
+  const [md, setMd] = useState(null); // active markdown form: { row, qty, reducedPrice }
+
+  const activeMarkdowns = useMemo(() => markdowns.filter((m) => m.status === 'active'), [markdowns]);
+  const mdTotals = useMemo(() => markdownTotals(markdowns), [markdowns]);
+
+  // Start marking down a FEFO row (sellable only — a hard-stop row can never be marked down).
+  function startMarkdown(row) {
+    const { product: p, info } = row;
+    if (info.mustPull) { toast.error('Past its use-by — pull it, don’t sell it.'); return; }
+    setMd({ row, qty: String(row.qty || 1), reducedPrice: '' });
+  }
+
+  function submitMarkdown() {
+    if (!md) return;
+    const { product: p, batchId, info } = md.row;
+    const res = createMarkdown({
+      productId: p.id, batchId: batchId || null, name: p.name,
+      qty: md.qty, originalPrice: p.price, reducedPrice: md.reducedPrice,
+      expiry: info?.date ? info.date.toISOString() : (p.expiry || null), dateType: info?.type || p.dateType || null,
+      mustPull: !!info?.mustPull,
+    });
+    if (!res.ok) { toast.error(res.error || 'Couldn’t create the markdown'); return; }
+    toast.success('Marked down — print or share the label. Stock is unchanged.');
+    setMd(null);
+    shareLabel(res.markdown);
+  }
+
+  async function shareLabel(m) {
+    const text = markdownLabelText(m);
+    try { if (navigator.share) { await navigator.share({ title: 'Markdown label', text }); return; } } catch { /* fall through */ }
+    try { await navigator.clipboard.writeText(text); toast('Label copied', { icon: '🏷️' }); } catch { /* ignore */ }
+  }
+
+  function printLabel(m) {
+    const safe = (s) => String(s).replace(/[<&>]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
+    const was = Number(m.originalPrice) > 0 ? `<div class="was">was £${Number(m.originalPrice).toFixed(2)}</div>` : '';
+    const by = m.expiry ? `<div class="by">Sell by ${new Date(m.expiry).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>` : '';
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Markdown label</title>
+      <style>@media print{@page{margin:10mm}} body{font-family:system-ui,Arial,sans-serif;text-align:center;padding:24px}
+      .tag{font-size:13px;letter-spacing:.15em;color:#b91c1c;font-weight:800}
+      .name{font-size:22px;font-weight:800;margin:8px 0}
+      .was{color:#6b7280;text-decoration:line-through;font-size:16px}
+      .now{font-size:40px;font-weight:900;color:#b91c1c;margin:4px 0}
+      .by{font-size:14px;color:#374151;margin-top:8px}</style></head>
+      <body><div class="tag">REDUCED TO CLEAR</div><div class="name">${safe(m.name || 'Item')}</div>
+      ${was}<div class="now">£${Number(m.reducedPrice).toFixed(2)}</div>${by}
+      <script>window.onload=function(){window.print()}</script></body></html>`;
+    try {
+      const w = window.open('', '_blank');
+      if (!w) { toast('Pop-up blocked — use Share instead', { icon: 'ℹ️' }); return; }
+      w.document.write(html); w.document.close();
+    } catch { toast.error('Couldn’t open the print view'); }
+  }
+
+  // Bin n units of a markdown's batch/product through the EXISTING waste flow (real stock movement), then
+  // close the markdown with the reported sold + binned split. "Sold" is reported-only (estimated), never a
+  // confirmed sale and never a stock change here.
+  function closeMarkdown(m, soldReported, binned) {
+    const n = Number(binned) || 0;
+    if (n > 0) {
+      const p = products.find((x) => x.id === m.productId);
+      if (p) {
+        const opGroupId = newOpId();
+        const valuation = (p.cost ?? 0);
+        const res = m.batchId
+          ? wasteBatch({ id: p.id, batchId: m.batchId, qty: n, valuation, reason: 'marked down — unsold, binned', opGroupId })
+          : recordWaste({ id: p.id, qty: n, valuation, reason: 'marked down — unsold, binned', batchId: opGroupId });
+        if (res && res.ok) {
+          addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: m.batchId || undefined, batchInfo: res.batch, reason: 'marked down — unsold' });
+        }
+      }
+    }
+    recordOutcome(m.id, { soldReported: Number(soldReported) || 0, binned: n, close: true });
+    toast.success('Markdown closed');
+  }
 
   function log(type) {
     if (!form.value) return;
@@ -104,18 +181,89 @@ export default function WasteView({ onBack }) {
                       <span className="mt-0.5 inline-block rounded-full bg-warning-light px-1.5 py-0.5 text-[10px] font-semibold text-warning-dark">Mark down to sell in time</span>
                     )}
                   </span>
-                  <button
-                    type="button"
-                    disabled={qty <= 0}
-                    onClick={() => binRow(row)}
-                    className="shrink-0 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95 disabled:opacity-40"
-                  >
-                    {info.mustPull ? 'Pull' : 'Bin'}
-                  </button>
+                  <span className="flex shrink-0 flex-col gap-1">
+                    {!info.mustPull && (
+                      <button
+                        type="button"
+                        disabled={qty <= 0}
+                        onClick={() => startMarkdown(row)}
+                        className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary ring-1 ring-primary/20 active:scale-95 disabled:opacity-40"
+                      >
+                        Mark down
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={qty <= 0}
+                      onClick={() => binRow(row)}
+                      className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95 disabled:opacity-40"
+                    >
+                      {info.mustPull ? 'Pull' : 'Bin'}
+                    </button>
+                  </span>
                 </li>
               );
             })}
           </ul>
+        </section>
+      )}
+
+      {/* Markdown form (price action only — does NOT change stock) */}
+      {md && (
+        <div className="mb-4 rounded-2xl border border-primary/20 bg-white p-3 shadow-sm">
+          <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400"><BadgePercent className="h-3.5 w-3.5" /> Mark down</h3>
+          <p className="mb-2 text-sm font-semibold text-gray-900">{md.row.product.name}</p>
+          <div className="mb-2 grid grid-cols-2 gap-2">
+            <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">Qty
+              <input value={md.qty} onChange={(e) => setMd((m) => ({ ...m, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            </label>
+            <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">New £
+              <input value={md.reducedPrice} onChange={(e) => setMd((m) => ({ ...m, reducedPrice: e.target.value }))} inputMode="decimal" placeholder={Number(md.row.product.price) > 0 ? `was ${money(md.row.product.price)}` : 'price'} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            </label>
+          </div>
+          <p className="mb-2 text-[11px] text-gray-400">Creates a reduced-price label to print/share. It does <strong>not</strong> change your stock or record a sale.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setMd(null)} className="rounded-xl bg-gray-100 px-3 py-2.5 text-sm font-semibold text-gray-600">Cancel</button>
+            <button type="button" onClick={submitMarkdown} className="rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white">Create label</button>
+          </div>
+        </div>
+      )}
+
+      {/* Active markdowns */}
+      {activeMarkdowns.length > 0 && (
+        <section className="mb-4">
+          <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <BadgePercent className="h-3.5 w-3.5" /> On markdown
+            {mdTotals.unitsOnOffer > 0 && <span className="ml-1 font-normal normal-case text-gray-400">· {mdTotals.unitsOnOffer} unit{mdTotals.unitsOnOffer === 1 ? '' : 's'}</span>}
+          </h3>
+          <ul className="space-y-2">
+            {activeMarkdowns.map((m) => (
+              <li key={m.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-gray-900">{m.name} <span className="font-normal text-gray-400">×{m.qty}</span></span>
+                    <span className="block text-[11px] text-gray-500">{Number(m.originalPrice) > 0 ? `was ${money(m.originalPrice)} · ` : ''}now <span className="font-semibold text-danger">{money(m.reducedPrice)}</span>{m.expiry ? ` · sell by ${new Date(m.expiry).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</span>
+                  </span>
+                  <button type="button" onClick={() => removeMarkdown(m.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove markdown"><Trash2 className="h-4 w-4" /></button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => printLabel(m)} className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><Printer className="h-3.5 w-3.5" /> Print</button>
+                  <button type="button" onClick={() => shareLabel(m)} className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sold = Number(window.prompt(`How many of the ${m.qty} sold at the reduced price? (reported only — not a confirmed sale)`, '0'));
+                      if (Number.isNaN(sold)) return;
+                      const bin = Math.max(0, (Number(m.qty) || 0) - (Number(sold) || 0));
+                      if (window.confirm(`Record ${sold || 0} sold (reported) and bin the remaining ${bin}?`)) closeMarkdown(m, sold, bin);
+                    }}
+                    className="flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"
+                  ><Check className="h-3.5 w-3.5" /> Record outcome</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[10px] text-gray-400">“Sold” here is your own estimate — confirmed sales only come from till imports. Unsold units you bin update stock.</p>
         </section>
       )}
 
