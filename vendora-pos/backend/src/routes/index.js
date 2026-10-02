@@ -17,6 +17,11 @@ router.use('/pwa-sync', pwaSyncRoutes);
 const pwaDocRoutes = require('./pwaDocRoutes');
 router.use('/pwa-docs', pwaDocRoutes);
 
+// ── PWA product images (core). Product photos → GridFS, shop-scoped, all roles. OFF unless
+//    PRODUCT_IMAGES=true (routes then report enabled:false / 503). PWA token required. ──
+const pwaImageRoutes = require('./pwaImageRoutes');
+router.use('/pwa-images', pwaImageRoutes);
+
 // ── PWA barcode auto-fill (scan → name/category via Open Food Facts proxy). PWA token required. ──
 const pwaLookupRoutes = require('./pwaLookupRoutes');
 router.use('/pwa-lookup', pwaLookupRoutes);

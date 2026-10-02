@@ -8,6 +8,7 @@ import { useInventory, margin, worstExpiry } from '../../lib/inventoryStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse } from '../../config/categories';
 import { lookupBarcode } from '../../lib/productLookup';
+import ProductImage from '../common/ProductImage';
 
 // Scan → identify. Scan (or type) a barcode and see exactly what it is: the product, its category, price,
 // margin and stock — and whether the scan was a SINGLE or a whole CASE. Book stock in (a case books in
@@ -155,6 +156,18 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
   // must not override packSize when booking in cases). A case-barcode scan already carries packSize.
   const per = Number(p.packSize) > 1 ? Number(p.packSize) : (multiplier || 1);
 
+  // Fetch a provider suggestion (image + pack size) ONLY when the product has no picture yet — the selection
+  // order prefers the owner's/catalogue photo. Never blocks the result; fills in when it arrives.
+  const [suggested, setSuggested] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (p.image && p.image.id) { setSuggested(null); return undefined; }
+    lookupBarcode(p.barcode).then((r) => { if (live && r && r.found) setSuggested(r); });
+    return () => { live = false; };
+  }, [p.id, p.image && p.image.id, p.barcode]);
+
+  const sizeLabel = p.size || (suggested && suggested.size) || null;
+
   function bookCases(nCases) {
     const units = Math.max(1, nCases) * per;
     const res = inv.bookIn(p.id, units);
@@ -173,16 +186,29 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
       </div>
 
       <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-bold text-gray-900">{p.name}</h2>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-          {p.category && <span className="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-600">{p.category}</span>}
-          {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
-          {m != null && <span className={m < 0 ? 'text-danger' : 'text-success'}>{(m * 100).toFixed(0)}% margin</span>}
-          {p.packSize > 1 && <span className="inline-flex items-center gap-1"><Package2 className="h-3 w-3" /> case of {p.packSize}</span>}
-        </div>
-        <div className="mt-3 flex items-baseline gap-1">
-          <span className="text-3xl font-extrabold tabular-nums text-gray-900">{Number(p.qty) || 0}</span>
-          <span className="text-sm text-gray-500">in stock</span>
+        <div className="flex gap-4">
+          {/* Picture beside the details — resolves owner → catalogue → suggestion → placeholder, non-blocking. */}
+          <ProductImage
+            product={p}
+            suggested={suggested}
+            barcode={p.barcode}
+            onSave={(ref) => inv.updateProduct(p.id, { image: ref })}
+            onRemove={() => inv.updateProduct(p.id, { image: null })}
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-bold text-gray-900">{p.name}</h2>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+              {sizeLabel && <span className="font-medium text-gray-600">{sizeLabel}</span>}
+              {p.category && <span className="rounded-full bg-gray-100 px-2 py-0.5 font-medium text-gray-600">{p.category}</span>}
+              <span className={`inline-flex items-center gap-1 font-semibold ${isCaseScan ? 'text-primary' : 'text-success'}`}>{isCaseScan ? <><Package2 className="h-3 w-3" /> case ×{multiplier}</> : <><Check className="h-3 w-3" /> single</>}</span>
+              {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
+              {m != null && <span className={m < 0 ? 'text-danger' : 'text-success'}>{(m * 100).toFixed(0)}% margin</span>}
+            </div>
+            <div className="mt-3 flex items-baseline gap-1">
+              <span className="text-3xl font-extrabold tabular-nums text-gray-900">{Number(p.qty) || 0}</span>
+              <span className="text-sm text-gray-500">in stock</span>
+            </div>
+          </div>
         </div>
       </div>
 

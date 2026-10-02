@@ -7,8 +7,13 @@
 // It only ever returns name/category/brand — never cost, price, stock or anything shop-specific.
 
 const OFF_BASE = 'https://world.openfoodfacts.org/api/v2/product';
-const FIELDS = 'product_name,brands,categories_tags';
+// quantity gives the pack size/weight (e.g. "330 ml"); image_front_* are the product-front photos.
+const FIELDS = 'product_name,brands,categories_tags,quantity,image_front_small_url,image_front_url';
 const TIMEOUT_MS = 4000;
+// Open Food Facts product PHOTOS are licensed CC BY-SA 3.0 — we must show attribution and never present them
+// as the shop's own until the owner confirms. (The underlying DATA is ODbL; we only surface name/category.)
+const OFF_IMAGE_LICENCE = 'CC BY-SA 3.0';
+const OFF_IMAGE_ATTRIBUTION = 'Photo: Open Food Facts contributors (CC BY-SA 3.0)';
 
 /** Turn an Open Food Facts category tag ("en:sweet-snacks") into a readable label ("Sweet snacks"). */
 function labelFromTag(tag) {
@@ -26,8 +31,22 @@ function mapOffProduct(json) {
   const tags = Array.isArray(p.categories_tags) ? p.categories_tags : [];
   // The last tag is the most specific category.
   const category = tags.length ? labelFromTag(tags[tags.length - 1]) : null;
-  if (!name && !category) return { found: false };
-  return { found: true, name, category, brand, source: 'openfoodfacts' };
+  const size = (p.quantity || '').trim() || null;
+  // A SUGGESTED product photo (never the shop's own): prefer the small image for a thumbnail, keep the full
+  // one too. Only https URLs; labelled + attributed in the UI, stored only if the owner confirms it.
+  const small = typeof p.image_front_small_url === 'string' && p.image_front_small_url.startsWith('https://') ? p.image_front_small_url : null;
+  const full = typeof p.image_front_url === 'string' && p.image_front_url.startsWith('https://') ? p.image_front_url : null;
+  const image = small || full || null;
+  if (!name && !category && !image) return { found: false };
+  const out = { found: true, name, category, brand, size, source: 'openfoodfacts' };
+  if (image) {
+    out.image = image;
+    out.imageLarge = full || image;
+    out.imageLicence = OFF_IMAGE_LICENCE;
+    out.imageAttribution = OFF_IMAGE_ATTRIBUTION;
+    out.imageSource = 'openfoodfacts';
+  }
+  return out;
 }
 
 /** Look a barcode up. Resolves to { found, name?, category?, brand?, source? }; never throws. */
@@ -51,4 +70,34 @@ async function lookup(barcode) {
   }
 }
 
-module.exports = { lookup, mapOffProduct, labelFromTag };
+// Allow-listed Open Food Facts image hosts — we only ever proxy a provider image from these, never an
+// arbitrary URL (prevents the endpoint being used as an open image proxy / SSRF).
+const OFF_IMAGE_HOSTS = new Set(['images.openfoodfacts.org', 'static.openfoodfacts.org', 'world.openfoodfacts.org']);
+
+/** True if a URL is an https Open Food Facts image we're willing to proxy. */
+function isAllowedImageUrl(url) {
+  try { const u = new URL(String(url)); return u.protocol === 'https:' && OFF_IMAGE_HOSTS.has(u.hostname); }
+  catch { return false; }
+}
+
+/**
+ * Proxy a provider product image (CSP-safe: the browser only ever talks to our own host). Only allow-listed
+ * OFF image hosts; returns { buffer, contentType } or null. Never throws.
+ */
+async function fetchImage(url) {
+  if (!isAllowedImageUrl(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Vendora-POS/1.0 (UK convenience pilot)' } });
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    if (!contentType.startsWith('image/')) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (!buffer.length || buffer.length > 3 * 1024 * 1024) return null; // sane cap for a provider thumbnail
+    return { buffer, contentType };
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
+
+module.exports = { lookup, mapOffProduct, labelFromTag, fetchImage, isAllowedImageUrl };

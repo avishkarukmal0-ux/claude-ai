@@ -3,6 +3,7 @@ import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Penc
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
 import ProductHistory from './ProductHistory';
 import MergeView from './MergeView';
+import { ProductThumb } from '../common/ProductImage';
 import { useFormDraft } from '../../lib/formDraft';
 import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
@@ -154,7 +155,9 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
   return (
     <li className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="flex min-w-0 gap-2.5">
+          <ProductThumb product={p} />
+          <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
             {p.barcode && <span className="font-mono">{p.barcode}</span>}
@@ -206,6 +209,7 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
                 {ei.daysLeft < 0 ? (ei.mustPull ? 'PULL' : 'expired') : `${ei.daysLeft}d`}
               </span>
             ); })()}
+          </div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">

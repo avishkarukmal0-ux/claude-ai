@@ -57,6 +57,17 @@ module.exports = {
     allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'],
   },
 
+  // Product pictures (core feature — NOT the paid add-on). Owner photos are kept on-device and, when this is
+  // on, backed up cross-device to GridFS (shop-scoped). OFF by default (local-only until configured).
+  //   PRODUCT_IMAGES=true     → enable the /api/pwa-images upload/download/delete endpoints
+  //   PRODUCT_IMAGE_MAX_MB    → per-image cap after client compression (default 5)
+  productImages: {
+    enabled: process.env.PRODUCT_IMAGES === 'true',
+    provider: process.env.PRODUCT_IMAGES_PROVIDER || 'gridfs',
+    maxBytes: (parseInt(process.env.PRODUCT_IMAGE_MAX_MB, 10) || 5) * 1024 * 1024,
+    allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },

@@ -27,6 +27,9 @@ flag in the Render service env and redeploy.
 | `DOC_BACKUP_PROVIDER` | backend | gridfs | Storage provider for `DOC_BACKUP`. `gridfs` needs no extra service or secret (uses the existing Mongo). |
 | `DOC_MAX_FILE_MB` | backend | 10 | Per-file size cap for document backup. |
 | `VITE_DOC_BACKUP` | frontend | off | `true` shows the per-invoice "Back up" control (owner/manager). Must match the backend `DOC_BACKUP`; the UI also checks the server's `/status` before offering it. |
+| `PRODUCT_IMAGES` | backend | off | `true` enables cross-device product-picture backup over `/api/pwa-images` (GridFS, shop-scoped, all roles). Off → photos stay on-device (still fully usable). |
+| `PRODUCT_IMAGE_MAX_MB` | backend | 5 | Per-image size cap (after client compression). |
+| `VITE_PRODUCT_IMAGES` | frontend | off | `true` lets the app back up/fetch product photos cross-device (needs backend `PRODUCT_IMAGES`). Off → taking/showing photos still works on the device that took them. Product pictures are a CORE feature, never behind the paid add-on. |
 | `SYNC_HISTORY_KEEP` | backend | 10 | Revisions kept per store when history is on. |
 | `SYNC_HISTORY_TTL_DAYS` | backend | 30 | History older than this self-expires (TTL index backstop). |
 
@@ -155,6 +158,23 @@ The upload→download **round-trip, isolation and delete are covered by a DB-gat
 not tell owners a document is recoverable until you have run that test (or done a manual cross-device
 restore) against your live storage. The UI only claims "Backed up" after the server confirms an upload — it
 makes no cross-device recovery promise beyond what the server reports it holds.
+
+## Product pictures (core feature)
+
+Show a product photo after a scan, selection order: **owner photo → confirmed catalogue image → provider
+suggestion → placeholder**.
+
+- **On-device first:** an owner photo is compressed to a full image + thumbnail and kept on the device
+  (`lib/productImages.js`, per-image local keys — never in the sync blobs; only a small `product.image` ref
+  syncs). Works offline immediately; a canvas re-encode strips EXIF/GPS metadata.
+- **Cross-device backup (opt-in):** with `PRODUCT_IMAGES=true` (+ `VITE_PRODUCT_IMAGES=true`) the full image
+  is backed up to GridFS, shop-scoped (every read/delete filters on the account id), and cached as a thumb
+  on other devices for offline use.
+- **Provider suggestions:** Open Food Facts product photos, fetched through a CSP-safe, host-allowlisted
+  backend proxy (`/api/pwa-lookup/image`). They are **labelled "SUGGESTED" and attributed** (CC BY-SA 3.0),
+  never shown as the shop's own and never stored until the owner confirms. An owner photo is never
+  overwritten automatically. No fabricated packaging, no arbitrary web images.
+- **Validation:** image types + size enforced client-side and server-side; deletion is recoverable (undo).
 
 ## Monitoring & support (Phase 3.10)
 
