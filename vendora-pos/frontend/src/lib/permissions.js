@@ -16,6 +16,7 @@ export const MONEY_SCREENS = new Set([
   'takings', 'overview', 'outcomes', 'weekly-report',
   'claims', 'credit-notes', 'invoices', 'price-history', 'price-alerts',
   'journey', // buying journey surfaces claim/credit figures → owner/manager only
+  'supplier-insights', 'payments', // costs, spend, bills → owner/manager only
 ]);
 
 function norm(role) { return ROLES.includes(role) ? role : 'owner'; }

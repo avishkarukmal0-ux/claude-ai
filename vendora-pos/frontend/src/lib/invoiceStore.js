@@ -93,6 +93,25 @@ export function matchLines(lines, products, { supplierId = null } = {}) {
   });
 }
 
+// --- payment helpers (Phase 5, pure) ---------------------------------------
+/** Total paid so far against an invoice (sum of partial payments), decimal-safe. */
+export function invoicePaid(inv) { return sumMoney((inv && inv.payments ? inv.payments : []).map((p) => p.amount)); }
+/** Amount still owed = total − paid, floored at 0. Returns null if the invoice has no total recorded. */
+export function invoiceOwed(inv) {
+  const total = inv && inv.total != null ? r2(inv.total) : invoiceTotal(inv);
+  if (!(total > 0)) return null; // unknown total → can't say what's owed
+  return r2(Math.max(0, total - invoicePaid(inv)));
+}
+/** 'paid' | 'partial' | 'unpaid' | 'unknown' (no total). */
+export function invoicePaymentStatus(inv) {
+  const total = inv && inv.total != null ? r2(inv.total) : invoiceTotal(inv);
+  if (!(total > 0)) return 'unknown';
+  const paid = invoicePaid(inv);
+  if (paid <= 0) return 'unpaid';
+  if (paid + 0.005 >= total) return 'paid';
+  return 'partial';
+}
+
 /** A clean draft line. `uncertain` flags an OCR field the user should check. */
 export function blankInvoiceLine(partial = {}) {
   return {
@@ -144,6 +163,8 @@ export function useInvoices() {
       fileType: file ? (file.type || 'image') : draft.fileType || null,
       source: draft.source || 'manual',
       status: draft.status === 'committed' ? 'committed' : 'draft',
+      dueDate: draft.dueDate || null,            // payment due date (Phase 5), optional
+      payments: Array.isArray(draft.payments) ? draft.payments : [], // [{ id, amount, at }] partial payments
       createdAt: draft.createdAt || Date.now(),
       committedAt: draft.committedAt || null,
       updatedAt: Date.now(),
@@ -157,6 +178,25 @@ export function useInvoices() {
   const commitInvoice = useCallback((id) => {
     const next = load().map((x) => (x.id === id ? { ...x, status: 'committed', committedAt: Date.now(), updatedAt: Date.now() } : x));
     return commitAll(next);
+  }, []);
+
+  /** Set/clear the payment due date (Phase 5). */
+  const setDueDate = useCallback((id, dueDate) => {
+    return commitAll(load().map((x) => (x.id === id ? { ...x, dueDate: dueDate || null, updatedAt: Date.now() } : x)));
+  }, []);
+
+  /** Record a (partial) payment against an invoice. Amount is clamped positive; status is derived. */
+  const addPayment = useCallback((id, amount) => {
+    const amt = r2(amount);
+    if (!(amt > 0)) return { ok: false, error: 'Enter a payment amount.' };
+    return commitAll(load().map((x) => (x.id === id
+      ? { ...x, payments: [...(x.payments || []), { id: newId('pay'), amount: amt, at: Date.now() }], updatedAt: Date.now() }
+      : x)));
+  }, []);
+
+  /** Remove a recorded payment (correction). */
+  const removePayment = useCallback((id, paymentId) => {
+    return commitAll(load().map((x) => (x.id === id ? { ...x, payments: (x.payments || []).filter((p) => p.id !== paymentId), updatedAt: Date.now() } : x)));
   }, []);
 
   const removeInvoice = useCallback((id) => {
@@ -182,7 +222,7 @@ export function useInvoices() {
 
   const findDuplicate = useCallback((inv) => findDuplicateInvoice(inv, load()), []);
 
-  return { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate };
+  return { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate, setDueDate, addPayment, removePayment };
 }
 
 // Test hook: clear invoice files for the active workspace.

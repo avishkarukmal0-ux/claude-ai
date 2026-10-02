@@ -57,7 +57,9 @@ import { getOpenSuggestionCount } from '../lib/suggestionsStore';
 import { getOpenExceptionCount } from '../lib/taskStore';
 import ErrorBoundary from '../components/ErrorBoundary';
 import BuyingJourneyView from '../components/buy/BuyingJourneyView';
-import { Route } from 'lucide-react';
+import SupplierInsightsView from '../components/buy/SupplierInsightsView';
+import PaymentCalendarView from '../components/buy/PaymentCalendarView';
+import { Route, Scale, CalendarClock as CalClock } from 'lucide-react';
 
 const ONBOARDED_KEY = 'vendora:onboarded';
 function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return true; } }
@@ -190,6 +192,8 @@ export default function HomePage() {
         {screen === 'stocktake' && <StocktakeView onBack={() => setScreen(null)} />}
         {screen === 'refill' && <RefillView onBack={() => setScreen(null)} />}
         {screen === 'journey' && canSeeScreen(role, 'journey') && <BuyingJourneyView onBack={() => setScreen(null)} onGo={go} />}
+        {screen === 'supplier-insights' && canSeeScreen(role, 'supplier-insights') && <SupplierInsightsView onBack={() => setScreen(null)} />}
+        {screen === 'payments' && canSeeScreen(role, 'payments') && <PaymentCalendarView onBack={() => setScreen(null)} />}
         {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
         {screen === 'claims' && canSeeScreen(role, 'claims') && <ClaimsView onBack={() => setScreen(null)} />}
         {screen === 'price-alerts' && canSeeScreen(role, 'price-alerts') && <PriceAlertsView onBack={() => setScreen(null)} />}
@@ -295,6 +299,8 @@ export default function HomePage() {
             {INVOICES_ENABLED && !isStaff && <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />}
             {!isStaff && <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />}
             {INVOICES_ENABLED && !isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
+            {!isStaff && <HubTile icon={Scale} accent={accent} label="Compare suppliers" desc="Unit costs & reliability" onClick={() => setScreen('supplier-insights')} />}
+            {!isStaff && <HubTile icon={CalClock} accent={accent} label="Payments due" desc="Bills, due dates & expected credits" onClick={() => setScreen('payments')} />}
             <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
           </Hub>
         )}
