@@ -18,7 +18,7 @@ const ALLOWED = new Set([
   'shop_type', 'inventory_v1', 'suppliers_v1', 'buylist_v1', 'waste_v1', 'takings_v1', 'movements_v1',
   'suggestions_v1', 'stocktake_v1', 'stocktake_history_v1', 'deliveries_v1', 'orders_v1', 'claims_v1',
   'price_alerts_v1', 'tasks_v1', 'handovers_v1', 'requests_v1', 'sales_imports_v1', 'invoices_v1',
-  'credit_notes_v1', 'markdowns_v1',
+  'credit_notes_v1', 'markdowns_v1', 'trials_v1',
 ]);
 
 const MAX_VALUE_BYTES = 2 * 1024 * 1024; // 2 MB per store — generous for a single shop, bounds abuse

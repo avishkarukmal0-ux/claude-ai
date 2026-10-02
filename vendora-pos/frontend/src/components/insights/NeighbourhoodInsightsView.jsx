@@ -4,6 +4,7 @@ import {
   ArrowLeft, MapPin, Users, Home, Info, AlertTriangle, Lock, Loader2, BarChart3, Globe2,
 } from 'lucide-react';
 import { getStatus, getPreview, getProfile } from '../../lib/insightsClient';
+import TrialsPanel from './TrialsPanel';
 
 const RADII = [{ m: 500, label: '500 m' }, { m: 1000, label: '1 km' }, { m: 3000, label: '3 km' }];
 const CAT_LABEL = { ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
@@ -83,6 +84,9 @@ export default function NeighbourhoodInsightsView({ onBack }) {
               </div>
 
               {result && <ProfileResult result={result} />}
+
+              {/* Phase 3 — connect the area picture to the shop's real demand (requests → trial → sales). */}
+              <TrialsPanel />
             </>
           )}
         </>
