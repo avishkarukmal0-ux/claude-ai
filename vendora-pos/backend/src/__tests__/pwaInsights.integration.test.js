@@ -8,9 +8,32 @@ if (process.env.VENDORA_DNS_PUBLIC === '1') {
 }
 process.env.INSIGHTS_ENABLED = 'true';
 process.env.INSIGHTS_BILLING_WEBHOOK_SECRET = 'test-webhook-secret';
+// Configure Stripe billing so the REAL raw-body signed webhook is active. saleMode='subscription' with NO
+// census data provider and NO one-off price → nothing is actually on sale (checkout still 503), but the
+// signed webhook endpoint works, letting us test signature verification + entitlement end-to-end.
+process.env.INSIGHTS_BILLING_PROVIDER = 'stripe';
+process.env.STRIPE_SECRET_KEY = 'sk_test_dummydummydummy';
+process.env.INSIGHTS_STRIPE_WEBHOOK_SECRET = 'whsec_itest_secret';
+process.env.INSIGHTS_STRIPE_PRICE_CORE = 'price_core';
+process.env.INSIGHTS_STRIPE_PRICE_ADDON = 'price_addon';
+process.env.INSIGHTS_SALE_MODE = 'subscription';
 
 const mongoose = require('mongoose');
 const request = require('supertest');
+const Stripe = require('stripe');
+
+const stripeLib = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+function stripeSigned(eventObj) {
+  const payload = JSON.stringify(eventObj);
+  const header = stripeLib.webhooks.generateTestHeaderString({ payload, secret: process.env.INSIGHTS_STRIPE_WEBHOOK_SECRET });
+  return { payload, header };
+}
+function subUpdatedActiveWithAddon(accountId) {
+  return {
+    id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, type: 'customer.subscription.updated', created: Math.floor(Date.now() / 1000),
+    data: { object: { id: 'sub_itest', status: 'active', customer: 'cus_itest', current_period_end: Math.floor(Date.now() / 1000) + 30 * 86400, metadata: { accountId: String(accountId) }, items: { data: [{ id: 'si_core', price: { id: 'price_core' } }, { id: 'si_addon', price: { id: 'price_addon' } }] } } },
+  };
+}
 
 const URI = process.env.VENDORA_TEST_URI;
 const dbTest = URI ? test : test.skip;
@@ -85,9 +108,60 @@ describe('pwa-insights — entitlement enforced on the server', () => {
     expect(res.status).toBe(401);
   });
 
-  dbTest('checkout says purchasing is unavailable (no billing provider configured)', async () => {
+  dbTest('checkout says purchasing is unavailable (nothing on sale: no data + no one-off price)', async () => {
     const a = await newOwner('Ins A6');
     const res = await request(app).post('/api/pwa-insights/checkout').set('Authorization', `Bearer ${a.token}`).send({});
     expect(res.status).toBe(503);
+  });
+
+  dbTest('core PWA access stays available WITHOUT the add-on (images status 200 while profile 402)', async () => {
+    const a = await newOwner('Ins Core');
+    const core = await request(app).get('/api/pwa-images/status').set('Authorization', `Bearer ${a.token}`);
+    expect(core.status).toBe(200); // the rest of the PWA works with no entitlement
+    const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(prof.status).toBe(402);
+  });
+
+  dbTest('a duplicate webhook delivery is a safe no-op (idempotent)', async () => {
+    const a = await newOwner('Ins Dup');
+    const body = { type: 'purchased', accountId: a.id, currentPeriodEnd: Date.now() + 30 * 86400000, eventId: `dup_${Date.now()}`, eventCreatedMs: Date.now() };
+    const first = await request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', 'test-webhook-secret').send(body);
+    expect(first.body.status).toBe('active');
+    const second = await request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', 'test-webhook-secret').send(body);
+    expect(second.body.duplicate).toBe(true);
+    const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(prof.status).toBe(200); // still entitled
+  });
+
+  dbTest('an out-of-order (older) event is ignored; a newer one applies', async () => {
+    const a = await newOwner('Ins Order');
+    const t = Date.now();
+    await request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', 'test-webhook-secret')
+      .send({ type: 'purchased', accountId: a.id, currentPeriodEnd: t + 30 * 86400000, eventId: `o1_${t}`, eventCreatedMs: t + 2000 });
+    // Older payment_failed arrives late → must NOT revoke the newer active state.
+    const stale = await request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', 'test-webhook-secret')
+      .send({ type: 'payment_failed', accountId: a.id, eventId: `o2_${t}`, eventCreatedMs: t + 1000 });
+    expect(stale.body.skipped).toBe(true);
+    const stillOk = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(stillOk.status).toBe(200);
+    // A genuinely newer payment_failed DOES revoke.
+    await request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', 'test-webhook-secret')
+      .send({ type: 'payment_failed', accountId: a.id, eventId: `o3_${t}`, eventCreatedMs: t + 3000 });
+    const revoked = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(revoked.status).toBe(402);
+  });
+
+  dbTest('the REAL Stripe webhook (raw body, signed) grants access; a forged body is rejected', async () => {
+    const a = await newOwner('Ins Stripe');
+    const { payload, header } = stripeSigned(subUpdatedActiveWithAddon(a.id));
+    const ok = await request(app).post('/api/pwa-insights/billing/stripe/webhook')
+      .set('stripe-signature', header).set('Content-Type', 'application/json').send(Buffer.from(payload));
+    expect(ok.status).toBe(200);
+    const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(prof.status).toBe(200); // entitled via the signed webhook
+
+    const forged = await request(app).post('/api/pwa-insights/billing/stripe/webhook')
+      .set('stripe-signature', header).set('Content-Type', 'application/json').send(Buffer.from(payload.replace('sub_itest', 'sub_HACK')));
+    expect(forged.status).toBe(400); // signature no longer matches the body
   });
 });

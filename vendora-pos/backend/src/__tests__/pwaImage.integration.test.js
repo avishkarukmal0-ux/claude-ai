@@ -40,8 +40,13 @@ afterAll(async () => {
 });
 
 async function newOwner(shopName) {
-  const reg = await request(app).post('/api/pwa-auth/register').send({ email: email(), password: 'sup3rsecret', shopName });
-  return { token: reg.body.token, id: reg.body.shop.id };
+  const em = email();
+  const reg = await request(app).post('/api/pwa-auth/register').send({ email: em, password: 'sup3rsecret', shopName });
+  return { token: reg.body.token, id: reg.body.shop.id, email: em, password: 'sup3rsecret' };
+}
+async function loginAgain(owner) {
+  const res = await request(app).post('/api/pwa-auth/login').send({ email: owner.email, password: owner.password });
+  return res.body.token; // a token for the SAME shop from a different "device"
 }
 
 describe('pwa-images — round-trip + isolation', () => {
@@ -77,6 +82,51 @@ describe('pwa-images — round-trip + isolation', () => {
     const a = await newOwner('Img Shop A4');
     const res = await request(app).post(`/api/pwa-images/img-test-bad-${Date.now()}`).set('Authorization', `Bearer ${a.token}`).attach('file', Buffer.from('%PDF-1.4'), { filename: 'x.pdf', contentType: 'application/pdf' });
     expect(res.status).toBe(400);
+  });
+
+  dbTest('a second authorised device (fresh login) recovers the same image', async () => {
+    const a = await newOwner('Img Shop Dev1');
+    const fileId = `img-test-2dev-${Date.now()}`;
+    await request(app).post(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`).attach('file', PNG, { filename: 'p.png', contentType: 'image/png' });
+    const token2 = await loginAgain(a); // the shop signs in on another device
+    const dl = await request(app).get(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${token2}`).buffer(true).parse((res, cb) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(dl.status).toBe(200);
+    expect(Buffer.compare(dl.body, PNG)).toBe(0);
+  });
+
+  dbTest('an approved catalogue image is stored with its source and listed', async () => {
+    const a = await newOwner('Img Shop Cat');
+    const fileId = `img-test-cat-${Date.now()}`;
+    const up = await request(app).post(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`)
+      .field('source', 'catalogue').field('barcode', '5000000000000')
+      .attach('file', PNG, { filename: 'p.png', contentType: 'image/png' });
+    expect(up.status).toBe(200);
+    const list = await request(app).get('/api/pwa-images').set('Authorization', `Bearer ${a.token}`);
+    const entry = (list.body.files || []).find((f) => f.fileId === fileId);
+    expect(entry).toBeTruthy();
+    expect(entry.source).toBe('catalogue');
+  });
+
+  dbTest('authorised delete removes the server copy (then 404)', async () => {
+    const a = await newOwner('Img Shop Del');
+    const fileId = `img-test-del-${Date.now()}`;
+    await request(app).post(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`).attach('file', PNG, { filename: 'p.png', contentType: 'image/png' });
+    const del = await request(app).delete(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`);
+    expect(del.status).toBe(200);
+    const dl = await request(app).get(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`);
+    expect(dl.status).toBe(404);
+  });
+
+  dbTest('a shop cannot delete another shop’s image', async () => {
+    const a = await newOwner('Img Shop DelA');
+    const b = await newOwner('Img Shop DelB');
+    const fileId = `img-test-deliso-${Date.now()}`;
+    await request(app).post(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`).attach('file', PNG, { filename: 'p.png', contentType: 'image/png' });
+    await request(app).delete(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${b.token}`); // B deletes nothing
+    const aStill = await request(app).get(`/api/pwa-images/${fileId}`).set('Authorization', `Bearer ${a.token}`);
+    expect(aStill.status).toBe(200); // A's image is untouched
   });
 
   dbTest('requires a token', async () => {
