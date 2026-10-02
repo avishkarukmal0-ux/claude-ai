@@ -16,3 +16,7 @@ function flag(name, dflt = true) {
 // The supplier-invoice reconciliation + credit workflow (capture → reconcile → claim → credit note →
 // price history). Gate for the whole workflow's entry points.
 export const INVOICES_ENABLED = flag('VITE_INVOICES_ENABLED', true);
+
+// Neighbourhood Insights — optional PAID add-on. DEFAULT-OFF (opt-in): the tile/screen only appear when
+// VITE_INSIGHTS_ENABLED=true AND the backend INSIGHTS_ENABLED is on. The core PWA is fully usable without it.
+export const INSIGHTS_ENABLED = flag('VITE_INSIGHTS_ENABLED', false);

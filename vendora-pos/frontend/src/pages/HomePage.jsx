@@ -41,7 +41,9 @@ import CreditNotesView from '../components/invoices/CreditNotesView';
 import PriceHistoryView from '../components/invoices/PriceHistoryView';
 import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ACCOUNTS_ENABLED, isLoggedIn, useSession } from '../lib/account';
-import { INVOICES_ENABLED } from '../lib/features';
+import { INVOICES_ENABLED, INSIGHTS_ENABLED } from '../lib/features';
+import NeighbourhoodInsightsView from '../components/insights/NeighbourhoodInsightsView';
+import { Globe2 } from 'lucide-react';
 import { canSeeScreen, can } from '../lib/permissions';
 import StaffView from '../components/account/StaffView';
 import NotificationsView from '../components/account/NotificationsView';
@@ -194,6 +196,7 @@ export default function HomePage() {
         {screen === 'journey' && canSeeScreen(role, 'journey') && <BuyingJourneyView onBack={() => setScreen(null)} onGo={go} />}
         {screen === 'supplier-insights' && canSeeScreen(role, 'supplier-insights') && <SupplierInsightsView onBack={() => setScreen(null)} />}
         {screen === 'payments' && canSeeScreen(role, 'payments') && <PaymentCalendarView onBack={() => setScreen(null)} />}
+        {screen === 'insights' && INSIGHTS_ENABLED && canSeeScreen(role, 'insights') && <NeighbourhoodInsightsView onBack={() => setScreen(null)} />}
         {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
         {screen === 'claims' && canSeeScreen(role, 'claims') && <ClaimsView onBack={() => setScreen(null)} />}
         {screen === 'price-alerts' && canSeeScreen(role, 'price-alerts') && <PriceAlertsView onBack={() => setScreen(null)} />}
@@ -301,6 +304,7 @@ export default function HomePage() {
             {INVOICES_ENABLED && !isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
             {!isStaff && <HubTile icon={Scale} accent={accent} label="Compare suppliers" desc="Unit costs & reliability" onClick={() => setScreen('supplier-insights')} />}
             {!isStaff && <HubTile icon={CalClock} accent={accent} label="Payments due" desc="Bills, due dates & expected credits" onClick={() => setScreen('payments')} />}
+            {INSIGHTS_ENABLED && !isStaff && <HubTile icon={Globe2} accent={accent} label="Neighbourhood Insights" desc="Area profile & product trials (add-on)" onClick={() => setScreen('insights')} />}
             <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
           </Hub>
         )}
