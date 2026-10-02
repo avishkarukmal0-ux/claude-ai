@@ -2,6 +2,7 @@ import React, { useEffect, lazy, Suspense } from 'react';
 import toast from 'react-hot-toast';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { STORAGE_ERROR_EVENT } from './lib/storage';
+import { registerBackupAutoRetry } from './lib/productImages';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 // ── Standalone PWA (the product) — eager, tiny initial path ───────────────────
@@ -79,6 +80,9 @@ export default function App() {
     window.addEventListener(STORAGE_ERROR_EVENT, onErr);
     return () => window.removeEventListener(STORAGE_ERROR_EVENT, onErr);
   }, []);
+
+  // Flush any pending/failed product-photo backups when the app regains network or focus.
+  useEffect(() => { registerBackupAutoRetry(); }, []);
 
   return (
     <BrowserRouter>

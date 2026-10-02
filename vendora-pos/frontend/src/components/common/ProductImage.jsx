@@ -1,10 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Camera, Upload, ImageOff, Trash2, Check, Info, Loader2, RefreshCw } from 'lucide-react';
+import { Camera, Upload, ImageOff, Trash2, Check, Info, Loader2, RefreshCw, Cloud, CloudOff, UploadCloud, AlertCircle } from 'lucide-react';
 import {
   resolveImage, getThumbLocal, saveImage, removeImage, restoreImage, confirmSuggested,
   backupAvailable, backupImage, fetchImageToCache, fetchSuggestedImage,
+  getBackupState, deleteBackup, retryBackups, BACKUP_STATE,
 } from '../../lib/productImages';
+
+// Small, honest badge of where a saved photo lives: on this device only, uploading, safely backed up, or a
+// failed upload the owner can retry. Only meaningful for a stored (owner/catalogue) image.
+function BackupBadge({ state, onRetry }) {
+  if (state === BACKUP_STATE.DONE) {
+    return <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600"><Cloud className="h-3 w-3" /> Backed up</span>;
+  }
+  if (state === BACKUP_STATE.PENDING) {
+    return <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400"><UploadCloud className="h-3 w-3 animate-pulse" /> Backing up…</span>;
+  }
+  if (state === BACKUP_STATE.FAILED) {
+    return (
+      <button type="button" onClick={onRetry} className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 active:scale-95">
+        <AlertCircle className="h-3 w-3" /> Backup failed — retry
+      </button>
+    );
+  }
+  return <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400"><CloudOff className="h-3 w-3" /> On this device</span>;
+}
 
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024; // pre-compression guard; we downscale anyway
 const OK_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -25,11 +45,15 @@ function readFileDataUrl(file) {
  */
 export default function ProductImage({ product, suggested = null, onSave, onRemove, size = 'lg', editable = true, barcode = null }) {
   const resolved = resolveImage(product, suggested);
-  const [thumb, setThumb] = useState(() => (resolved.state === 'owner' || resolved.state === 'catalogue' ? getThumbLocal(resolved.id) : null));
+  const stored = resolved.state === 'owner' || resolved.state === 'catalogue';
+  const [thumb, setThumb] = useState(() => (stored ? getThumbLocal(resolved.id) : null));
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [backup, setBackup] = useState(() => (stored ? getBackupState(resolved.id).state : BACKUP_STATE.LOCAL));
   const camRef = useRef(null);
   const fileRef = useRef(null);
+
+  const refreshBackup = (id) => setBackup(getBackupState(id).state);
 
   const box = size === 'sm' ? 'h-12 w-12' : 'h-28 w-28';
 
@@ -38,11 +62,14 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
   useEffect(() => {
     let live = true;
     if (resolved.state === 'owner' || resolved.state === 'catalogue') {
+      setBackup(getBackupState(resolved.id).state);
       const local = getThumbLocal(resolved.id);
       if (local) { setThumb(local); return undefined; }
       setLoading(true);
       (async () => {
-        if (await backupAvailable()) { await fetchImageToCache(resolved.id); }
+        // Not on this device — pull it from the shop's backup (second-device recovery). Success means the
+        // server holds it, so reflect that as backed-up locally too.
+        if (await backupAvailable()) { const r = await fetchImageToCache(resolved.id); if (r.ok && live) setBackup(BACKUP_STATE.DONE); }
         if (live) { setThumb(getThumbLocal(resolved.id)); setLoading(false); }
       })();
     } else if (resolved.state === 'suggested') {
@@ -70,7 +97,9 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
       if (!saved.ok) { toast.error(saved.error || 'Couldn’t save that photo'); return; }
       setThumb(saved.thumb);
       onSave?.({ id: saved.id, source: 'owner', attribution: null, updatedAt: Date.now() });
-      if (await backupAvailable()) backupImage(saved.id, { barcode, source: 'owner' });
+      // Back up in the background; the badge tracks local → pending → backed-up / failed.
+      setBackup(BACKUP_STATE.PENDING);
+      backupImage(saved.id, { barcode, source: 'owner' }).then(() => refreshBackup(saved.id));
       toast.success('Photo saved');
     } catch { toast.error('Couldn’t read that photo'); }
     finally { setBusy(false); }
@@ -83,22 +112,32 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
       if (!ref) { toast.error('Couldn’t fetch that image — try taking your own photo.'); return; }
       setThumb(getThumbLocal(ref.id));
       onSave?.(ref);
+      refreshBackup(ref.id); // confirmSuggested already kicks off a backup when available
       toast.success('Added — you can replace it with your own photo any time.');
     } finally { setBusy(false); }
   }
 
   function doRemove() {
     const id = resolved.id;
+    const src = product?.image?.source || 'owner';
     const res = removeImage(id);
+    deleteBackup(id); // remove the authorised server copy too (best-effort, async)
     onRemove?.();
     setThumb(null);
+    setBackup(BACKUP_STATE.LOCAL);
     if (res.recoverable) {
       toast((t) => (
         <span className="flex items-center gap-2 text-sm">Photo removed
-          <button type="button" onClick={() => { const r = restoreImage(id); if (r.ok) { onSave?.({ id, source: product?.image?.source || 'owner', updatedAt: Date.now() }); setThumb(r.thumb); } toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>
+          <button type="button" onClick={() => { const r = restoreImage(id); if (r.ok) { onSave?.({ id, source: src, updatedAt: Date.now() }); setThumb(r.thumb); setBackup(BACKUP_STATE.PENDING); backupImage(id, { barcode, source: src }).then(() => refreshBackup(id)); } toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>
         </span>
       ), { duration: 6000 });
     } else { toast('Photo removed'); }
+  }
+
+  async function handleRetry() {
+    setBackup(BACKUP_STATE.PENDING);
+    await retryBackups();
+    refreshBackup(resolved.id);
   }
 
   const showImg = thumb || null;
@@ -138,10 +177,13 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
               <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95 disabled:opacity-50"><Upload className="h-3.5 w-3.5" /> Upload</button>
             </div>
           ) : (
-            <div className="flex gap-1.5">
-              <button type="button" onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><RefreshCw className="h-3.5 w-3.5" /> Replace</button>
-              <button type="button" onClick={doRemove} className="flex items-center justify-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 active:scale-95" aria-label="Remove photo"><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
+            <>
+              <div className="flex gap-1.5">
+                <button type="button" onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><RefreshCw className="h-3.5 w-3.5" /> Replace</button>
+                <button type="button" onClick={doRemove} className="flex items-center justify-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 active:scale-95" aria-label="Remove photo"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+              <BackupBadge state={backup} onRetry={handleRetry} />
+            </>
           )}
         </div>
       )}

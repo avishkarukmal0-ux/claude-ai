@@ -17,6 +17,13 @@ import { currentSession, isLoggedIn } from './account';
 const FULL = (id) => `pimg_full_${id}`;
 const THUMB = (id) => `pimg_thumb_${id}`;
 const TRASH = (id) => `pimg_trash_${id}`; // recoverable-delete holding slot (JSON { full, thumb, at })
+const BACKUP_MAP = 'pimg_backup_v1';       // per-device map { [id]: { state, at, error?, barcode?, source? } } — NOT synced
+
+// Backup lifecycle a picture can be in (per device). 'local' = kept on this device only (flag off, offline, or
+// not yet attempted); 'pending' = an upload is in flight; 'backed-up' = confirmed on the shop's server store;
+// 'failed' = an upload errored and is retryable. The UI shows these so the owner knows a photo is safe
+// off-device (or needs a retry) — a photo is never silently lost.
+export const BACKUP_STATE = { LOCAL: 'local', PENDING: 'pending', DONE: 'backed-up', FAILED: 'failed' };
 
 const API_BASE = (() => { try { return (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, ''); } catch { return ''; } })();
 const BASE = `${API_BASE}/api/pwa-images`;
@@ -39,6 +46,33 @@ export async function processImage(src) {
   const thumb = (await _downscale(full || src, { maxDim: 200, quality: 0.6, type: 'image/jpeg' })) || full;
   return { full, thumb };
 }
+
+// --- backup-state map (per device; drives the local/pending/backed-up/failed UI) -------------------------
+function readBackupMap() { try { return JSON.parse(read(BACKUP_MAP, 'null')) || {}; } catch { return {}; } }
+function writeBackupMap(m) { try { write(BACKUP_MAP, JSON.stringify(m || {})); } catch { /* ignore */ } }
+
+/** The backup record for an image id: { state, at, error?, barcode?, source? }. Defaults to LOCAL. */
+export function getBackupState(id) {
+  if (!id) return { state: BACKUP_STATE.LOCAL };
+  const rec = readBackupMap()[id];
+  return rec && rec.state ? rec : { state: BACKUP_STATE.LOCAL };
+}
+function setBackupState(id, patch) {
+  if (!id) return;
+  const m = readBackupMap();
+  m[id] = { ...(m[id] || {}), ...patch, at: Date.now() };
+  writeBackupMap(m);
+}
+function clearBackupState(id) { const m = readBackupMap(); if (m[id]) { delete m[id]; writeBackupMap(m); } }
+
+/** Ids that still need a (re)upload: anything FAILED, or PENDING left stale by a closed tab / lost network. */
+export function pendingBackups() {
+  const m = readBackupMap();
+  return Object.entries(m)
+    .filter(([, r]) => r && (r.state === BACKUP_STATE.FAILED || r.state === BACKUP_STATE.PENDING))
+    .map(([id, r]) => ({ id, barcode: r.barcode || null, source: r.source || 'owner' }));
+}
+export function pendingBackupCount() { return pendingBackups().length; }
 
 // --- local store -----------------------------------------------------------
 export function getThumbLocal(id) { return id ? read(THUMB(id), null) : null; }
@@ -70,6 +104,7 @@ export function removeImage(id) {
     try { write(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() })); } catch { /* ignore */ }
   }
   removeKey(FULL(id)); removeKey(THUMB(id));
+  clearBackupState(id); // the server copy is removed separately via deleteBackup() (authorised, async)
   return { ok: true, recoverable: !!(full || thumb) };
 }
 
@@ -126,24 +161,87 @@ async function _download(id) {
   if (!res.ok) throw new Error('download failed');
   return res.blob();
 }
-let _t = { status: _status, upload: _upload, download: _download };
-export function __setImageTransport(t) { _t = t || { status: _status, upload: _upload, download: _download }; }
+async function _remove(id) {
+  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeader() });
+  if (!res.ok && res.status !== 404) { const e = new Error('delete failed'); e.status = res.status; throw e; }
+  return true;
+}
+const _defaultTransport = () => ({ status: _status, upload: _upload, download: _download, remove: _remove });
+let _t = _defaultTransport();
+export function __setImageTransport(t) { _t = t || _defaultTransport(); }
 
 const dataUrlToBlob = async (d) => (await fetch(d)).blob();
 const blobToDataUrl = (blob) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.onerror = rej; r.readAsDataURL(blob); });
 
+// Tests can bypass the flag/login preconditions (null = normal behaviour).
+let _availabilityOverride = null;
+export function __setBackupAvailability(v) { _availabilityOverride = v == null ? null : !!v; }
+
 /** Is cloud image backup usable now? (flag on + signed in + server enabled). false on any failure. */
 export async function backupAvailable() {
-  if (!imagesFlagOn() || !isLoggedIn()) return false;
+  if (_availabilityOverride === false) return false;
+  if (_availabilityOverride !== true && (!imagesFlagOn() || !isLoggedIn())) return false;
   try { return !!(await _t.status()).enabled; } catch { return false; }
 }
 
-/** Back up a stored image's FULL bytes to the shop's server store. Best-effort; returns {ok}. */
+/**
+ * Back up a stored image's FULL bytes to the shop's server store, tracking the lifecycle so the UI can show
+ * local → pending → backed-up / failed. A failure leaves a FAILED record that `retryBackups()` can re-send.
+ * Best-effort (never throws); returns { ok, state }.
+ */
 export async function backupImage(id, { barcode = null, source = 'owner' } = {}) {
   const full = getFullLocal(id);
-  if (!full) return { ok: false, error: 'nothing to back up' };
-  try { await _t.upload(id, await dataUrlToBlob(full), { barcode, source }); return { ok: true }; }
-  catch (err) { return { ok: false, error: err.message || 'upload failed' }; }
+  if (!full) return { ok: false, state: BACKUP_STATE.LOCAL, error: 'nothing to back up' };
+  if (!(await backupAvailable())) {
+    // Keep it queued as FAILED so it uploads once backup becomes available (sign-in / flag on / back online).
+    setBackupState(id, { state: BACKUP_STATE.FAILED, error: 'backup unavailable', barcode, source });
+    return { ok: false, state: BACKUP_STATE.FAILED, error: 'backup unavailable' };
+  }
+  setBackupState(id, { state: BACKUP_STATE.PENDING, barcode, source, error: null });
+  try {
+    await _t.upload(id, await dataUrlToBlob(full), { barcode, source });
+    setBackupState(id, { state: BACKUP_STATE.DONE, error: null, barcode, source });
+    return { ok: true, state: BACKUP_STATE.DONE };
+  } catch (err) {
+    setBackupState(id, { state: BACKUP_STATE.FAILED, error: err.message || 'upload failed', barcode, source });
+    return { ok: false, state: BACKUP_STATE.FAILED, error: err.message || 'upload failed' };
+  }
+}
+
+/** Retry every image still pending/failed. Safe to call repeatedly (idempotent on the server). */
+export async function retryBackups() {
+  if (!(await backupAvailable())) return { attempted: 0, ok: 0, failed: 0 };
+  const items = pendingBackups();
+  let ok = 0; let failed = 0;
+  for (const it of items) {
+    if (!getFullLocal(it.id)) { clearBackupState(it.id); continue; } // bytes gone (deleted) — drop the record
+    const r = await backupImage(it.id, { barcode: it.barcode, source: it.source });
+    if (r.ok) ok += 1; else failed += 1;
+  }
+  return { attempted: items.length, ok, failed };
+}
+/** Opportunistic flush (call on sign-in / regaining network / app focus). No-op when backup isn't available. */
+export async function flushBackups() { return retryBackups(); }
+
+// Register one-time listeners so pending/failed photo backups flush when the app regains network or focus
+// (mirrors how sync.js flushes). Idempotent — safe to call from App once.
+let _autoRetryWired = false;
+export function registerBackupAutoRetry() {
+  if (_autoRetryWired || typeof window === 'undefined') return;
+  _autoRetryWired = true;
+  const run = () => { if (navigator.onLine !== false) flushBackups().catch(() => {}); };
+  try {
+    window.addEventListener('online', run);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') run(); });
+  } catch { /* non-browser env */ }
+}
+
+/** Delete the server-side backup copy of an image (authorised by the signed-in shop token). Best-effort. */
+export async function deleteBackup(id) {
+  clearBackupState(id);
+  if (!id || !(await backupAvailable())) return { ok: false };
+  try { await _t.remove(id); return { ok: true }; }
+  catch { return { ok: false }; }
 }
 
 const LOOKUP_IMG = `${API_BASE}/api/pwa-lookup/image`;
@@ -169,7 +267,8 @@ export async function confirmSuggested(suggested, { barcode = null } = {}) {
   if (!dataUrl) return null;
   const saved = await saveImage(dataUrl, { source: 'catalogue' });
   if (!saved.ok) return null;
-  if (await backupAvailable()) backupImage(saved.id, { barcode, source: 'catalogue' });
+  // Track the backup lifecycle (queues as FAILED for retry if backup isn't available yet).
+  backupImage(saved.id, { barcode, source: 'catalogue' });
   return { id: saved.id, source: 'catalogue', attribution: suggested.imageAttribution || null, updatedAt: Date.now() };
 }
 
@@ -181,6 +280,7 @@ export async function fetchImageToCache(id) {
     const full = await blobToDataUrl(blob);
     const { thumb } = await processImage(full);
     putLocal(id, { full, thumb });
+    setBackupState(id, { state: BACKUP_STATE.DONE }); // it came FROM the server, so it's backed up here now
     return { ok: true, thumb };
   } catch { return { ok: false }; }
 }

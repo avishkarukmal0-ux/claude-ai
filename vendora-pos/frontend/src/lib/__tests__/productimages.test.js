@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   resolveImage, saveImage, removeImage, restoreImage, getThumbLocal, confirmSuggested,
-  __setDownscale, __setImageTransport,
+  backupImage, retryBackups, deleteBackup, getBackupState, pendingBackupCount,
+  fetchImageToCache, BACKUP_STATE,
+  __setDownscale, __setImageTransport, __setBackupAvailability,
 } from '../productImages';
 import { setActiveWorkspace, LOCAL_WORKSPACE, __resetMemForTest } from '../storage';
 
@@ -77,5 +79,77 @@ describe('productImages — confirm a provider suggestion', () => {
   it('returns null when nothing to confirm', async () => {
     expect(await confirmSuggested(null)).toBe(null);
     expect(await confirmSuggested({})).toBe(null);
+  });
+});
+
+describe('productImages — backup lifecycle (local → pending → backed-up / failed → retry)', () => {
+  afterEach(() => { __setBackupAvailability(null); });
+
+  it('an upload moves the image to backed-up; getBackupState reflects it', async () => {
+    __setBackupAvailability(true);
+    const uploads = [];
+    __setImageTransport({ status: async () => ({ enabled: true }), upload: async (id) => { uploads.push(id); return {}; }, download: async () => null, remove: async () => true });
+    const saved = await saveImage(DATA, { source: 'owner' });
+    const r = await backupImage(saved.id, { source: 'owner' });
+    expect(r.ok).toBe(true);
+    expect(getBackupState(saved.id).state).toBe(BACKUP_STATE.DONE);
+    expect(uploads).toContain(saved.id);
+  });
+
+  it('a failed upload is marked failed and is retryable; retry succeeds', async () => {
+    __setBackupAvailability(true);
+    let failNext = true;
+    __setImageTransport({
+      status: async () => ({ enabled: true }),
+      upload: async () => { if (failNext) { const e = new Error('boom'); throw e; } return {}; },
+      download: async () => null, remove: async () => true,
+    });
+    const saved = await saveImage(DATA, { source: 'owner' });
+    const r1 = await backupImage(saved.id, { source: 'owner' });
+    expect(r1.ok).toBe(false);
+    expect(getBackupState(saved.id).state).toBe(BACKUP_STATE.FAILED);
+    expect(pendingBackupCount()).toBe(1);
+
+    failNext = false;
+    const res = await retryBackups();
+    expect(res.ok).toBe(1);
+    expect(getBackupState(saved.id).state).toBe(BACKUP_STATE.DONE);
+    expect(pendingBackupCount()).toBe(0);
+  });
+
+  it('when backup is unavailable the image is queued (failed) for later retry', async () => {
+    __setBackupAvailability(false);
+    const saved = await saveImage(DATA, { source: 'owner' });
+    const r = await backupImage(saved.id, { source: 'owner' });
+    expect(r.ok).toBe(false);
+    expect(getBackupState(saved.id).state).toBe(BACKUP_STATE.FAILED);
+    expect(pendingBackupCount()).toBe(1);
+  });
+
+  it('second-device recovery: fetchImageToCache pulls bytes and marks them backed-up here', async () => {
+    __setBackupAvailability(true);
+    __setImageTransport({
+      status: async () => ({ enabled: true }), upload: async () => ({}),
+      download: async () => new Blob([new Uint8Array([9, 9, 9])], { type: 'image/jpeg' }),
+      remove: async () => true,
+    });
+    const id = 'pi_fromserver';
+    expect(getThumbLocal(id)).toBe(null); // not on this device yet
+    const r = await fetchImageToCache(id);
+    expect(r.ok).toBe(true);
+    expect(getThumbLocal(id)).toBeTruthy();
+    expect(getBackupState(id).state).toBe(BACKUP_STATE.DONE);
+  });
+
+  it('deleteBackup removes the server copy and clears local state', async () => {
+    __setBackupAvailability(true);
+    const removed = [];
+    __setImageTransport({ status: async () => ({ enabled: true }), upload: async () => ({}), download: async () => null, remove: async (id) => { removed.push(id); return true; } });
+    const saved = await saveImage(DATA, { source: 'owner' });
+    await backupImage(saved.id, { source: 'owner' });
+    const d = await deleteBackup(saved.id);
+    expect(d.ok).toBe(true);
+    expect(removed).toContain(saved.id);
+    expect(getBackupState(saved.id).state).toBe(BACKUP_STATE.LOCAL);
   });
 });
