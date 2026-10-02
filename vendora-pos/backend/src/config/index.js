@@ -68,6 +68,32 @@ module.exports = {
     allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
   },
 
+  // Neighbourhood Insights — optional PAID add-on (aggregate ONS Census 2021 area profiles). Two independent
+  // switches, both default OFF; the add-on is unusable (and purchasing unavailable) until configured:
+  //   INSIGHTS_ENABLED=true        → mount the /api/pwa-insights routes at all
+  //   INSIGHTS_DATA_PROVIDER       → the census DATA source: 'nomis' (ONS Census 2021 via Nomis API) once the
+  //                                  Output-Area centroid data is in place; null = no data → `configured:false`
+  //   INSIGHTS_BILLING_PROVIDER    → entitlement/billing source (e.g. 'stripe'); null = purchasing unavailable
+  //   INSIGHTS_LOCATION_PROVIDER   → postcode→location ('postcodes_io', open/OGL); default on when enabled
+  // Pricing is configurable and NOT set here — no commercial terms are invented. See [[Deployment-Config]].
+  neighbourhoodInsights: {
+    enabled: process.env.INSIGHTS_ENABLED === 'true',
+    dataProvider: process.env.INSIGHTS_DATA_PROVIDER || null,
+    billingProvider: process.env.INSIGHTS_BILLING_PROVIDER || null,
+    locationProvider: process.env.INSIGHTS_LOCATION_PROVIDER || 'postcodes_io',
+    // Supported radii (metres) and the verified coverage — England & Wales only (ONS Census 2021).
+    radii: [500, 1000, 3000],
+    coverage: 'England and Wales',
+    dataSource: 'ONS Census 2021',
+    referenceYear: 2021,
+    licence: 'Open Government Licence v3.0',
+    attribution: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0',
+    // Configurable price (minor units, e.g. pence) + interval — unset until the operator decides commercial terms.
+    priceMinor: process.env.INSIGHTS_PRICE_MINOR ? parseInt(process.env.INSIGHTS_PRICE_MINOR, 10) : null,
+    priceCurrency: process.env.INSIGHTS_PRICE_CURRENCY || 'GBP',
+    priceInterval: process.env.INSIGHTS_PRICE_INTERVAL || null, // 'month' | 'year' | 'once' — operator sets
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },
