@@ -248,7 +248,8 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
       </div>
 
       {/* Lines */}
-      <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Lines</h3>
+      <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Lines</h3>
+      <p className="mb-2 text-[11px] leading-snug text-gray-400">Enter the quantity, whether it’s in <strong>units</strong> or <strong>cases</strong>, the <strong>units per case</strong> (for cases), and the cost (<strong>£ per case</strong> or <strong>£ per unit</strong> to match). The per-single-unit cost is worked out below each line.</p>
       <ul className="space-y-2">
         {matched.map((l, i) => (
           <li key={l.id} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm">
@@ -265,7 +266,7 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
                 <option value="units">units</option>
                 <option value="cases">cases</option>
               </select>
-              <input value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} inputMode="numeric" placeholder="Pack" aria-label="Pack size" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
+              <input value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} inputMode="numeric" placeholder="Units/case" aria-label="Units per case" title="How many single units are in one case" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
               <input value={l.qtyMode === 'cases' ? l.caseCost : l.unitCost} onChange={(e) => setLine(i, l.qtyMode === 'cases' ? { caseCost: e.target.value } : { unitCost: e.target.value })} inputMode="decimal" placeholder={l.qtyMode === 'cases' ? '£/case' : '£/unit'} aria-label="Cost" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
             </div>
             <div className="mt-1 text-right text-[11px] text-gray-500">{gbp(lineUnitCost(l))}/unit · line {gbp(lineTotal(l))}</div>

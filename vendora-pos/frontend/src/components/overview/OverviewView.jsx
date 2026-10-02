@@ -67,13 +67,13 @@ export default function OverviewView({ onBack, onOpen }) {
         <div className="mt-3 grid grid-cols-2 gap-3">
           {insights.projected.value != null && (
             <Stat
-              label="Expected sales/wk"
+              label={insights.projected.basis === 'sales' ? 'Sales/wk' : 'Est. sales/wk'}
               value={`£${insights.projected.value.toFixed(0)}`}
               icon={LineChart}
               tone="text-primary"
-              hint={insights.projected.basis === 'estimated' ? 'Estimate — from stock changes'
-                : insights.projected.basis === 'mixed' ? 'Part sales, part estimate'
-                : 'From recorded sales'}
+              hint={insights.projected.basis === 'estimated' ? 'Rough — from stock edits, not confirmed sales'
+                : insights.projected.basis === 'mixed' ? 'Part confirmed sales, part rough estimate'
+                : 'From confirmed sales'}
             />
           )}
           {insights.margin.value != null && (
@@ -116,7 +116,8 @@ export default function OverviewView({ onBack, onOpen }) {
       )}
       {insights.top.length === 0 && (
         <p className="mt-4 text-center text-[11px] text-gray-400">
-          Best sellers &amp; projections appear as you sell stock (adjust quantities down as things sell).
+          Best sellers appear from confirmed sales — import your till sales (More → Data) for accurate figures.
+          Editing a stock count is a correction, not a sale.
         </p>
       )}
     </div>
