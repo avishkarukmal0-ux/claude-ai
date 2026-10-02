@@ -20,3 +20,7 @@ export const INVOICES_ENABLED = flag('VITE_INVOICES_ENABLED', true);
 // Neighbourhood Insights — optional PAID add-on. DEFAULT-OFF (opt-in): the tile/screen only appear when
 // VITE_INSIGHTS_ENABLED=true AND the backend INSIGHTS_ENABLED is on. The core PWA is fully usable without it.
 export const INSIGHTS_ENABLED = flag('VITE_INSIGHTS_ENABLED', false);
+
+// Real neighbourhood area data (ONS/Nomis via our backend). Independent of the paid add-on; OFF by default.
+// Also requires the backend NEIGHBOURHOOD_ENABLED=true (+ a configured dataset) to return figures.
+export const NEIGHBOURHOOD_ENABLED = flag('VITE_NEIGHBOURHOOD_ENABLED', false);

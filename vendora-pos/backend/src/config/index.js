@@ -139,6 +139,31 @@ module.exports = {
     cancelUrl: process.env.INSIGHTS_BILLING_CANCEL_URL || null,
   },
 
+  // Neighbourhood area data (real, official): store postcode → postcodes.io area codes → ONS/Nomis Census 2021
+  // figure, cached server-side with full provenance. OFF by default; never invents numbers. The browser never
+  // calls these upstreams directly — only this backend does (CORS, rate limits, User-Agent, secret Nomis UID).
+  //   NEIGHBOURHOOD_ENABLED=true   → mount the /api/pwa-insights/area route
+  //   ONS_USER_AGENT               → descriptive UA ONS asks for, e.g. "vendora/1.0.0 (ops@example.com +url)"
+  //   NOMIS_UID                    → optional secret; removes Nomis' 25k-cell guest limit (never in repo/chat)
+  //   NEIGHBOURHOOD_SOURCE         → 'ons' (api.beta.ons.gov.uk) | 'nomis'; default 'ons'
+  //   NEIGHBOURHOOD_POP_DATASET    → dataset id for the population figure (unset → runtime discovery; we do NOT
+  //                                  hardcode an unverified id). For Nomis this is NM_xxxx_1; for ONS the slug.
+  //   NEIGHBOURHOOD_TTL_HOURS      → re-fetch when the cached record is older than this (default 168 = 7 days)
+  neighbourhood: {
+    enabled: process.env.NEIGHBOURHOOD_ENABLED === 'true',
+    source: process.env.NEIGHBOURHOOD_SOURCE || 'ons',
+    onsBase: (process.env.ONS_API_BASE || 'https://api.beta.ons.gov.uk/v1').replace(/\/+$/, ''),
+    nomisBase: (process.env.NOMIS_API_BASE || 'https://www.nomisweb.co.uk/api/v01').replace(/\/+$/, ''),
+    postcodesBase: (process.env.POSTCODES_IO_BASE || 'https://api.postcodes.io').replace(/\/+$/, ''),
+    userAgent: process.env.ONS_USER_AGENT || 'vendora-pos/1.0.0 (neighbourhood data; +https://claude-ai-indol.vercel.app)',
+    nomisUid: process.env.NOMIS_UID || null,
+    populationDataset: process.env.NEIGHBOURHOOD_POP_DATASET || null,
+    ttlHours: parseInt(process.env.NEIGHBOURHOOD_TTL_HOURS, 10) || 168,
+    timeoutMs: parseInt(process.env.NEIGHBOURHOOD_TIMEOUT_MS, 10) || 55000, // Render cold start can be ~50s
+    maxConcurrent: parseInt(process.env.NEIGHBOURHOOD_MAX_CONCURRENT, 10) || 2,
+    staleMaxDays: parseInt(process.env.NEIGHBOURHOOD_STALE_MAX_DAYS, 10) || 400, // beyond this, show "out of date"
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },

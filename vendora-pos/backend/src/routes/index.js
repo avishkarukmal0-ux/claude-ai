@@ -29,6 +29,13 @@ if (config.neighbourhoodInsights && config.neighbourhoodInsights.enabled) {
   router.use('/pwa-insights', pwaInsightsRoutes);
 }
 
+// ── Real neighbourhood data for the store's area (postcodes.io → ONS/Nomis, cached). Mounted ONLY when
+//    NEIGHBOURHOOD_ENABLED=true. Owner/manager; NOT the paid add-on (no entitlement gate). ──
+if (config.neighbourhood && config.neighbourhood.enabled) {
+  const pwaNeighbourhoodRoutes = require('./pwaNeighbourhoodRoutes');
+  router.use('/pwa-neighbourhood', pwaNeighbourhoodRoutes);
+}
+
 // ── PWA barcode auto-fill (scan → name/category via Open Food Facts proxy). PWA token required. ──
 const pwaLookupRoutes = require('./pwaLookupRoutes');
 router.use('/pwa-lookup', pwaLookupRoutes);

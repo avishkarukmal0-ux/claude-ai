@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { getStatus, getPreview, getProfile, startCheckout, cancelAddon } from '../../lib/insightsClient';
 import TrialsPanel from './TrialsPanel';
+import NeighbourhoodAreaCard from './NeighbourhoodAreaCard';
 
 const RADII = [{ m: 500, label: '500 m' }, { m: 1000, label: '1 km' }, { m: 3000, label: '3 km' }];
 const CAT_LABEL = { ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
@@ -63,6 +64,9 @@ export default function NeighbourhoodInsightsView({ onBack }) {
           <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 text-[11px] text-gray-500 shadow-sm">
             <span className="font-semibold text-gray-700">{status.dataSource}</span> · {status.coverage} · reference year {status.referenceYear} · {status.licence}
           </div>
+
+          {/* Real, official area figure (free; works offline). Independent of the paid entitlement below. */}
+          <NeighbourhoodAreaCard />
 
           {!entitled ? (
             <NotEntitled status={status} preview={preview} />
