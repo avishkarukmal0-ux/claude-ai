@@ -433,3 +433,4 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer <PWA_TOKEN>" } `
 - **postcodes.io**: `200` — RM10 8AA → lsoa21 **E01000036**, msoa21 E02000011, ward Alibon, district Barking and Dagenham, England.
 - **Nomis dataset (population)**: **`NM_2021_1`** = Census 2021 **TS001** "Number of usual residents in households and communal establishments". Set `NEIGHBOURHOOD_SOURCE=nomis` + `NEIGHBOURHOOD_POP_DATASET=NM_2021_1`.
 - **Count-table handling**: TS001 returns a "Total" row PLUS components (Total = Σ components), so the fetch takes the **Total** row (else the max) — it never sums (fixed after the first live run showed a doubled 2,940 for E01000036; the true total is the Total row).
+- **Figure confirmed**: E01000036 → **1,470** usual residents (Nomis NM_2021_1 / TS001). Raw obs rows 1470/1470/0 (Total / household / communal) confirm the fix takes the Total row, not the sum. Step 1 end-to-end live-verified from the owner's PC on 2026-10-02.
