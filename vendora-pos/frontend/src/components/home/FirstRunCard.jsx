@@ -37,8 +37,8 @@ export default function FirstRunCard({ onGo }) {
         <button type="button" onClick={() => onGo?.({ screen: 'waste' })} className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 text-left active:scale-[0.99]">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary"><CalendarClock className="h-5 w-5" /></span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-gray-900">Record a waste / expiry check</span>
-            <span className="block text-[11px] text-gray-500">Log a loss in seconds — no catalogue needed.</span>
+            <span className="block text-sm font-semibold text-gray-900">Check your first dated product</span>
+            <span className="block text-[11px] text-gray-500">Scan a short-dated item, mark it down or log the loss — no catalogue needed.</span>
           </span>
         </button>
         <button type="button" onClick={tryDemo} className="flex w-full items-center gap-3 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 text-left active:scale-[0.99]">

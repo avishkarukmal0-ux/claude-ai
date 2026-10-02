@@ -48,7 +48,32 @@ note). So the journey is a **derive-only** layer — no new persistence.
 ## Commit(s)
 - (this commit) — feat(pwa): guided buying journey tracker + order record-vs-send (Phase 2)
 
-## Follow-ups
-- [ ] Wire `hasClaimFor` into the claim-create paths (prevent duplicate claims).
-- [ ] Reconcile order-awareness (compare ordered vs delivered vs invoiced).
-- [ ] First-use contextual starting actions ("Receive your first delivery" / "Check your first dated product").
+---
+
+# Phase 2b — duplicate-claim guard, reconcile order-awareness, first-use wording
+
+## Changes
+- **Duplicate claims prevented in BOTH create paths:** `ClaimsView` already filtered deliveries that already
+  have a claim (`!claims.some(c => c.deliveryId === d.id)`); added the matching guard to the reconcile path
+  in `InvoiceCaptureView.raise()` via `hasClaimFor(claims, {deliveryId, invoiceId})` — a toast blocks a second
+  claim for the same delivery/invoice.
+- **Reconcile order-awareness** (`reconcile.js`): now accepts an optional `order` and emits INFO-only
+  (`order_short`, `order_price`) discrepancies comparing ordered qty vs delivered and agreed price vs
+  invoiced. No `claimReason`, so they never add claimable amounts (no double counting). `InvoiceCaptureView`
+  passes the linked order (`delivery.orderId`) into reconcile. Order qty is single-unit, so it lines up with
+  the existing unit normalisation.
+- **First-use** (`FirstRunCard`): the second action relabelled to the mandate wording "Check your first dated
+  product" (the receive-first-delivery action + separated sample-data were already present from Phase 2.6).
+
+## Verification
+- `reconcile.test.js` +3 (order shortfall info / price info / no-order unchanged). Full suite **306/306**;
+  build clean.
+
+## Commit(s)
+- (this commit) — feat(pwa): duplicate-claim guard + reconcile order-awareness + first-use wording (Phase 2b)
+
+## Phase 2 status: complete
+All Phase 2 mandate points addressed: guided journey, stage+next action, carried refs, shortcuts kept,
+partial deliveries/credits, compare ordered/delivery/invoice with unit normalisation, check without an order,
+duplicate movement/claim/allocation prevention, record-vs-send distinction, never auto-send, contextual
+first-use, sample data separate.

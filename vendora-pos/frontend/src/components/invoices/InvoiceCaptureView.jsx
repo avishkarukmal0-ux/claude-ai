@@ -7,9 +7,11 @@ import { useInvoices, matchLines, blankInvoiceLine, lineUnitCost, lineTotal, inv
 import { useSuppliers } from '../../lib/supplierStore';
 import { useInventory } from '../../lib/inventoryStore';
 import { useDeliveries } from '../../lib/deliveryStore';
+import { useOrders } from '../../lib/orderStore';
 import { useClaims } from '../../lib/claimStore';
 import { extractInvoiceText } from '../../lib/invoiceOcr';
 import { reconcile, discrepanciesToClaimItems } from '../../lib/reconcile';
+import { hasClaimFor } from '../../lib/buyingJourney';
 import { parseInvoiceText } from '../../lib/parseInvoiceText';
 import { downscaleImage } from '../../lib/image';
 import { recordFailure } from '../../lib/diagnostics';
@@ -253,14 +255,18 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
 // explained discrepancies, and raise a claim through the existing claims workflow. No order required.
 function ReconcileView({ invoice, onBack }) {
   const { deliveries } = useDeliveries();
-  const { createClaim } = useClaims();
+  const { orders } = useOrders();
+  const { claims, createClaim } = useClaims();
   const supKey = (invoice.supplierName || '').trim().toLowerCase();
   const candidates = useMemo(() => deliveries.filter((d) => d.status === 'received'
     && (!supKey || (d.supplierName || '').trim().toLowerCase() === supKey)), [deliveries, supKey]);
   const [deliveryId, setDeliveryId] = useState(candidates[0] ? candidates[0].id : '');
   const [excluded, setExcluded] = useState(() => new Set());
   const delivery = candidates.find((d) => d.id === deliveryId) || deliveries.find((d) => d.id === deliveryId) || null;
-  const result = useMemo(() => (delivery ? reconcile({ delivery, invoice }) : null), [delivery, invoice]);
+  // If the delivery was booked against an order, include it so reconcile can also compare ordered qty +
+  // agreed price (info only — it never adds claimable amounts, so no double counting).
+  const order = delivery && delivery.orderId ? orders.find((o) => o.id === delivery.orderId) : null;
+  const result = useMemo(() => (delivery ? reconcile({ delivery, invoice, order }) : null), [delivery, invoice, order]);
 
   const claimable = (result ? result.discrepancies : []).filter((d) => d.claimReason);
   const info = (result ? result.discrepancies : []).filter((d) => !d.claimReason);
@@ -271,6 +277,11 @@ function ReconcileView({ invoice, onBack }) {
   function raise() {
     const items = discrepanciesToClaimItems(selected);
     if (!items.length) { toast('Nothing selected to claim'); return; }
+    // Prevent a duplicate claim for the same delivery/invoice pairing (mandate: no duplicate claims).
+    if (hasClaimFor(claims, { deliveryId: delivery.id, invoiceId: invoice.id })) {
+      toast.error('A claim already exists for this delivery/invoice — edit it in Supplier claims.');
+      return;
+    }
     const c = createClaim({ supplierId: invoice.supplierId, supplierName: invoice.supplierName, deliveryId: delivery.id, deliveryRef: delivery.reference || invoice.reference || '', invoiceId: invoice.id, invoiceRef: invoice.reference || '', items });
     if (c) { toast.success('Claim drafted — review it in Supplier claims'); onBack(); }
     else toast.error('Couldn’t create the claim');

@@ -25,7 +25,7 @@ const key = (l) => (l.productId ? `p:${l.productId}` : (l.barcode ? `b:${String(
  * @param {{ delivery:{id?,lines:[]}, invoice:{id?,reference?,lines:[]}, order?:{lines:[]} }} input
  * @returns {{ discrepancies:[], summary:{ overcharge, claimable, info, matched } }}
  */
-export function reconcile({ delivery, invoice } = {}) {
+export function reconcile({ delivery, invoice, order } = {}) {
   const dLines = (delivery && delivery.lines) || [];
   const iLines = (invoice && invoice.lines) || [];
   const invoiceId = (invoice && invoice.id) || null;
@@ -111,6 +111,45 @@ export function reconcile({ delivery, invoice } = {}) {
         units: deliveredUnits(dl), overcharge: 0, ...refs(null, dl),
         detail: `Delivered ${deliveredUnits(dl)} of "${dl.name || 'item'}" but it's not on the invoice (no claim).`,
       });
+    }
+  }
+
+  // When an ORDER exists, compare it too (mandate: compare ordered quantities and agreed prices with the
+  // delivery and invoice). These are INFO-only (no claimReason) so they enrich the picture without
+  // double-counting the claimable delivered-vs-invoiced discrepancies above. Order qty is already in single
+  // units (orders carry no pack mode), so no extra normalisation is needed to line it up with the unit maths.
+  const oLines = (order && order.lines) || [];
+  if (oLines.length) {
+    const iByKey = new Map();
+    for (const il of iLines) { const k = key(il); if (k && !iByKey.has(k)) iByKey.set(k, il); }
+    for (const ol of oLines) {
+      const k = key(ol);
+      const name = ol.name || (ol.barcode ? `#${ol.barcode}` : 'Item');
+      const orderedQty = Number(ol.qty) || 0;
+      if (orderedQty <= 0) continue;
+      const dl = k ? dByKey.get(k) : null;
+      const il = k ? iByKey.get(k) : null;
+      const delU = dl ? deliveredUnits(dl) : 0;
+      // Ordered vs delivered (under-delivery against the order).
+      if (orderedQty - delU > EPS) {
+        discrepancies.push({
+          type: 'order_short', claimReason: null, name, productId: ol.productId || null, barcode: ol.barcode || '',
+          units: r2(orderedQty - delU), overcharge: 0, ...refs(il, dl),
+          detail: `Ordered ${orderedQty}, delivered ${delU} → ${r2(orderedQty - delU)} short against the order.`,
+        });
+      }
+      // Agreed (order) price vs invoiced price — informational heads-up.
+      const agreed = ol.unitCost == null || ol.unitCost === '' ? null : Number(ol.unitCost);
+      if (il && agreed != null && Number.isFinite(agreed) && agreed > 0) {
+        const invCost = invoiceUnitCost(il);
+        if (Math.abs(invCost - agreed) > EPS) {
+          discrepancies.push({
+            type: 'order_price', claimReason: null, name, productId: ol.productId || null,
+            units: 0, overcharge: 0, ...refs(il, dl),
+            detail: `Ordered at ${money(agreed)}/unit, invoiced ${money(invCost)}/unit — ${invCost > agreed ? 'higher' : 'lower'} than agreed.`,
+          });
+        }
+      }
     }
   }
 

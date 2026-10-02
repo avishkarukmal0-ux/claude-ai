@@ -15,6 +15,40 @@ describe('reconcile — pack/unit normalisation', () => {
   });
 });
 
+describe('reconcile — order-awareness (Phase 2, info-only)', () => {
+  const ol = (o) => ({ productId: null, barcode: '', name: '', qty: 0, unitCost: null, ...o });
+
+  it('flags ordered-vs-delivered shortfall as INFO (no extra claimable amount)', () => {
+    const order = { lines: [ol({ barcode: '1', name: 'Cola', qty: 24, unitCost: 1 })] };
+    const delivery = { lines: [dl({ barcode: '1', name: 'Cola', deliveredQty: 20, unitCost: 1 })] };
+    const invoice = { lines: [il({ barcode: '1', name: 'Cola', qty: 20, unitCost: 1 })] }; // billed = delivered → no claim
+    const { discrepancies, summary } = reconcile({ delivery, invoice, order });
+    const shortVsOrder = discrepancies.find((d) => d.type === 'order_short');
+    expect(shortVsOrder).toBeTruthy();
+    expect(shortVsOrder.claimReason).toBe(null);
+    expect(shortVsOrder.units).toBe(4); // ordered 24 − delivered 20
+    expect(summary.claimable).toBe(0); // order info never adds a claim
+  });
+
+  it('flags agreed-vs-invoiced price difference as INFO', () => {
+    const order = { lines: [ol({ barcode: '1', name: 'Cola', qty: 10, unitCost: 1 })] };
+    const delivery = { lines: [dl({ barcode: '1', name: 'Cola', deliveredQty: 10, unitCost: 1.2 })] };
+    const invoice = { lines: [il({ barcode: '1', name: 'Cola', qty: 10, unitCost: 1.2 })] };
+    const { discrepancies } = reconcile({ delivery, invoice, order });
+    const priceInfo = discrepancies.find((d) => d.type === 'order_price');
+    expect(priceInfo).toBeTruthy();
+    expect(priceInfo.claimReason).toBe(null);
+    expect(priceInfo.detail).toMatch(/ordered at/i);
+  });
+
+  it('no order → behaves exactly as before (no order_* discrepancies)', () => {
+    const delivery = { lines: [dl({ barcode: '1', name: 'Cola', deliveredQty: 10, unitCost: 1 })] };
+    const invoice = { lines: [il({ barcode: '1', name: 'Cola', qty: 10, unitCost: 1 })] };
+    const { discrepancies } = reconcile({ delivery, invoice });
+    expect(discrepancies.some((d) => d.type === 'order_short' || d.type === 'order_price')).toBe(false);
+  });
+});
+
 describe('reconcile — source references + calculation detail (A1/A2)', () => {
   it('every claimable discrepancy carries source doc + line refs and a calc detail', () => {
     const delivery = { id: 'del_1', lines: [dl({ id: 'dln_1', barcode: '1', name: 'Cola', deliveredQty: 10, unitCost: 1 })] };
