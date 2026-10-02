@@ -27,6 +27,27 @@ const notifySchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Paid add-on entitlements (server-enforced). Additive + lazy: existing accounts get the default (no access)
+// on first read/write. Each entitlement is scoped to THIS account (the shop). Nothing here is the deferred
+// till subscription — that is a separate, Store-scoped model behind TILL_ENABLED.
+const entitlementSchema = new mongoose.Schema(
+  {
+    status: { type: String, enum: ['none', 'active', 'past_due', 'cancelled'], default: 'none' },
+    source: { type: String, default: null },        // e.g. 'stripe' | 'comp' (how it was granted)
+    reference: { type: String, default: null },     // provider reference (e.g. subscription id)
+    grantedAt: { type: Number, default: null },     // epoch ms
+    currentPeriodEnd: { type: Number, default: null }, // epoch ms; access lapses after this when set
+    cancelledAt: { type: Number, default: null },
+    note: { type: String, default: '' },
+  },
+  { _id: false },
+);
+
+const entitlementsSchema = new mongoose.Schema(
+  { neighbourhoodInsights: { type: entitlementSchema, default: () => ({}) } },
+  { _id: false },
+);
+
 const accountSchema = new mongoose.Schema(
   {
     email: {
@@ -35,6 +56,7 @@ const accountSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     shopName: { type: String, required: true, trim: true },
     notify: { type: notifySchema, default: () => ({}) },
+    entitlements: { type: entitlementsSchema, default: () => ({}) },
   },
   { timestamps: true },
 );

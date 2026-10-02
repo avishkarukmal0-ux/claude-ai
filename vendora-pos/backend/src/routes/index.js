@@ -22,6 +22,13 @@ router.use('/pwa-docs', pwaDocRoutes);
 const pwaImageRoutes = require('./pwaImageRoutes');
 router.use('/pwa-images', pwaImageRoutes);
 
+// ── Neighbourhood Insights (optional PAID add-on). Mounted ONLY when INSIGHTS_ENABLED=true, so the core PWA
+//    is unaffected when off. Owner/manager + server-enforced paid entitlement. ──
+if (config.neighbourhoodInsights && config.neighbourhoodInsights.enabled) {
+  const pwaInsightsRoutes = require('./pwaInsightsRoutes');
+  router.use('/pwa-insights', pwaInsightsRoutes);
+}
+
 // ── PWA barcode auto-fill (scan → name/category via Open Food Facts proxy). PWA token required. ──
 const pwaLookupRoutes = require('./pwaLookupRoutes');
 router.use('/pwa-lookup', pwaLookupRoutes);
