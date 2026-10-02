@@ -33,12 +33,22 @@ const notifySchema = new mongoose.Schema(
 const entitlementSchema = new mongoose.Schema(
   {
     status: { type: String, enum: ['none', 'active', 'past_due', 'cancelled'], default: 'none' },
+    plan: { type: String, enum: ['none', 'subscription', 'one_off'], default: 'none' },
     source: { type: String, default: null },        // e.g. 'stripe' | 'comp' (how it was granted)
     reference: { type: String, default: null },     // provider reference (e.g. subscription id)
     grantedAt: { type: Number, default: null },     // epoch ms
     currentPeriodEnd: { type: Number, default: null }, // epoch ms; access lapses after this when set
     cancelledAt: { type: Number, default: null },
     note: { type: String, default: '' },
+    // Provider mapping (server-side only; never set from client input). Links this shop to its Stripe records
+    // so a webhook can be resolved to the authorised account and the add-on cancelled without touching core.
+    customerId: { type: String, default: null },       // Stripe customer id
+    subscriptionId: { type: String, default: null },   // Stripe subscription id (core + optional add-on items)
+    itemId: { type: String, default: null },           // the add-on's subscription item id (for add-on-only cancel)
+    priceId: { type: String, default: null },
+    // Out-of-order / duplicate webhook guard: the created-time (ms) and id of the last applied provider event.
+    lastEventAt: { type: Number, default: null },
+    lastEventId: { type: String, default: null },
   },
   { _id: false },
 );

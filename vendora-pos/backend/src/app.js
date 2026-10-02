@@ -123,6 +123,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Stripe webhooks must verify the signature against the UNPARSED body, so this one path gets the raw bytes
+// BEFORE express.json() would consume them. (The till's own Stripe webhook, if enabled, parses its own raw
+// body inside subscriptionRoutes; this is the separate PWA/insights endpoint.)
+app.use('/api/pwa-insights/billing/stripe/webhook', express.raw({ type: '*/*', limit: '1mb' }));
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

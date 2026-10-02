@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, Users, Home, Info, AlertTriangle, Lock, Loader2, BarChart3, Globe2,
 } from 'lucide-react';
-import { getStatus, getPreview, getProfile, startCheckout } from '../../lib/insightsClient';
+import { getStatus, getPreview, getProfile, startCheckout, cancelAddon } from '../../lib/insightsClient';
 import TrialsPanel from './TrialsPanel';
 
 const RADII = [{ m: 500, label: '500 m' }, { m: 1000, label: '1 km' }, { m: 3000, label: '3 km' }];
@@ -85,12 +85,40 @@ export default function NeighbourhoodInsightsView({ onBack }) {
 
               {result && <ProfileResult result={result} />}
 
+              {/* Manage a recurring add-on — cancel it without cancelling the core Vendora Shop subscription. */}
+              {status.entitlement && status.entitlement.plan === 'subscription' && status.entitlement.hasAddon && (
+                <ManageAddon onCancelled={() => getStatus().then(setStatus)} />
+              )}
+
               {/* Phase 3 — connect the area picture to the shop's real demand (requests → trial → sales). */}
               <TrialsPanel />
             </>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function ManageAddon({ onCancelled }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <h3 className="mb-1 text-sm font-bold text-gray-900">Your subscription</h3>
+      <p className="mb-3 text-xs text-gray-500">Neighbourhood Insights is active as an add-on. You can cancel just the add-on — your Vendora Shop subscription stays as it is.</p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try { await cancelAddon(); toast.success('Add-on cancelled — Vendora Shop continues.'); onCancelled?.(); }
+          catch (e) { toast.error(e.message || 'Couldn’t cancel the add-on.'); }
+          finally { setBusy(false); }
+        }}
+        className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 active:scale-[0.99] disabled:opacity-50"
+      >
+        {busy ? 'Cancelling…' : 'Cancel Neighbourhood Insights add-on'}
+      </button>
     </div>
   );
 }

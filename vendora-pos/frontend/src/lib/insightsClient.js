@@ -38,3 +38,9 @@ export async function getProfile({ postcode, radiusM }) { return _t('/profile', 
 
 /** Begin a purchase. Throws with a clear message when purchasing isn't configured (503) — never a fake flow. */
 export async function startCheckout() { return _t('/checkout', { method: 'POST' }); }
+
+/** Preview the prorated charge for adding the add-on to an existing subscription (shown before confirming). */
+export async function previewProration() { return _t('/billing/preview', { method: 'POST' }); }
+
+/** Cancel ONLY the Neighbourhood Insights add-on; the core Vendora Shop subscription continues. */
+export async function cancelAddon() { return _t('/billing/cancel-addon', { method: 'POST' }); }
