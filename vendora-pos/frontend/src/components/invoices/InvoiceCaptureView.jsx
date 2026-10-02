@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, FileText, Camera, Plus, Trash2, Check, AlertTriangle, Loader2, ScanText,
@@ -12,6 +12,7 @@ import { useClaims } from '../../lib/claimStore';
 import { extractInvoiceText } from '../../lib/invoiceOcr';
 import { reconcile, discrepanciesToClaimItems } from '../../lib/reconcile';
 import { hasClaimFor } from '../../lib/buyingJourney';
+import { backupAvailable, backupInvoiceFile, listBackedUp, getBackupState } from '../../lib/cloudDocs';
 import { parseInvoiceText } from '../../lib/parseInvoiceText';
 import { downscaleImage } from '../../lib/image';
 import { recordFailure } from '../../lib/diagnostics';
@@ -23,7 +24,7 @@ const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
 const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
 
 export default function InvoiceCaptureView({ onBack, onReconcile }) {
-  const { invoices, saveDraft, commitInvoice, removeInvoice, deleteFile, findDuplicate } = useInvoices();
+  const { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate } = useInvoices();
   const { suppliers } = useSuppliers();
   const { products } = useInventory();
   const [mode, setMode] = useState('list'); // 'list' | 'review' | 'reconcile'
@@ -32,6 +33,34 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
   const [ocr, setOcr] = useState({ busy: false, text: null });
   const [reconcileId, setReconcileId] = useState(null);
   const fileRef = useRef(null);
+
+  // Document backup (Phase 3) — only offered when the flag is on, the shop is signed in, AND the server
+  // reports it enabled. `backedUp` is the server's authoritative set; `bkState` is this device's progress.
+  const [backupOk, setBackupOk] = useState(false);
+  const [backedUp, setBackedUp] = useState(() => new Set());
+  const [bkState, setBkState] = useState(() => getBackupState());
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const ok = await backupAvailable();
+      if (!live) return;
+      setBackupOk(ok);
+      if (ok) { try { setBackedUp(await listBackedUp()); } catch { /* offline — leave empty */ } }
+    })();
+    const refresh = () => setBkState(getBackupState());
+    window.addEventListener('vendora:doc-backup', refresh);
+    return () => { live = false; window.removeEventListener('vendora:doc-backup', refresh); };
+  }, []);
+
+  async function doBackup(inv) {
+    const f = getFile(inv.fileId);
+    if (!f || !f.dataUrl) { toast.error('That file isn’t on this device to back up.'); return; }
+    // Let the data-URL's own mime flow through for images; only force the PDF type. (Stored `type` is the
+    // coarse 'image'|'pdf' label, not a real mime, so never pass it as the content type.)
+    const r = await backupInvoiceFile({ fileId: inv.fileId, dataUrl: f.dataUrl, type: f.type === 'pdf' ? 'application/pdf' : undefined, invoiceId: inv.id });
+    if (r.ok) { setBackedUp((prev) => new Set(prev).add(inv.fileId)); toast.success('Backed up'); }
+    else toast.error(r.error || 'Backup failed');
+  }
 
   function startManual() {
     setFile(null); setOcr({ busy: false, text: null });
@@ -137,7 +166,16 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
                 {inv.fileId && (
                   <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 active:scale-95">Delete file</button>
                 )}
+                {backupOk && inv.fileId && (() => {
+                  const st = backedUp.has(inv.fileId) ? 'uploaded' : (bkState[inv.fileId]?.status || 'none');
+                  if (st === 'uploaded') return <span className="inline-flex items-center gap-1 rounded-lg bg-success-light px-2.5 py-1.5 text-[11px] font-semibold text-success-dark"><Check className="h-3.5 w-3.5" /> Backed up</span>;
+                  if (st === 'pending') return <span className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-400">Backing up…</span>;
+                  return <button type="button" onClick={() => doBackup(inv)} className="rounded-lg border border-primary/30 bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary active:scale-95">{st === 'failed' ? 'Retry backup' : 'Back up'}</button>;
+                })()}
               </div>
+              {backupOk && inv.fileId && !backedUp.has(inv.fileId) && (
+                <p className="mt-1.5 text-[10px] text-gray-400">Stored on this device only — back up to reach it on another device.</p>
+              )}
             </li>
           ))}
         </ul>

@@ -46,6 +46,17 @@ module.exports = {
     historyTtlDays: parseInt(process.env.SYNC_HISTORY_TTL_DAYS, 10) || 30,
   },
 
+  // Document backup (Phase 3): cross-device backup of invoice photos/PDFs. OFF by default.
+  //   DOC_BACKUP=true           → enable the /api/pwa-docs upload/download/delete endpoints
+  //   DOC_BACKUP_PROVIDER       → 'gridfs' (default; stores in MongoDB, no extra secret/provider needed)
+  //   DOC_MAX_FILE_MB=<n>       → per-file size cap (default 10)
+  docBackup: {
+    enabled: process.env.DOC_BACKUP === 'true',
+    provider: process.env.DOC_BACKUP_PROVIDER || 'gridfs',
+    maxBytes: (parseInt(process.env.DOC_MAX_FILE_MB, 10) || 10) * 1024 * 1024,
+    allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'],
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/vendora-dev',
   },

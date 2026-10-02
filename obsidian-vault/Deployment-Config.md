@@ -23,6 +23,10 @@ flag in the Render service env and redeploy.
 | `NOTIFY_RUN_TOKEN` | backend | off | Enables `POST /api/pwa-notify/run` for an external scheduler (header `x-notify-token`). Unset → that route is 404. |
 | `NOTIFY_CRON` | backend | off | `true` also runs an in-process 15-min digest sweep (only reliable while the instance stays awake). |
 | `SYNC_HISTORY` | backend | off | `true` keeps a server-side version history of each synced store so a bad overwrite / lost conflict is recoverable (owner → More → Data → Cloud version history → Restore). Off → latest-only, exactly as before. |
+| `DOC_BACKUP` | backend | off | `true` enables cross-device backup of invoice photos/PDFs over `/api/pwa-docs` (stored in GridFS, NOT the JSON sync blobs). Off → the endpoints report `enabled:false` and files stay device-local, exactly as before. Needs accounts/sync in use. |
+| `DOC_BACKUP_PROVIDER` | backend | gridfs | Storage provider for `DOC_BACKUP`. `gridfs` needs no extra service or secret (uses the existing Mongo). |
+| `DOC_MAX_FILE_MB` | backend | 10 | Per-file size cap for document backup. |
+| `VITE_DOC_BACKUP` | frontend | off | `true` shows the per-invoice "Back up" control (owner/manager). Must match the backend `DOC_BACKUP`; the UI also checks the server's `/status` before offering it. |
 | `SYNC_HISTORY_KEEP` | backend | 10 | Revisions kept per store when history is on. |
 | `SYNC_HISTORY_TTL_DAYS` | backend | 30 | History older than this self-expires (TTL index backstop). |
 
@@ -118,6 +122,39 @@ account holder can do them (third-party keys + the Render dashboard).
    (free key at ocr.space/ocrapi). Redeploy. `GET /api/pwa-invoice-ocr/status` then reports `configured:true`.
 2. No app change — the capture screen starts showing scanned text + "Fill lines from this text" (still
    review + commit). With no key it stays manual entry (`configured:false`), never fabricated.
+
+## Document backup (invoice photos/PDFs — Phase 3)
+
+Invoice records (figures) already sync; the **raw files** (photos/PDFs) are device-local by default and were
+excluded from backup. `DOC_BACKUP` adds an authorised, shop-isolated backup so a file can be recovered on
+another device.
+
+- **Storage:** GridFS (MongoDB) by default — multi-MB binaries stored chunked, **not** in the JSON sync
+  blobs. No new provider or secret beyond the existing `MONGODB_URI`. The provider is a seam
+  (`config.docBackup.provider`) for a future S3/object-store without changing callers.
+- **Isolation:** every file is tagged with the authenticated account id; every download/delete filters on
+  it, so one shop can never read another's document. Routes are owner/manager only (invoices are financial).
+- **States:** the app shows per-file **pending / backed-up / failed** and a **Retry** on failure; the server
+  list is authoritative for "Backed up". Re-upload replaces the prior copy (idempotent) so an interrupted
+  upload is safe to retry.
+- **Retention/deletion:** "Delete file" removes the local copy (keeps the invoice record); deleting the
+  server backup is a separate authorised action. Nothing is auto-deleted.
+- **Validation:** type (jpeg/png/webp/heic/pdf) and size (`DOC_MAX_FILE_MB`, default 10) are enforced
+  server-side (and multer caps the request body).
+
+### Enabling (operator)
+1. **Render → backend → Environment:** `DOC_BACKUP=true` (optionally `DOC_MAX_FILE_MB`). Redeploy.
+2. **Vercel → frontend → Environment:** `VITE_DOC_BACKUP=true`. Redeploy. Needs `VITE_ACCOUNTS_ENABLED=true`.
+3. Verify: `GET /api/pwa-docs/status` (with a shop token) reports `enabled:true`; the owner sees a "Back up"
+   control on each invoice that has a stored file.
+
+### ⚠️ Recovery not yet verified end-to-end here
+The upload→download **round-trip, isolation and delete are covered by a DB-gated integration test**
+(`backend/src/__tests__/pwaDoc.integration.test.js`), which runs only with a real test Mongo
+(`VENDORA_TEST_URI`). It was **not run in this environment** (no Mongo in the sandbox). Per the mandate, do
+not tell owners a document is recoverable until you have run that test (or done a manual cross-device
+restore) against your live storage. The UI only claims "Backed up" after the server confirms an upload — it
+makes no cross-device recovery promise beyond what the server reports it holds.
 
 ## Monitoring & support (Phase 3.10)
 

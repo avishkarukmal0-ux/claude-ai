@@ -12,6 +12,11 @@ router.use('/pwa-auth', pwaAuthRoutes);
 const pwaSyncRoutes = require('./pwaSyncRoutes');
 router.use('/pwa-sync', pwaSyncRoutes);
 
+// ── PWA document backup (Phase 3). Invoice photos/PDFs → GridFS. OFF unless DOC_BACKUP=true (the routes
+//    then report enabled:false / 503). PWA token required; owner/manager only. ──
+const pwaDocRoutes = require('./pwaDocRoutes');
+router.use('/pwa-docs', pwaDocRoutes);
+
 // ── PWA barcode auto-fill (scan → name/category via Open Food Facts proxy). PWA token required. ──
 const pwaLookupRoutes = require('./pwaLookupRoutes');
 router.use('/pwa-lookup', pwaLookupRoutes);
