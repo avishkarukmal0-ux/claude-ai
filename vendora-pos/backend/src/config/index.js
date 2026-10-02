@@ -88,12 +88,55 @@ module.exports = {
     referenceYear: 2021,
     licence: 'Open Government Licence v3.0',
     attribution: 'Source: Office for National Statistics licensed under the Open Government Licence v.3.0',
+    // Census DATA source wiring (used by the 'nomis' provider). All optional; with no centroids file the
+    // provider reports it isn't set up (configured:false) rather than inventing numbers.
+    //   INSIGHTS_CENTROIDS_PATH   → path to the ONS OA (2021) population-weighted centroids file (CSV/NDJSON)
+    //   NOMIS_API_BASE            → Nomis API base (default the public endpoint)
+    //   INSIGHTS_NOMIS_TABLES_PATH→ optional JSON overriding the dataset-id / dimension map (verify-first)
+    //   INSIGHTS_CACHE_TTL        → seconds to cache a built profile (default 1 day)
+    //   INSIGHTS_FETCH_TIMEOUT_MS → per-request timeout to Nomis (default 15s)
+    //   INSIGHTS_MAX_OA           → safety cap on Output Areas per profile (default 2000)
+    data: {
+      centroidsPath: process.env.INSIGHTS_CENTROIDS_PATH || null,
+      nomisBase: (process.env.NOMIS_API_BASE || 'https://www.nomisweb.co.uk/api/v01').replace(/\/+$/, ''),
+      tablesPath: process.env.INSIGHTS_NOMIS_TABLES_PATH || null,
+      cacheTtlSeconds: parseInt(process.env.INSIGHTS_CACHE_TTL, 10) || 86400,
+      fetchTimeoutMs: parseInt(process.env.INSIGHTS_FETCH_TIMEOUT_MS, 10) || 15000,
+      maxOutputAreas: parseInt(process.env.INSIGHTS_MAX_OA, 10) || 2000,
+    },
     // Configurable price (minor units, e.g. pence) + interval — unset until the operator decides commercial terms.
     priceMinor: process.env.INSIGHTS_PRICE_MINOR ? parseInt(process.env.INSIGHTS_PRICE_MINOR, 10) : null,
     priceCurrency: process.env.INSIGHTS_PRICE_CURRENCY || 'GBP',
     priceInterval: process.env.INSIGHTS_PRICE_INTERVAL || null, // 'month' | 'year' | 'once' — operator sets
     // Shared secret the billing provider adapter signs its normalised webhook with. Unset → the webhook is 404.
     webhookSecret: process.env.INSIGHTS_BILLING_WEBHOOK_SECRET || null,
+  },
+
+  // Billing for the PWA (Stripe). SEPARATE from the deferred till subscription (subscriptionRoutes, behind
+  // TILL_ENABLED) — different endpoint, different webhook secret, its own prices. Nothing here activates live
+  // charges: a live (sk_live_) key is REFUSED unless BILLING_ALLOW_LIVE=true, and the whole surface is inert
+  // until INSIGHTS_BILLING_PROVIDER=stripe. Prices are configurable (test-mode price ids) and NOT hard-coded,
+  // so no commercial terms are baked in. saleMode decides what (if anything) is on sale:
+  //   'off'          → purchasing unavailable (default)
+  //   'one_off'      → a single paid area report (Checkout in 'payment' mode)
+  //   'subscription' → Vendora Shop (core) + optional Neighbourhood Insights add-on item on one subscription
+  // If the census DATA provider isn't configured, a 'subscription' sale is DOWNGRADED to one_off (or off) so a
+  // recurring charge is never taken for data that isn't being delivered yet. See [[Deployment-Config]].
+  billing: {
+    provider: process.env.INSIGHTS_BILLING_PROVIDER || null, // 'stripe' | null
+    stripeSecretKey: process.env.STRIPE_SECRET_KEY || null,
+    stripeWebhookSecret: process.env.INSIGHTS_STRIPE_WEBHOOK_SECRET || null,
+    allowLive: process.env.BILLING_ALLOW_LIVE === 'true', // guard: never use an sk_live_ key unless this is set
+    saleMode: process.env.INSIGHTS_SALE_MODE || 'off',    // 'off' | 'one_off' | 'subscription'
+    currency: (process.env.INSIGHTS_PRICE_CURRENCY || 'GBP').toLowerCase(),
+    prices: {
+      core: process.env.INSIGHTS_STRIPE_PRICE_CORE || null,     // Vendora Shop (proposed £19/mo)
+      addon: process.env.INSIGHTS_STRIPE_PRICE_ADDON || null,   // Neighbourhood Insights add-on (proposed £5/mo)
+      oneoff: process.env.INSIGHTS_STRIPE_PRICE_ONEOFF || null, // single area report (one-off)
+    },
+    reportValidDays: parseInt(process.env.INSIGHTS_REPORT_VALID_DAYS, 10) || 30, // one-off report access window
+    successUrl: process.env.INSIGHTS_BILLING_SUCCESS_URL || null,
+    cancelUrl: process.env.INSIGHTS_BILLING_CANCEL_URL || null,
   },
 
   mongodb: {
