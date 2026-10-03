@@ -60,7 +60,11 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
           {result.area && (result.area.ward || result.area.district) && (
             <p className="text-[11px] text-gray-500">{[result.area.ward, result.area.district].filter(Boolean).join(' · ')}</p>
           )}
-          {(result.figures || []).map((f) => (f.kind === 'breakdown' ? <BreakdownFigure key={f.key} f={f} /> : <CountFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />))}
+          {(result.figures || []).map((f) => {
+            if (f.kind === 'breakdown') return <BreakdownFigure key={f.key} f={f} />;
+            if (f.kind === 'imd') return <DeprivationFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
+            return <CountFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
+          })}
           <p className="flex items-start gap-1 text-[10px] leading-snug text-gray-400"><Info className="mt-0.5 h-2.5 w-2.5 shrink-0" /> {result.attribution} · Census 2021 · figures are estimates for the shop’s immediate area (LSOA).</p>
         </div>
       )}
@@ -81,6 +85,17 @@ function CountFigure({ f, fallbackDate }) {
     <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
       <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400"><Users className="h-4 w-4" /> {f.label} (est.)</span>
       <span className="mt-1 block text-3xl font-extrabold tabular-nums text-gray-900">{fmtNum(f.value)}</span>
+      <Provenance f={f} fallbackDate={fallbackDate} />
+    </div>
+  );
+}
+
+function DeprivationFigure({ f, fallbackDate }) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+      <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400"><MapPin className="h-4 w-4" /> {f.label}</span>
+      <span className="mt-1 block text-3xl font-extrabold tabular-nums text-gray-900">Decile {f.decile}<span className="text-base font-semibold text-gray-400"> of 10</span></span>
+      <span className="mt-1 block text-[11px] text-gray-500">1 = most deprived 10% of England{f.rank != null && f.rankOf != null ? ` · rank ${fmtNum(f.rank)} of ${fmtNum(f.rankOf)}` : ''}{f.score != null ? ` · score ${f.score}` : ''}</span>
       <Provenance f={f} fallbackDate={fallbackDate} />
     </div>
   );

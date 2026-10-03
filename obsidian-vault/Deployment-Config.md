@@ -503,3 +503,20 @@ New env: `NEIGHBOURHOOD_DS_POP_MID` (=NM_2014_1). postcodes.io is OPD Aug 2024 �
 **Planned next increments (not in this change):** IMD 2025 import script + model + join (deprivation decile);
 police.uk crime (month-labelled, ≤ last-updated); FSA food hygiene. Attribution wording for non-ONS sources is
 an assumption ("Source: <provider>, licensed under OGL v3.0") pending confirmation.
+
+### IMD 2025 deprivation (increment 2) — import-once, England only
+Deprivation now comes from the official **English Indices of Deprivation 2025** (OGL v3.0), not a census table.
+Imported once into Mongo (`ImdArea`), joined by `lsoa21`, shown as "Decile N of 10 (1 = most deprived)" + rank
++ score. England only — Welsh LSOAs (W…) are omitted (not covered). It appears automatically on `/area` once the
+collection has data (no flag); the figure is additive and never fabricated.
+
+**Owner import (run once, on a machine with the CSV + DB; NOT the sandbox):**
+```powershell
+cd vendora-pos\backend
+$env:MONGODB_URI="<Atlas URI>"   # vendora_pilot, or a test DB first
+node scripts/import-imd.js "C:\path\File_7_IoD2025_All_Ranks_Scores_Deciles_Population_Denominators.csv"
+```
+Download the CSV from gov.uk (assets.publishing.service.gov.uk/media/691ded56d140bbbaa59a2a7d/). The script maps
+the LSOA/score/rank/decile columns tolerantly, sets rankOf = number of England LSOAs (~33,755), upserts, and
+prints the E01000036 sample (expect decile 4, rank 10,874, score 25.385). Attribution wording for IMD is an
+ASSUMPTION pending confirmation ("Source: English indices of deprivation 2025 … OGL v3.0").

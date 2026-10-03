@@ -12,6 +12,7 @@
 // unit-tested offline. The network functions require outbound access and run on the server (Render), not in CI.
 const config = require('../config');
 const NeighbourhoodArea = require('../models/NeighbourhoodArea');
+const imd = require('./imdService');
 
 const C = () => config.neighbourhood;
 const OGL = 'Source: Office for National Statistics licensed under the Open Government Licence v3.0';
@@ -135,6 +136,7 @@ function shapeResponse(record, { online = true, now = Date.now() } = {}) {
     figures: (record.figures || []).map((f) => ({
       key: f.key, label: f.label, kind: f.kind || 'count', value: f.value, unit: f.unit,
       rows: f.rows || undefined,
+      decile: f.decile, rank: f.rank, rankOf: f.rankOf, score: f.score,
       geography: f.geography, geographyCode: f.geographyCode,
       source: f.source, datasetId: f.datasetId, edition: f.edition, version: f.version,
       referenceDate: f.referenceDate, lastUpdated: f.lastUpdated, fetchedAt: f.fetchedAt,
@@ -285,6 +287,8 @@ async function getAreaProfile(postcode, { force = false, now = Date.now() } = {}
     // Fetch every configured figure; the concurrency limiter throttles the upstream calls. A figure that fails
     // or returns nothing is simply omitted (never fabricated).
     const fetched = (await Promise.all(defs.map((d) => fetchFigure(area, d).catch(() => null)))).filter(Boolean);
+    // Deprivation comes from the imported IMD 2025 data (England only), not from Nomis. Optional + additive.
+    try { const dep = await imd.getFigure(area.lsoa21); if (dep) fetched.push({ ...dep }); } catch { /* imd optional */ }
     if (!fetched.length) {
       // Upstream reachable but no usable figures (e.g. no dataset configured). Don't invent — serve stale if any.
       if (existing) return { ...shapeResponse(existing, { online: true, now }), note: 'Showing last known data; a fresh figure isn’t available yet.' };

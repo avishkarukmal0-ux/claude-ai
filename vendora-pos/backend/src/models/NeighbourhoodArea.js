@@ -19,6 +19,11 @@ const figureSchema = new mongoose.Schema(
     unit: { type: String, default: null },
     // For a breakdown figure: the category rows (Total excluded), biggest first, with a share %.
     rows: { type: [{ _id: false, label: String, value: Number, pct: Number }], default: undefined },
+    // For an IMD (deprivation) figure: decile 1-10 (1 = most deprived), rank out of rankOf, and the score.
+    decile: { type: Number, default: undefined },
+    rank: { type: Number, default: undefined },
+    rankOf: { type: Number, default: undefined },
+    score: { type: Number, default: undefined },
     geography: { type: String, default: null },   // the geography the figure is for, e.g. 'lsoa21'
     geographyCode: { type: String, default: null },
     source: { type: String, required: true },     // 'ONS' | 'Nomis'
