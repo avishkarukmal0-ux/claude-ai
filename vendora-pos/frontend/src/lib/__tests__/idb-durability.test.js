@@ -35,6 +35,28 @@ describe('durability — write-through to IndexedDB', () => {
     expect(fake._map.get(storage.keyFor('inventory_v1', ws))).toBe(JSON.stringify([{ id: 'a' }]));
   });
 
+  it('FE3: an overflow write drops the stale localStorage value so the new one wins at restart', async () => {
+    const ws = storage.getActiveWorkspace();
+    const key = storage.keyFor('inventory_v1', ws);
+    storage.writeJSON('inventory_v1', [{ id: 'old' }]); // succeeds into localStorage + durable
+    await tick();
+    // Now make localStorage reject the replacement (quota), while the durable backend still accepts it.
+    const orig = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function block(k, v) {
+      if (k === key) throw new Error('QuotaExceededError');
+      return orig.call(this, k, v);
+    });
+    const res = storage.writeJSON('inventory_v1', [{ id: 'new' }]);
+    expect(res).toMatchObject({ ok: true, overflow: true });
+    expect(localStorage.getItem(key)).toBeNull();                 // stale 'old' removed (FE3)
+    expect(fake._map.get(key)).toBe(JSON.stringify([{ id: 'new' }])); // durable holds 'new'
+    spy.mockRestore();
+    // Simulate restart: fresh MEM + init recovers from durable; must read 'new', not 'old'.
+    storage.__resetMemForTest(); storage.__resetInitForTest();
+    await storage.initStorage();
+    expect(storage.readJSON('inventory_v1', null)).toEqual([{ id: 'new' }]);
+  });
+
   it('removeKey deletes from the durable backend too', async () => {
     storage.writeJSON('inventory_v1', [{ id: 'a' }]);
     await tick();

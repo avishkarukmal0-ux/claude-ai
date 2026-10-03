@@ -212,6 +212,11 @@ export function write(name, value, ws = getActiveWorkspace()) {
     // fails, surface it (otherwise an over-quota change could be lost silently — audit F3/F4).
     MEM.set(fullKey, value);
     durableSet(fullKey, value, { critical: true, name });
+    // Audit FE3: the FAILED setItem left the PREVIOUS value in localStorage. If we leave it, restart recovery
+    // (which only restores from IndexedDB when localStorage is absent) would resurrect that stale value and
+    // silently revert this acknowledged change. Drop the stale key so the newer IndexedDB value is authoritative
+    // on the next boot (also frees the quota the old value held).
+    try { localStorage.removeItem(fullKey); } catch { /* ignore */ }
     dispatch(STORAGE_WRITE_EVENT, { name, ws });
     return { ok: true, overflow: true };
   }

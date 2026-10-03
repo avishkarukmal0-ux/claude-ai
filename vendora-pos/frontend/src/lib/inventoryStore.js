@@ -743,7 +743,12 @@ export function useInventory() {
       applied += units;
     }
 
-    persist(next);
+    // Audit D1: do NOT record the goods-received ledger or report success unless the stock write actually
+    // committed. If persist fails (quota with no IndexedDB, etc.), return the failure so the caller does not
+    // mark the delivery received — and since no operationId movement is written, the owner can retry cleanly.
+    // (overflow is still ok:true — IndexedDB holds it durably.)
+    const saved = persist(next);
+    if (!saved.ok) return { ok: false, applied: 0, error: saved.error || 'Couldn’t save received stock — please retry.' };
     setProducts(next);
     for (const r of toLog) {
       recordMovement({
