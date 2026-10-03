@@ -151,6 +151,19 @@ describe('pwa-insights — entitlement enforced on the server', () => {
     expect(revoked.status).toBe(402);
   });
 
+  dbTest('S3: concurrent older-renewed + newer-ended → ended wins (no stale reactivation)', async () => {
+    const a = await newOwner('Ins Race');
+    const t = Date.now();
+    const sig = 'test-webhook-secret';
+    const renewed = request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', sig)
+      .send({ type: 'renewed', accountId: a.id, currentPeriodEnd: t + 30 * 86400000, eventId: `r_${t}`, eventCreatedMs: t + 100 });
+    const ended = request(app).post('/api/pwa-insights/billing/webhook').set('x-insights-signature', sig)
+      .send({ type: 'ended', accountId: a.id, eventId: `e_${t}`, eventCreatedMs: t + 200 });
+    await Promise.all([renewed, ended]); // race both deliveries
+    const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(prof.status).toBe(402); // the newer 'ended' must win regardless of which landed first
+  });
+
   dbTest('the REAL Stripe webhook (raw body, signed) grants access; a forged body is rejected', async () => {
     const a = await newOwner('Ins Stripe');
     const { payload, header } = stripeSigned(subUpdatedActiveWithAddon(a.id));

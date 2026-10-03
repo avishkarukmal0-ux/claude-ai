@@ -72,10 +72,16 @@ function mapEvent(event) {
   const base = { eventId: event.id, eventCreatedMs: createdMs, source: 'stripe' };
 
   switch (event.type) {
-    case 'checkout.session.completed': {
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded': {
       // One-off report purchase only. Subscription checkouts are granted via customer.subscription.* (which
       // carry the authoritative item list + period), so they're ignored here.
       if (obj.mode !== 'payment') return null;
+      // Audit S2: grant ONLY for a SETTLED payment of OUR product. A completed session can still be unpaid
+      // (delayed payment methods), and an unrelated 'payment' checkout could carry the same accountId metadata —
+      // neither must grant. Require payment_status 'paid' and our own kind marker ('insights_report').
+      if (obj.payment_status !== 'paid') return null; // async/unpaid → wait for async_payment_succeeded
+      if (obj.metadata && obj.metadata.kind && obj.metadata.kind !== 'insights_report') return null; // not our product
       const accountId = obj.client_reference_id || (obj.metadata && obj.metadata.accountId) || null;
       return {
         ...base, type: 'purchased', plan: 'one_off', accountId,

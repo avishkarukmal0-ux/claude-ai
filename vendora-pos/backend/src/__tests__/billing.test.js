@@ -85,12 +85,28 @@ describe('stripeBilling.mapEvent — grants only from real subscription state', 
     expect(n.type).toBe('ended');
   });
 
-  test('one-off checkout (payment mode) → purchased one_off with report window', () => {
-    const n = stripeBilling.mapEvent({ id: 'evt', type: 'checkout.session.completed', created: 1700000000, data: { object: { mode: 'payment', client_reference_id: 'acct_9', customer: 'cus_9', payment_intent: 'pi_9' } } });
+  test('one-off checkout (payment mode, PAID, our product) → purchased one_off with report window', () => {
+    const n = stripeBilling.mapEvent({ id: 'evt', type: 'checkout.session.completed', created: 1700000000, data: { object: { mode: 'payment', payment_status: 'paid', metadata: { kind: 'insights_report', accountId: 'acct_9' }, client_reference_id: 'acct_9', customer: 'cus_9', payment_intent: 'pi_9' } } });
     expect(n.type).toBe('purchased');
     expect(n.plan).toBe('one_off');
     expect(n.accountId).toBe('acct_9');
     expect(n.currentPeriodEnd).toBeGreaterThan(n.eventCreatedMs);
+  });
+
+  test('S2: an UNPAID completed session does NOT grant (waits for async_payment_succeeded)', () => {
+    const n = stripeBilling.mapEvent({ id: 'e', type: 'checkout.session.completed', created: 1, data: { object: { mode: 'payment', payment_status: 'unpaid', metadata: { kind: 'insights_report', accountId: 'a' }, client_reference_id: 'a' } } });
+    expect(n).toBeNull();
+  });
+
+  test('S2: a PAID checkout for an UNRELATED product does NOT grant', () => {
+    const n = stripeBilling.mapEvent({ id: 'e', type: 'checkout.session.completed', created: 1, data: { object: { mode: 'payment', payment_status: 'paid', metadata: { kind: 'something_else', accountId: 'a' }, client_reference_id: 'a' } } });
+    expect(n).toBeNull();
+  });
+
+  test('S2: async_payment_succeeded (paid, our product) grants the one-off', () => {
+    const n = stripeBilling.mapEvent({ id: 'e', type: 'checkout.session.async_payment_succeeded', created: 1, data: { object: { mode: 'payment', payment_status: 'paid', metadata: { kind: 'insights_report', accountId: 'a' }, client_reference_id: 'a' } } });
+    expect(n.type).toBe('purchased');
+    expect(n.plan).toBe('one_off');
   });
 
   test('subscription-mode checkout is ignored (granted via subscription.* instead)', () => {

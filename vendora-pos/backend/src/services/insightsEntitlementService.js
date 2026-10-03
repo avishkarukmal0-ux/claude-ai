@@ -45,6 +45,27 @@ async function setEntitlement(accountId, patch) {
   return acct.entitlements.neighbourhoodInsights;
 }
 
+// Audit S3: apply a patch ONLY if this event is strictly newer than the last applied one, atomically. Two
+// concurrent webhooks (e.g. an older 'renewed' and a newer 'ended') both read the same old state under the
+// non-atomic path and the last writer wins regardless of order. Here the conditional findOneAndUpdate is the
+// single source of truth: the guard compares the STORED lastEventAt at write time, so the newest event wins
+// whichever lands first; a stale event matches 0 docs and is skipped. @returns the new entitlement or null.
+const NP = 'entitlements.neighbourhoodInsights'; // nested path
+async function setEntitlementIfNewer(accountId, patch, eventCreatedMs) {
+  const current = await getEntitlement(accountId);
+  const merged = { ...DEFAULT, ...current, ...patch };
+  const guard = {
+    _id: accountId,
+    $or: [
+      { [`${NP}.lastEventAt`]: { $exists: false } },
+      { [`${NP}.lastEventAt`]: null },
+      { [`${NP}.lastEventAt`]: { $lt: eventCreatedMs } },
+    ],
+  };
+  const doc = await Account.findOneAndUpdate(guard, { $set: { [NP]: merged } }, { new: true }).lean();
+  return doc ? doc.entitlements.neighbourhoodInsights : null; // null = a newer event already applied (skip)
+}
+
 // --- billing lifecycle (provider-agnostic) ---------------------------------
 // A billing provider adapter normalises its events to one of these types and posts them to the webhook; we
 // translate to an entitlement patch here (pure + testable). Access policy (documented):
@@ -150,7 +171,15 @@ async function ingestProviderEvent(event, now = Date.now()) {
 
   const patch = entitlementPatchFor(event, current, now);
   if (!patch) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: 'no_patch' }; }
-  const ent = await setEntitlement(accountId, patch);
+  // When the event carries a created-time, apply it with the atomic ordering guard (S3). Otherwise (e.g. the
+  // generic manual webhook with no timestamp) fall back to the plain write.
+  let ent;
+  if (event.eventCreatedMs != null) {
+    ent = await setEntitlementIfNewer(accountId, patch, event.eventCreatedMs);
+    if (!ent) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: 'stale' }; }
+  } else {
+    ent = await setEntitlement(accountId, patch);
+  }
   await recordProcessed(event, accountId);
   return { ok: true, status: ent ? ent.status : null, entitled: isActive(ent, now) };
 }

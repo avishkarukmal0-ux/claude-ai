@@ -84,8 +84,11 @@ router.put('/prefs', async (req, res, next) => {
 });
 
 // GET /api/pwa-notify/preview → the digest that WOULD be sent right now (no send, no state change).
+// Owner/manager only (audit S1): the digest contains financial data (supplier claim amounts) that staff must
+// not see — the same financial-store prohibition enforced on sync reads/writes.
 router.get('/preview', async (req, res, next) => {
   try {
+    if (req.pwa.role === 'staff') throw new AppError('Not allowed', 403, 'FORBIDDEN');
     const digest = await notify.previewForAccount(req.pwa.shopId, Date.now());
     if (!digest) throw new AppError('Account not found', 404, 'NOT_FOUND');
     res.json({ success: true, configured: notify.emailConfigured(), digest });
