@@ -83,9 +83,12 @@ export function getThumbLocal(id, ws = getActiveWorkspace()) { return id ? read(
 export function getFullLocal(id, ws = getActiveWorkspace()) { return id ? read(FULL(id), null, ws) : null; }
 export function hasLocal(id) { return !!getThumbLocal(id) || !!getFullLocal(id); }
 
+// Returns which byte writes actually committed (audit FE4): write() reports {ok:false} on a durable failure
+// (quota + no IndexedDB), so callers can avoid saving a product image reference with no bytes behind it.
 function putLocal(id, { full, thumb }, ws = getActiveWorkspace()) {
-  if (full) write(FULL(id), full, ws);
-  if (thumb) write(THUMB(id), thumb, ws);
+  const fullOk = full ? (write(FULL(id), full, ws).ok !== false) : null;
+  const thumbOk = thumb ? (write(THUMB(id), thumb, ws).ok !== false) : null;
+  return { full: fullOk, thumb: thumbOk };
 }
 
 /**
@@ -96,7 +99,11 @@ export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace
   const id = newImageId();
   const { full, thumb } = await processImage(src); // async — pin the workspace captured at entry (FE1)
   if (!full && !thumb) return { ok: false, error: 'Couldn’t process that image' };
-  putLocal(id, { full, thumb }, ws);
+  const wrote = putLocal(id, { full, thumb }, ws);
+  // FE4: don't claim success (and don't let the caller save a product.image ref) if nothing persisted.
+  if (wrote.full === false && (wrote.thumb === false || wrote.thumb === null)) {
+    return { ok: false, error: 'Couldn’t save the photo to this device (storage full).' };
+  }
   return { ok: true, id, thumb, full, source };
 }
 
@@ -104,12 +111,15 @@ export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace
 export function removeImage(id) {
   if (!id) return { ok: false };
   const full = getFullLocal(id); const thumb = getThumbLocal(id);
+  // FE4: only report the delete as recoverable if the trash copy actually persisted.
+  let trashedOk = false;
   if (full || thumb) {
-    try { write(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() })); } catch { /* ignore */ }
+    const w = write(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }));
+    trashedOk = w && w.ok !== false;
   }
   removeKey(FULL(id)); removeKey(THUMB(id));
   clearBackupState(id); // the server copy is removed separately via deleteBackup() (authorised, async)
-  return { ok: true, recoverable: !!(full || thumb) };
+  return { ok: true, recoverable: trashedOk };
 }
 
 /** Undo a recoverable delete. @returns {{ok, thumb?}} */
@@ -117,7 +127,9 @@ export function restoreImage(id) {
   let t = null;
   try { t = JSON.parse(read(TRASH(id), 'null')); } catch { t = null; }
   if (!t) return { ok: false };
-  putLocal(id, { full: t.full, thumb: t.thumb });
+  const wrote = putLocal(id, { full: t.full, thumb: t.thumb });
+  // FE4: keep the trash copy if the restore writes didn't commit, so the photo isn't lost.
+  if (wrote.full === false && (wrote.thumb === false || wrote.thumb === null)) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
   removeKey(TRASH(id));
   return { ok: true, thumb: t.thumb };
 }

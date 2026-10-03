@@ -6,18 +6,26 @@
 // cancel. Device-local only: these keys are NOT workspace-scoped stores, so they never sync and never land
 // in a backup.
 import { useState, useEffect, useRef } from 'react';
+import { getActiveWorkspace } from './storage';
 
-const PREFIX = 'vendora:formdraft:';
+// Audit FE2: scope draft keys UNDER the active workspace (`vendora:<ws>:formdraft:<key>`) so that (a) one shop
+// can't read a half-typed product/cost left by another on a shared device, and (b) purgeWorkspace() on
+// sign-out/shop-switch — which clears every `vendora:<ws>:` key — removes them too. The legacy unscoped key
+// (`vendora:formdraft:<key>`) is proactively deleted so it can't shadow or leak.
+const scopedKey = (key, ws = getActiveWorkspace()) => `vendora:${ws}:formdraft:${key}`;
+const legacyKey = (key) => `vendora:formdraft:${key}`;
 
 export function loadFormDraft(key) {
-  try { const r = localStorage.getItem(PREFIX + key); return r ? JSON.parse(r) : null; }
+  try { const r = localStorage.getItem(scopedKey(key)); return r ? JSON.parse(r) : null; }
   catch { return null; }
 }
 export function saveFormDraft(key, value) {
-  try { localStorage.setItem(PREFIX + key, JSON.stringify(value)); } catch { /* ignore (quota/private mode) */ }
+  try { localStorage.setItem(scopedKey(key), JSON.stringify(value)); } catch { /* ignore (quota/private mode) */ }
+  try { localStorage.removeItem(legacyKey(key)); } catch { /* ignore */ } // retire any pre-scoping draft
 }
 export function clearFormDraft(key) {
-  try { localStorage.removeItem(PREFIX + key); } catch { /* ignore */ }
+  try { localStorage.removeItem(scopedKey(key)); } catch { /* ignore */ }
+  try { localStorage.removeItem(legacyKey(key)); } catch { /* ignore */ }
 }
 
 /**

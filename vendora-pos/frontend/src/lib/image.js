@@ -44,7 +44,9 @@ export async function downscaleImage(src, { maxDim = 1600, quality = 0.7, type =
     const { width, height } = bitmap;
     const longest = Math.max(width, height) || 1;
     const scale = Math.min(1, maxDim / longest);
-    if (scale >= 1) { try { bitmap.close && bitmap.close(); } catch { /* ignore */ } return await asDataUrl(); }
+    // Audit FE5: ALWAYS re-encode through the canvas (even when the image already fits, scale===1) so EXIF/GPS
+    // and other metadata are stripped. Returning the original source for small images leaked location/device
+    // data into backups. Canvas pixels carry no metadata, so a scale-1 redraw sanitises without resizing.
     const w = Math.max(1, Math.round(width * scale));
     const h = Math.max(1, Math.round(height * scale));
     const canvas = (typeof OffscreenCanvas !== 'undefined') ? new OffscreenCanvas(w, h) : document.createElement('canvas');
