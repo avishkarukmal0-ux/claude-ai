@@ -57,6 +57,15 @@ async function removeAll(accountId, fileId) {
   return files.length;
 }
 
+/** Remove every stored copy of (account,fileId) EXCEPT keepId. Used after a successful replacement (S4). */
+async function removeAllExcept(accountId, fileId, keepId) {
+  const b = bucket();
+  const files = await b.find({ filename: nameFor(accountId, fileId), 'metadata.accountId': accountId }).toArray();
+  let removed = 0;
+  for (const f of files) { if (String(f._id) !== String(keepId)) { try { await b.delete(f._id); removed += 1; } catch { /* gone */ } } }
+  return removed;
+}
+
 /**
  * Store (or replace) a file for an account. Idempotent per (accountId, fileId): a retry replaces the prior
  * copy rather than duplicating, so an interrupted upload can be safely re-run.
@@ -69,17 +78,25 @@ async function upload(accountId, fileId, { buffer, contentType, invoiceId = null
   const size = buffer ? buffer.length : 0;
   validate({ contentType, size });
 
-  await removeAll(accountId, fileId); // replace-on-retry, no duplicates
+  // Audit S4: upload the NEW copy first, then drop the superseded ones — never delete the only backup before
+  // the replacement has committed. On failure, clean up the partial write and keep the previous copy.
   const b = bucket();
-  await new Promise((resolve, reject) => {
-    const stream = b.openUploadStream(nameFor(accountId, fileId), {
-      contentType,
-      metadata: { accountId, fileId, invoiceId, contentType, uploadedAt: new Date() },
+  let newId = null;
+  try {
+    newId = await new Promise((resolve, reject) => {
+      const stream = b.openUploadStream(nameFor(accountId, fileId), {
+        contentType,
+        metadata: { accountId, fileId, invoiceId, contentType, uploadedAt: new Date() },
+      });
+      stream.on('error', reject);
+      stream.on('finish', () => resolve(stream.id));
+      stream.end(buffer);
     });
-    stream.on('error', reject);
-    stream.on('finish', resolve);
-    stream.end(buffer);
-  });
+  } catch (err) {
+    if (newId) { try { await b.delete(newId); } catch { /* ignore */ } }
+    throw new AppError(`Upload failed — your previous backup is unchanged. (${err.message})`, 502, 'UPLOAD_FAILED');
+  }
+  await removeAllExcept(accountId, fileId, newId);
   return { ok: true, fileId, size, contentType };
 }
 

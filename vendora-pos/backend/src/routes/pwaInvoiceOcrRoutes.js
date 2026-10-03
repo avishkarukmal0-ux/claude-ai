@@ -8,8 +8,10 @@ const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
 const ocr = require('../services/invoiceOcrService');
 
-router.use((req, res, next) => {
-  try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); next(); }
+router.use(async (req, res, next) => {
+  // Audit follow-up: also assert the member is active so a revoked member can't keep spending paid OCR on a
+  // not-yet-expired token — consistent with the protected data routes.
+  try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); await pwaAuth.assertMemberActive(req.pwa); next(); }
   catch (err) { next(err); }
 });
 

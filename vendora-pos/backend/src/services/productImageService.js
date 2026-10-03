@@ -49,6 +49,15 @@ async function removeAll(accountId, fileId) {
   return files.length;
 }
 
+/** Remove every stored copy of (account,fileId) EXCEPT keepId. Used after a successful replacement (S4). */
+async function removeAllExcept(accountId, fileId, keepId) {
+  const b = bucket();
+  const files = await b.find({ filename: nameFor(accountId, fileId), 'metadata.accountId': accountId }).toArray();
+  let removed = 0;
+  for (const f of files) { if (String(f._id) !== String(keepId)) { try { await b.delete(f._id); removed += 1; } catch { /* gone */ } } }
+  return removed;
+}
+
 /** Store (replace) a product image for an account. Idempotent per (accountId, fileId) — a re-upload replaces. */
 async function upload(accountId, fileId, { buffer, contentType, barcode = null, source = 'owner' }) {
   assertEnabled();
@@ -56,17 +65,25 @@ async function upload(accountId, fileId, { buffer, contentType, barcode = null, 
   if (!fileId) throw new AppError('Missing image id.', 400, 'NO_IMAGE_ID');
   const size = buffer ? buffer.length : 0;
   validate({ contentType, size });
-  await removeAll(accountId, fileId);
+  // Audit S4: upload the NEW copy first, then remove the old ones — so a failed upload can't destroy the only
+  // backup. On error, clean up the partial write and keep the previous copy intact.
   const b = bucket();
-  await new Promise((resolve, reject) => {
-    const stream = b.openUploadStream(nameFor(accountId, fileId), {
-      contentType,
-      metadata: { accountId, fileId, barcode, source, contentType, uploadedAt: new Date() },
+  let newId = null;
+  try {
+    newId = await new Promise((resolve, reject) => {
+      const stream = b.openUploadStream(nameFor(accountId, fileId), {
+        contentType,
+        metadata: { accountId, fileId, barcode, source, contentType, uploadedAt: new Date() },
+      });
+      stream.on('error', reject);
+      stream.on('finish', () => resolve(stream.id));
+      stream.end(buffer);
     });
-    stream.on('error', reject);
-    stream.on('finish', resolve);
-    stream.end(buffer);
-  });
+  } catch (err) {
+    if (newId) { try { await b.delete(newId); } catch { /* ignore */ } }
+    throw new AppError(`Upload failed — your previous copy is unchanged. (${err.message})`, 502, 'UPLOAD_FAILED');
+  }
+  await removeAllExcept(accountId, fileId, newId); // drop the superseded copies now the new one is committed
   return { ok: true, fileId, size, contentType };
 }
 

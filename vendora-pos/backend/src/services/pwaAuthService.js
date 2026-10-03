@@ -20,12 +20,14 @@ const Member = require('../models/Member');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
 
-// Identity carried in every token. For the owner, mid === shopId.
-function tokensFor({ shopId, role, memberId, name }) {
-  const base = { sub: shopId, shopId, role, mid: memberId, name };
+// Identity carried in every token. For the owner, mid === shopId. `tv` is the member's token version (S6):
+// it's stamped into both tokens so a password reset / revoke (which bumps the member's tokenVersion) instantly
+// invalidates every previously issued token for that member.
+function tokensFor({ shopId, role, memberId, name, tv = 0 }) {
+  const base = { sub: shopId, shopId, role, mid: memberId, name, tv };
   const accessToken = jwt.sign({ ...base, typ: 'pwa' }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
   const refreshToken = jwt.sign(
-    { sub: shopId, shopId, role, mid: memberId, typ: 'pwa-refresh' },
+    { sub: shopId, shopId, role, mid: memberId, tv, typ: 'pwa-refresh' },
     config.jwt.refreshSecret,
     { expiresIn: config.jwt.refreshExpiresIn },
   );
@@ -86,7 +88,7 @@ async function login({ email, password } = {}) {
     const owner = await Account.findById(member.account);
     if (owner) {
       const shopId = owner._id.toString();
-      const { accessToken, refreshToken } = tokensFor({ shopId, role: member.role, memberId: member._id.toString(), name: member.name });
+      const { accessToken, refreshToken } = tokensFor({ shopId, role: member.role, memberId: member._id.toString(), name: member.name, tv: member.tokenVersion || 0 });
       return { token: accessToken, refreshToken, shop: shapeShop(owner), role: member.role, member: shapeMember(member) };
     }
   }
@@ -116,8 +118,10 @@ async function refresh(refreshToken) {
   // the owner made takes effect on the next refresh.
   const member = await Member.findById(decoded.mid);
   if (!member || member.active === false || member.account.toString() !== decoded.shopId) throw AppError.authRefreshInvalid();
+  // S6: a refresh token minted before a password reset carries an older tv — reject it.
+  if ((decoded.tv || 0) !== (member.tokenVersion || 0)) throw AppError.authRefreshInvalid();
   const token = jwt.sign(
-    { sub: decoded.shopId, shopId: decoded.shopId, role: member.role, mid: member._id.toString(), name: member.name, typ: 'pwa' },
+    { sub: decoded.shopId, shopId: decoded.shopId, role: member.role, mid: member._id.toString(), name: member.name, tv: member.tokenVersion || 0, typ: 'pwa' },
     config.jwt.secret,
     { expiresIn: config.jwt.expiresIn },
   );
@@ -180,17 +184,22 @@ async function assertMemberActive(decoded) {
   const now = Date.now();
   let cached = _memberCache.get(id);
   if (!cached || now - cached.at > MEMBER_CACHE_TTL_MS) {
-    const m = await Member.findById(id).select('active role account').lean();
+    const m = await Member.findById(id).select('active role account tokenVersion').lean();
     cached = {
       at: now,
       found: !!m,
       active: m ? m.active !== false : false,
       role: m ? m.role : null,
       account: m && m.account ? m.account.toString() : null,
+      tokenVersion: m ? (m.tokenVersion || 0) : 0,
     };
     _memberCache.set(id, cached);
   }
   if (!cached.found || !cached.active || cached.account !== decoded.shopId) {
+    throw new AppError('Access has been revoked', 401, 'AUTH_TOKEN_EXPIRED');
+  }
+  // S6: a token minted before a password reset carries an older tv — reject it (cache TTL ≤30s bounds the lag).
+  if ((decoded.tv || 0) !== cached.tokenVersion) {
     throw new AppError('Access has been revoked', 401, 'AUTH_TOKEN_EXPIRED');
   }
   decoded.role = cached.role; // live role wins over whatever the token was minted with
@@ -230,6 +239,7 @@ async function updateMember(accountId, memberId, { name, role, active, password 
   if (password != null) {
     if (String(password).length < MIN_PASSWORD) throw AppError.validation(`Password must be at least ${MIN_PASSWORD} characters`);
     member.passwordHash = await Member.hashPassword(password);
+    member.tokenVersion = (member.tokenVersion || 0) + 1; // S6: revoke every token issued before this reset
   }
   await member.save();
   invalidateMember(memberId); // deactivation / role change / reset bites on the next data request

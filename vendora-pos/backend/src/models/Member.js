@@ -21,6 +21,9 @@ const memberSchema = new mongoose.Schema(
     // Deactivated members keep their record (for attribution history) but can no longer sign in or
     // refresh — the owner can switch access off without deleting who-did-what.
     active: { type: Boolean, default: true },
+    // Session/token version (audit S6). Every issued token carries this; a password reset (or explicit
+    // revoke) bumps it, so previously issued access AND refresh tokens stop validating immediately.
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

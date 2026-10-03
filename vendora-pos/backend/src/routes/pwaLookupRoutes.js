@@ -9,8 +9,10 @@ const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
 const lookupService = require('../services/productLookupService');
 
-router.use((req, res, next) => {
-  try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); next(); }
+router.use(async (req, res, next) => {
+  // Audit follow-up: also check the member is still active, so a deactivated/reset member can't keep using the
+  // proxy (and incur provider cost) on a not-yet-expired token — consistent with the data routes.
+  try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); await pwaAuth.assertMemberActive(req.pwa); next(); }
   catch (err) { next(err); }
 });
 
