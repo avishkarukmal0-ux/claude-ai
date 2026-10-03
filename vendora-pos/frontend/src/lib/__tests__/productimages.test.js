@@ -141,6 +141,19 @@ describe('productImages — backup lifecycle (local → pending → backed-up / 
     expect(getBackupState(id).state).toBe(BACKUP_STATE.DONE);
   });
 
+  it('FE1: an async save stays in the workspace it STARTED in, even if the shop switches mid-await', async () => {
+    // Slow the processing so we can switch workspace before it resolves.
+    __setDownscale((src) => new Promise((res) => { setTimeout(() => res(typeof src === 'string' ? src : DATA), 10); }));
+    setActiveWorkspace('ws-A');
+    const p = saveImage(DATA, { source: 'owner' }); // ws captured = ws-A
+    setActiveWorkspace('ws-B'); // user switches shop while processing is in flight
+    const saved = await p;
+    setActiveWorkspace('ws-A');
+    expect(getThumbLocal(saved.id)).toBeTruthy(); // written under A (the originating shop)
+    setActiveWorkspace('ws-B');
+    expect(getThumbLocal(saved.id)).toBe(null); // NOT leaked into B
+  });
+
   it('deleteBackup removes the server copy and clears local state', async () => {
     __setBackupAvailability(true);
     const removed = [];

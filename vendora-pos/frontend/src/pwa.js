@@ -49,7 +49,16 @@ export function registerServiceWorker() {
     window.location.reload();
   });
 
-  window.addEventListener('load', () => {
+  // Audit FE9: registration must not depend ONLY on a future `load` event. boot() can await IndexedDB
+  // hydration past `load`, so a listener added afterwards never fires and the worker is never registered
+  // (the PWA then can't reopen offline). Register immediately when the document is already loaded; otherwise
+  // attach a one-shot load listener.
+  const whenReady = (fn) => {
+    if (document.readyState === 'complete') fn();
+    else window.addEventListener('load', fn, { once: true });
+  };
+
+  whenReady(() => {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {

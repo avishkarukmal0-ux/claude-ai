@@ -48,8 +48,12 @@ export async function processImage(src) {
 }
 
 // --- backup-state map (per device; drives the local/pending/backed-up/failed UI) -------------------------
-function readBackupMap() { try { return JSON.parse(read(BACKUP_MAP, 'null')) || {}; } catch { return {}; } }
-function writeBackupMap(m) { try { write(BACKUP_MAP, JSON.stringify(m || {})); } catch { /* ignore */ } }
+// Audit FE1: an async photo op must read/write the workspace it STARTED in, not whichever shop is active when
+// the await resolves — otherwise a prior shop's photo/state can be written under another account. Every
+// local helper therefore takes an explicit `ws` (captured at the operation's entry), defaulting to the
+// current workspace only for synchronous/UI callers.
+function readBackupMap(ws = getActiveWorkspace()) { try { return JSON.parse(read(BACKUP_MAP, 'null', ws)) || {}; } catch { return {}; } }
+function writeBackupMap(m, ws = getActiveWorkspace()) { try { write(BACKUP_MAP, JSON.stringify(m || {}), ws); } catch { /* ignore */ } }
 
 /** The backup record for an image id: { state, at, error?, barcode?, source? }. Defaults to LOCAL. */
 export function getBackupState(id) {
@@ -57,13 +61,13 @@ export function getBackupState(id) {
   const rec = readBackupMap()[id];
   return rec && rec.state ? rec : { state: BACKUP_STATE.LOCAL };
 }
-function setBackupState(id, patch) {
+function setBackupState(id, patch, ws = getActiveWorkspace()) {
   if (!id) return;
-  const m = readBackupMap();
+  const m = readBackupMap(ws);
   m[id] = { ...(m[id] || {}), ...patch, at: Date.now() };
-  writeBackupMap(m);
+  writeBackupMap(m, ws);
 }
-function clearBackupState(id) { const m = readBackupMap(); if (m[id]) { delete m[id]; writeBackupMap(m); } }
+function clearBackupState(id, ws = getActiveWorkspace()) { const m = readBackupMap(ws); if (m[id]) { delete m[id]; writeBackupMap(m, ws); } }
 
 /** Ids that still need a (re)upload: anything FAILED, or PENDING left stale by a closed tab / lost network. */
 export function pendingBackups() {
@@ -75,24 +79,24 @@ export function pendingBackups() {
 export function pendingBackupCount() { return pendingBackups().length; }
 
 // --- local store -----------------------------------------------------------
-export function getThumbLocal(id) { return id ? read(THUMB(id), null) : null; }
-export function getFullLocal(id) { return id ? read(FULL(id), null) : null; }
+export function getThumbLocal(id, ws = getActiveWorkspace()) { return id ? read(THUMB(id), null, ws) : null; }
+export function getFullLocal(id, ws = getActiveWorkspace()) { return id ? read(FULL(id), null, ws) : null; }
 export function hasLocal(id) { return !!getThumbLocal(id) || !!getFullLocal(id); }
 
-function putLocal(id, { full, thumb }) {
-  if (full) write(FULL(id), full);
-  if (thumb) write(THUMB(id), thumb);
+function putLocal(id, { full, thumb }, ws = getActiveWorkspace()) {
+  if (full) write(FULL(id), full, ws);
+  if (thumb) write(THUMB(id), thumb, ws);
 }
 
 /**
  * Save a new owner/catalogue image locally from a source (data URL / Blob). Does NOT touch the product
  * record — the caller sets `product.image` via the inventory store (an explicit action). @returns {{id, thumb}}
  */
-export async function saveImage(src, { source = 'owner' } = {}) {
+export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace() } = {}) {
   const id = newImageId();
-  const { full, thumb } = await processImage(src);
+  const { full, thumb } = await processImage(src); // async — pin the workspace captured at entry (FE1)
   if (!full && !thumb) return { ok: false, error: 'Couldn’t process that image' };
-  putLocal(id, { full, thumb });
+  putLocal(id, { full, thumb }, ws);
   return { ok: true, id, thumb, full, source };
 }
 
@@ -138,31 +142,34 @@ export function resolveImage(product, suggested = null) {
 }
 
 // --- cloud backup (flag-gated, shop-scoped; pluggable transport for tests) --
-function authHeader() { const s = currentSession(); return s && s.token ? { Authorization: `Bearer ${s.token}` } : {}; }
-async function _status() {
-  const res = await fetch(`${BASE}/status`, { headers: authHeader() });
+// Audit FE1: pin the bearer token captured at the operation's entry so an upload/download/delete can never run
+// under a shop the user has since switched to. A null token falls back to the current session (sync callers).
+function currentToken() { const s = currentSession(); return s && s.token ? s.token : null; }
+function authHeaderFor(token) { const tk = token || currentToken(); return tk ? { Authorization: `Bearer ${tk}` } : {}; }
+async function _status(token) {
+  const res = await fetch(`${BASE}/status`, { headers: authHeaderFor(token) });
   let d = null; try { d = await res.json(); } catch { /* ignore */ }
   if (!res.ok) throw new Error('status failed');
   return d || {};
 }
-async function _upload(id, blob, { barcode, source } = {}) {
+async function _upload(id, blob, { barcode, source, token } = {}) {
   const form = new FormData();
   form.append('file', blob, id);
   if (barcode) form.append('barcode', barcode);
   if (source) form.append('source', source);
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: 'POST', headers: authHeader(), body: form });
+  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: 'POST', headers: authHeaderFor(token), body: form });
   let d = null; try { d = await res.json(); } catch { /* ignore */ }
   if (!res.ok) { const e = new Error((d && d.message) || 'upload failed'); e.status = res.status; throw e; }
   return d || {};
 }
-async function _download(id) {
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { headers: authHeader() });
+async function _download(id, token) {
+  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { headers: authHeaderFor(token) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error('download failed');
   return res.blob();
 }
-async function _remove(id) {
-  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeader() });
+async function _remove(id, token) {
+  const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaderFor(token) });
   if (!res.ok && res.status !== 404) { const e = new Error('delete failed'); e.status = res.status; throw e; }
   return true;
 }
@@ -177,11 +184,12 @@ const blobToDataUrl = (blob) => new Promise((res, rej) => { const r = new FileRe
 let _availabilityOverride = null;
 export function __setBackupAvailability(v) { _availabilityOverride = v == null ? null : !!v; }
 
-/** Is cloud image backup usable now? (flag on + signed in + server enabled). false on any failure. */
-export async function backupAvailable() {
+/** Is cloud image backup usable now? (flag on + signed in + server enabled). false on any failure. Pass the
+ *  token captured at entry so the check is for THAT identity (FE1). */
+export async function backupAvailable(token) {
   if (_availabilityOverride === false) return false;
   if (_availabilityOverride !== true && (!imagesFlagOn() || !isLoggedIn())) return false;
-  try { return !!(await _t.status()).enabled; } catch { return false; }
+  try { return !!(await _t.status(token)).enabled; } catch { return false; }
 }
 
 /**
@@ -189,21 +197,21 @@ export async function backupAvailable() {
  * local → pending → backed-up / failed. A failure leaves a FAILED record that `retryBackups()` can re-send.
  * Best-effort (never throws); returns { ok, state }.
  */
-export async function backupImage(id, { barcode = null, source = 'owner' } = {}) {
-  const full = getFullLocal(id);
+export async function backupImage(id, { barcode = null, source = 'owner', ws = getActiveWorkspace(), token = currentToken() } = {}) {
+  const full = getFullLocal(id, ws);
   if (!full) return { ok: false, state: BACKUP_STATE.LOCAL, error: 'nothing to back up' };
-  if (!(await backupAvailable())) {
+  if (!(await backupAvailable(token))) {
     // Keep it queued as FAILED so it uploads once backup becomes available (sign-in / flag on / back online).
-    setBackupState(id, { state: BACKUP_STATE.FAILED, error: 'backup unavailable', barcode, source });
+    setBackupState(id, { state: BACKUP_STATE.FAILED, error: 'backup unavailable', barcode, source }, ws);
     return { ok: false, state: BACKUP_STATE.FAILED, error: 'backup unavailable' };
   }
-  setBackupState(id, { state: BACKUP_STATE.PENDING, barcode, source, error: null });
+  setBackupState(id, { state: BACKUP_STATE.PENDING, barcode, source, error: null }, ws);
   try {
-    await _t.upload(id, await dataUrlToBlob(full), { barcode, source });
-    setBackupState(id, { state: BACKUP_STATE.DONE, error: null, barcode, source });
+    await _t.upload(id, await dataUrlToBlob(full), { barcode, source, token }); // pinned token (FE1)
+    setBackupState(id, { state: BACKUP_STATE.DONE, error: null, barcode, source }, ws);
     return { ok: true, state: BACKUP_STATE.DONE };
   } catch (err) {
-    setBackupState(id, { state: BACKUP_STATE.FAILED, error: err.message || 'upload failed', barcode, source });
+    setBackupState(id, { state: BACKUP_STATE.FAILED, error: err.message || 'upload failed', barcode, source }, ws);
     return { ok: false, state: BACKUP_STATE.FAILED, error: err.message || 'upload failed' };
   }
 }
@@ -237,10 +245,10 @@ export function registerBackupAutoRetry() {
 }
 
 /** Delete the server-side backup copy of an image (authorised by the signed-in shop token). Best-effort. */
-export async function deleteBackup(id) {
-  clearBackupState(id);
-  if (!id || !(await backupAvailable())) return { ok: false };
-  try { await _t.remove(id); return { ok: true }; }
+export async function deleteBackup(id, { ws = getActiveWorkspace(), token = currentToken() } = {}) {
+  clearBackupState(id, ws);
+  if (!id || !(await backupAvailable(token))) return { ok: false };
+  try { await _t.remove(id, token); return { ok: true }; }
   catch { return { ok: false }; }
 }
 
@@ -250,7 +258,7 @@ const LOOKUP_IMG = `${API_BASE}/api/pwa-lookup/image`;
 export async function fetchSuggestedImage(url) {
   if (!url) return null;
   try {
-    const res = await fetch(`${LOOKUP_IMG}?url=${encodeURIComponent(url)}`, { headers: authHeader() });
+    const res = await fetch(`${LOOKUP_IMG}?url=${encodeURIComponent(url)}`, { headers: authHeaderFor() });
     if (!res.ok) return null;
     return await blobToDataUrl(await res.blob());
   } catch { return null; }
@@ -263,24 +271,26 @@ export async function fetchSuggestedImage(url) {
  */
 export async function confirmSuggested(suggested, { barcode = null } = {}) {
   if (!suggested || !suggested.image) return null;
+  const ws = getActiveWorkspace(); const token = currentToken(); // pin identity at entry (FE1)
   const dataUrl = await fetchSuggestedImage(suggested.imageLarge || suggested.image);
   if (!dataUrl) return null;
-  const saved = await saveImage(dataUrl, { source: 'catalogue' });
+  const saved = await saveImage(dataUrl, { source: 'catalogue', ws });
   if (!saved.ok) return null;
   // Track the backup lifecycle (queues as FAILED for retry if backup isn't available yet).
-  backupImage(saved.id, { barcode, source: 'catalogue' });
+  backupImage(saved.id, { barcode, source: 'catalogue', ws, token });
   return { id: saved.id, source: 'catalogue', attribution: suggested.imageAttribution || null, updatedAt: Date.now() };
 }
 
 /** Fetch an image from the shop's server store into the local cache (for a device that doesn't hold it). */
 export async function fetchImageToCache(id) {
+  const ws = getActiveWorkspace(); const token = currentToken(); // pin identity at entry (FE1)
   try {
-    const blob = await _t.download(id);
+    const blob = await _t.download(id, token);
     if (!blob) return { ok: false };
     const full = await blobToDataUrl(blob);
     const { thumb } = await processImage(full);
-    putLocal(id, { full, thumb });
-    setBackupState(id, { state: BACKUP_STATE.DONE }); // it came FROM the server, so it's backed up here now
+    putLocal(id, { full, thumb }, ws);
+    setBackupState(id, { state: BACKUP_STATE.DONE }, ws); // it came FROM the server, so it's backed up here now
     return { ok: true, thumb };
   } catch { return { ok: false }; }
 }
