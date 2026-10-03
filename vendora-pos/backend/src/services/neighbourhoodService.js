@@ -70,15 +70,24 @@ function parseBreakdown(obs) {
   return { total, rows: out };
 }
 
-// The figures we offer, each mapped to its Census 2021 table. Dataset ids are read from config (never
-// hardcoded) and a figure is only fetched when its id is set — so nothing is ever fabricated.
+// The figures we offer. Each dataset id is read from config (never hardcoded) and a figure is only fetched
+// when its id is set — nothing is fabricated. `query` carries any extra Nomis dimension params a dataset needs;
+// `referenceDate` is the human period for that specific figure (never merged across sources).
+//   population      TS001  NM_2021_1  — Census 2021 usual residents (count)
+//   populationMid   —      NM_2014_1  — mid-year population estimate; needs gender=0&c_age=200&time=latest
+//   age             TS007A NM_2020_1  — Census 2021 age, 5-year bands (breakdown)
+//   households      TS041             — Census 2021 households (count) [id not on the verified list yet]
+//   economicActivity TS066            — Census 2021 economic activity (breakdown) [id unverified]
+//   qualifications  TS067             — Census 2021 highest qualification (breakdown) [id unverified]
+// Household DEPRIVATION is deliberately NOT a Nomis figure here — it comes from the IMD 2025 import (see
+// imdService), per the 2026-10-03 source update.
 const FIGURE_DEFS = [
-  { key: 'population', label: 'Usual residents', table: 'TS001', kind: 'count', unit: 'people', cfg: 'population' },
-  { key: 'households', label: 'Households', table: 'TS041', kind: 'count', unit: 'households', cfg: 'households' },
-  { key: 'age', label: 'Age', table: 'TS007A', kind: 'breakdown', cfg: 'age' },
-  { key: 'economicActivity', label: 'Economic activity', table: 'TS066', kind: 'breakdown', cfg: 'economicActivity' },
-  { key: 'deprivation', label: 'Household deprivation', table: 'TS011', kind: 'breakdown', cfg: 'deprivation' },
-  { key: 'qualifications', label: 'Qualifications', table: 'TS067', kind: 'breakdown', cfg: 'qualifications' },
+  { key: 'populationMid', label: 'Population (mid-year estimate)', kind: 'count', unit: 'people', cfg: 'populationMid', referenceDate: 'mid-2024', query: '&gender=0&c_age=200&time=latest' },
+  { key: 'population', label: 'Usual residents', table: 'TS001', kind: 'count', unit: 'people', cfg: 'population', referenceDate: 'Census 2021 (21 Mar 2021)' },
+  { key: 'age', label: 'Age', table: 'TS007A', kind: 'breakdown', cfg: 'age', referenceDate: 'Census 2021 (21 Mar 2021)' },
+  { key: 'households', label: 'Households', table: 'TS041', kind: 'count', unit: 'households', cfg: 'households', referenceDate: 'Census 2021 (21 Mar 2021)' },
+  { key: 'economicActivity', label: 'Economic activity', table: 'TS066', kind: 'breakdown', cfg: 'economicActivity', referenceDate: 'Census 2021 (21 Mar 2021)' },
+  { key: 'qualifications', label: 'Qualifications', table: 'TS067', kind: 'breakdown', cfg: 'qualifications', referenceDate: 'Census 2021 (21 Mar 2021)' },
 ];
 function datasetFor(def) { return def.cfg === 'population' ? C().populationDataset : (C().figuresConfig[def.cfg] || null); }
 function configuredFigureDefs() { return FIGURE_DEFS.filter((d) => !!datasetFor(d)); }
@@ -206,7 +215,7 @@ function baseFigure(def, area, dataset, extra) {
     key: def.key, label: def.label, kind: def.kind, unit: def.unit || null,
     geography: 'lsoa21', geographyCode: area.lsoa21,
     source: C().source === 'nomis' ? 'Nomis' : 'ONS', datasetId: dataset, edition: null, version: null,
-    referenceDate: 'Census 2021', lastUpdated: null, attribution: OGL, ...extra,
+    referenceDate: def.referenceDate || 'Census 2021', lastUpdated: null, attribution: OGL, ...extra,
   };
 }
 
@@ -215,7 +224,8 @@ async function fetchFigureNomis(area, def) {
   const dataset = datasetFor(def);
   if (!dataset) return null; // we do NOT guess a dataset id
   const uid = C().nomisUid ? `&uid=${encodeURIComponent(C().nomisUid)}` : '';
-  const url = `${C().nomisBase}/dataset/${dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`;
+  const extra = def.query || ''; // per-dataset dimension params (e.g. NM_2014_1 needs gender/c_age/time)
+  const url = `${C().nomisBase}/dataset/${dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${extra}${uid}`;
   const res = await getJson(url);
   if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
   if (def.kind === 'count') {
@@ -249,8 +259,8 @@ async function fetchFigureOns(area, def) {
 
 function fetchFigure(area, def) { return C().source === 'nomis' ? fetchFigureNomis(area, def) : fetchFigureOns(area, def); }
 
-// Back-compat wrappers (population only) kept for existing callers/tests.
-const POP_DEF = FIGURE_DEFS[0];
+// Back-compat wrappers (census population only) kept for existing callers/tests.
+const POP_DEF = FIGURE_DEFS.find((d) => d.key === 'population');
 function fetchPopulationNomis(area) { return fetchFigureNomis(area, POP_DEF); }
 function fetchPopulationOns(area) { return fetchFigureOns(area, POP_DEF); }
 function fetchPopulation(area) { return fetchFigure(area, POP_DEF); }

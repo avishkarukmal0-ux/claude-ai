@@ -26,8 +26,9 @@ const SOURCE = (process.env.NEIGHBOURHOOD_SOURCE || 'ons').toLowerCase();
 const UA = process.env.ONS_USER_AGENT || 'vendora/1.0.0 (neighbourhood live-check; set ONS_USER_AGENT)';
 const DATASET = process.env.NEIGHBOURHOOD_POP_DATASET || null;
 const NOMIS_UID = process.env.NOMIS_UID || null;
-// Step 2 figures (optional) — set the ones you want to verify.
+// Step 2 figures (optional) — set the ones you want to verify. `query` adds dataset-specific Nomis dims.
 const STEP2 = [
+  { key: 'populationMid', label: 'Population (mid-year)', kind: 'count', dataset: process.env.NEIGHBOURHOOD_DS_POP_MID || null, query: '&gender=0&c_age=200&time=latest' },
   { key: 'households', label: 'Households', kind: 'count', dataset: process.env.NEIGHBOURHOOD_DS_HOUSEHOLDS || null },
   { key: 'age', label: 'Age', kind: 'breakdown', dataset: process.env.NEIGHBOURHOOD_DS_AGE || null },
   { key: 'economicActivity', label: 'Economic activity', kind: 'breakdown', dataset: process.env.NEIGHBOURHOOD_DS_ECON || null },
@@ -89,7 +90,8 @@ async function fetchNomis(area) {
 // Fetch a Step 2 figure from Nomis (count or breakdown) for the live check.
 async function fetchNomisFigure(area, fig) {
   const uid = NOMIS_UID ? `&uid=${encodeURIComponent(NOMIS_UID)}` : '';
-  const res = await get(`${NOMIS_BASE}/dataset/${fig.dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${uid}`);
+  const extra = fig.query || '';
+  const res = await get(`${NOMIS_BASE}/dataset/${fig.dataset}.data.json?geography=${encodeURIComponent(area.lsoa21)}&measures=20100${extra}${uid}`);
   if (res.status !== 200 || !res.body || !Array.isArray(res.body.obs)) return null;
   if (fig.kind === 'count') {
     let total = null; let max = null;

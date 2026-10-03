@@ -488,3 +488,18 @@ NEIGHBOURHOOD_DS_QUALS=NM_2084_1
 ONS_USER_AGENT=vendora/1.0.0 (ops@yourdomain +https://claude-ai-indol.vercel.app)
 ```
 Frontend (Vercel): `VITE_NEIGHBOURHOOD_ENABLED=true`.
+
+### Source update 2026-10-03 — verified IDs + dual population; IMD/police/FSA planned
+Authoritative dataset list applied. **Verified against the owner's live check:** population `NM_2021_1` (TS001,
+Census 2021 total), age `NM_2020_1` (TS007A). **Added:** mid-year population `NM_2014_1` — needs extra Nomis
+dims `&gender=0&c_age=200&time=latest` (→ ~1,513 for E01000036, labelled "mid-2024"); the adapter now supports
+per-figure query params + per-figure referenceDate, and the two population figures are shown separately, never
+merged. **Still unverified (not on the authoritative list; returned sane live data but keep configurable, no
+default):** households `NM_2059_1`, economic activity `NM_2083_1`, qualifications `NM_2084_1`. **Deprivation:**
+switch from census TS011 to the **IMD 2025** CSV (decile 4 for E01000036) imported to Mongo — NOT yet built.
+`NEIGHBOURHOOD_ENABLED` should stay **false** until the live check passes for the dual-population Step 1.
+New env: `NEIGHBOURHOOD_DS_POP_MID` (=NM_2014_1). postcodes.io is OPD Aug 2024 → handle "postcode not found".
+
+**Planned next increments (not in this change):** IMD 2025 import script + model + join (deprivation decile);
+police.uk crime (month-labelled, ≤ last-updated); FSA food hygiene. Attribution wording for non-ONS sources is
+an assumption ("Source: <provider>, licensed under OGL v3.0") pending confirmation.

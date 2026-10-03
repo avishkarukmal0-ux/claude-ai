@@ -8,6 +8,7 @@ process.env.NEIGHBOURHOOD_ENABLED = 'true';
 process.env.NEIGHBOURHOOD_SOURCE = 'nomis';
 process.env.NEIGHBOURHOOD_POP_DATASET = 'NM_test_1';
 process.env.NEIGHBOURHOOD_DS_AGE = 'NM_age_1'; // Step 2 breakdown figure
+process.env.NEIGHBOURHOOD_DS_POP_MID = 'NM_mid_1'; // mid-year population estimate (needs extra dims)
 
 const svc = require('../services/neighbourhoodService');
 
@@ -86,7 +87,7 @@ describe('network layer (stubbed transport)', () => {
       return { status: 200, headers: {}, body: { obs: [{ obs_value: { value: 1500 } }] } };
     });
     const fig = await svc.fetchPopulationNomis({ lsoa21: 'E01000036' });
-    expect(fig).toMatchObject({ key: 'population', value: 1500, source: 'Nomis', datasetId: 'NM_test_1', geographyCode: 'E01000036', referenceDate: 'Census 2021' });
+    expect(fig).toMatchObject({ key: 'population', value: 1500, source: 'Nomis', datasetId: 'NM_test_1', geographyCode: 'E01000036', referenceDate: 'Census 2021 (21 Mar 2021)' });
     expect(fig.attribution).toMatch(/Open Government Licence/);
   });
 
@@ -160,9 +161,21 @@ describe('network layer (stubbed transport)', () => {
 
   test('configuredFigureDefs only includes figures whose dataset id is set', () => {
     const keys = svc.configuredFigureDefs().map((d) => d.key);
-    expect(keys).toContain('population'); // NM_test_1
-    expect(keys).toContain('age');        // NM_age_1
+    expect(keys).toContain('population');    // NM_test_1
+    expect(keys).toContain('age');           // NM_age_1
+    expect(keys).toContain('populationMid'); // NM_mid_1
     expect(keys).not.toContain('qualifications'); // no id set → skipped (never fabricated)
+  });
+
+  test('mid-year population sends the extra dims and carries its own reference date', async () => {
+    let seen = null;
+    svc.__setTransport(async (url) => { seen = url; return { status: 200, headers: {}, body: { obs: [{ c_age: { description: 'All Ages' }, obs_value: { value: 1513 } }] } }; });
+    const def = svc.FIGURE_DEFS.find((d) => d.key === 'populationMid');
+    const fig = await svc.fetchFigureNomis({ lsoa21: 'E01000036' }, def);
+    expect(seen).toMatch(/NM_mid_1\.data\.json\?geography=E01000036&measures=20100&gender=0&c_age=200&time=latest/);
+    expect(fig.value).toBe(1513);
+    expect(fig.referenceDate).toBe('mid-2024');
+    expect(fig.key).toBe('populationMid');
   });
 
   test('no configured dataset → returns null (never a guessed number)', async () => {

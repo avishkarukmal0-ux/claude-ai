@@ -166,6 +166,7 @@ module.exports = {
     //   deprivation    TS011  NEIGHBOURHOOD_DS_DEPRIVATION
     //   qualifications TS067  NEIGHBOURHOOD_DS_QUALS
     figuresConfig: {
+      populationMid: process.env.NEIGHBOURHOOD_DS_POP_MID || null, // NM_2014_1 mid-year pop estimate
       households: process.env.NEIGHBOURHOOD_DS_HOUSEHOLDS || null,
       age: process.env.NEIGHBOURHOOD_DS_AGE || null,
       economicActivity: process.env.NEIGHBOURHOOD_DS_ECON || null,
