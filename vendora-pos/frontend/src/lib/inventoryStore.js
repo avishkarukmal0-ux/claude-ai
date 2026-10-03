@@ -547,7 +547,9 @@ export function useInventory() {
     const newBatches = batchesOf(p)
       .map((x) => (x.id === batchId ? { ...x, qty: (Number(x.qty) || 0) - applied } : x))
       .filter((x) => (Number(x.qty) || 0) > 0);
-    const next = prev.map((x) => (x.id === id ? { ...x, qty: Math.max(0, (Number(x.qty) || 0) - applied), batches: newBatches, updatedAt: Date.now() } : x));
+    // Audit D9: reconcile shelf/dated allocations after the decrement (like sellUnits/recordWaste) so shelfQty
+    // can't exceed the new total — otherwise shelf/back-room views assert impossible stock.
+    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: Math.max(0, (Number(x.qty) || 0) - applied), batches: newBatches, updatedAt: Date.now() }) : x));
     persist(next);
     setProducts(next);
     recordMovement({

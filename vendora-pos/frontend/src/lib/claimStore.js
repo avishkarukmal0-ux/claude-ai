@@ -170,7 +170,13 @@ export function useClaims() {
         }
         return merged;
       });
-      return { ...c, items, updatedAt: Date.now() };
+      // Audit D2: keep the requested total in step with the items. Previously requestedAmount was frozen at
+      // creation (0 for a wrong-price claim), so edited line amounts never reached the requested/approved total
+      // or the credit chase. Re-derive it from the items on every edit, unless the claim has already advanced
+      // past 'requested' (then the agreed amount is authoritative and must not be silently overwritten).
+      const next = { ...c, items, updatedAt: Date.now() };
+      if (!c.status || c.status === 'requested') next.requestedAmount = sumMoney(items.map((i) => i.amount));
+      return next;
     }));
   }, []);
 

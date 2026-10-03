@@ -19,6 +19,10 @@ describe('invoiceStore — pack/unit normalisation', () => {
   it('line total = unit cost × units, across unit/case expression', () => {
     expect(lineTotal({ qty: 2, qtyMode: 'cases', packSize: 24, caseCost: 24 })).toBe(48); // 48 units × £1
     expect(lineTotal({ qty: 10, qtyMode: 'units', unitCost: 1.5 })).toBe(15);
+    // Audit D4: a case whose unit cost doesn't divide to whole pennies must bill the whole-case cost, not a
+    // rounded per-unit × units (£10/24 = £0.4166… → old code gave £0.42 × 24 = £10.08).
+    expect(lineTotal({ qty: 1, qtyMode: 'cases', packSize: 24, caseCost: 10 })).toBe(10);
+    expect(lineTotal({ qty: 100, qtyMode: 'cases', packSize: 3, caseCost: 1 })).toBe(100); // £1/3 × 3 × 100 = £100
   });
 
   it('invoice total sums line totals', () => {

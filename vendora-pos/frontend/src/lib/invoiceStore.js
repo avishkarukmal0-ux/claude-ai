@@ -35,10 +35,16 @@ export function lineUnitCost(line) {
   if (n(line.caseCost) > 0) return r2(n(line.caseCost) / pack);
   return 0;
 }
-/** Line total = unit cost × units (what the invoice charges for this line). */
+/** Line total = what the invoice charges for this line. Audit D4: keep full precision through the division and
+ *  round only the FINAL total — never the per-unit cost first (£10/24 × 24 must be £10.00, not £10.08). For a
+ *  case purchase the authoritative figure is the whole-case cost × number of cases. */
 export function lineTotal(line) {
   if (n(line.lineTotal) > 0) return r2(line.lineTotal);
-  return r2(lineUnitCost(line) * lineUnits(line));
+  const pack = Math.max(1, Math.round(n(line.packSize)) || 1);
+  if (line.qtyMode === 'cases' && n(line.caseCost) > 0) return r2(n(line.caseCost) * n(line.qty));
+  if (n(line.unitCost) > 0) return r2(n(line.unitCost) * lineUnits(line));
+  if (n(line.caseCost) > 0) return r2((n(line.caseCost) / pack) * lineUnits(line));
+  return 0;
 }
 
 // --- untrusted upload validation (Phase 2) ---------------------------------

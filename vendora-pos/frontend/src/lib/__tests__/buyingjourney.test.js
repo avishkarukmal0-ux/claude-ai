@@ -17,6 +17,14 @@ describe('buyingJourney — stage derivation', () => {
     expect(j.complete).toBe(false);
   });
 
+  it('D8: a part-received order still surfaces an active journey for the outstanding remainder', () => {
+    const orders = [{ id: 'o1', status: 'ordered', orderedAt: now, supplierName: 'Bestway', lines: [{ qty: 10, receivedQty: 5 }] }];
+    const deliveries = [{ id: 'd1', status: 'received', orderId: 'o1', supplierName: 'Bestway', lines: [{ name: 'Milk', issue: null }], receivedAt: now }];
+    const active = activeJourneys({ orders, deliveries });
+    // The remainder (order o1) is still in-flight even though a delivery referenced it.
+    expect(active.some((j) => j.anchor === 'order')).toBe(true);
+  });
+
   it('a recorded-but-unsent (draft) order shows order as the current stage (not sent)', () => {
     const orders = [{ id: 'o1', status: 'ordered', orderedAt: null, supplierName: 'Bestway', lines: [{ qty: 5, receivedQty: 0 }] }];
     const [j] = buildJourneys({ orders, now });
@@ -100,7 +108,8 @@ describe('buyingJourney — stage derivation', () => {
     const orders = [{ id: 'o1', status: 'partially_received', orderedAt: now, supplierName: 'Bestway',
       lines: [{ qty: 10, receivedQty: 6 }] }];
     const deliveries = [{ id: 'd1', orderId: 'o1', status: 'received', supplierName: 'Bestway', receivedAt: now, lines: [{ name: 'X', issue: null }] }];
-    const [j] = buildJourneys({ orders, deliveries, now });
+    // The delivery journey shows the order stage as part-received (D8 also adds a separate remainder journey).
+    const j = buildJourneys({ orders, deliveries, now }).find((x) => x.anchor === 'delivery');
     expect(stageOf(j, 'order').detail).toMatch(/part-received/i);
   });
 });

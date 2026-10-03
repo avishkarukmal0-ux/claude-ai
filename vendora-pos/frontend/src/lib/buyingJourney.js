@@ -187,7 +187,10 @@ export function buildJourneys({ orders = [], deliveries = [], invoices = [], cla
     if (!o || !o.id) continue;
     const st = statusFor(o);
     if (st === 'cancelled' || st === 'received') continue;         // closed orders aren't in-flight
-    if (deliveredOrderIds.has(o.id)) continue;                    // already has a delivery journey
+    // Audit D8: a part-received order still has units outstanding, so keep its own in-flight journey even
+    // though a delivery already references it — otherwise the remainder is silently hidden and never chased.
+    // Fully-handled orders with a delivery are represented by that delivery's journey.
+    if (deliveredOrderIds.has(o.id) && st !== 'partially_received') continue;
     journeys.push(buildFromOpenOrder(o));
   }
   // Sort: incomplete (active) first, then by most-recent activity.
