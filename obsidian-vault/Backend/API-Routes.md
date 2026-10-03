@@ -1,0 +1,83 @@
+# API Routes
+
+Back to [[Home]] · Related: [[Backend-Overview]] · [[Services]] · [[Data-Models]]
+
+All mounted under `/api` in `src/routes/index.js`. Public routes first, then `authenticate` gates the rest.
+
+> **App/Till split (ADR-002).** The PWA routes below are ALWAYS mounted (the live product). Everything
+> under "Public (no JWT)" and "Authenticated" is the **till**, mounted only when `TILL_ENABLED=true`
+> (off in the pilot) — see [[2026-09-30-Till-Disabled-Pilot]]. PWA routes use their own `typ:'pwa'`
+> tokens and never touch the till's Staff/Store models.
+
+## PWA (always mounted — the live product)
+| Mount | File | Gate | Purpose |
+|---|---|---|---|
+| `/pwa-auth` | `pwaAuthRoutes.js` | public (+ owner-gated staff routes) | owner accounts: `register`, `login` (owner **or** staff member), `refresh`, `GET /me` (→ shop+role+member) — `typ:'pwa'` JWTs carrying `role`/`mid`/`name`. Owner-only staff admin: `GET/POST /staff`, `PATCH/DELETE /staff/:id`. See [[2026-10-01-Staff-Access]] |
+| `/pwa-sync` | `pwaSyncRoutes.js` | PWA access token | cross-device sync: `GET /pull`, `POST /push` — per-store `{value,rev,mtime}` blobs, scoped to the account (infra Stage 3). **Role-enforced:** staff can't write/read financial stores (`takings_v1`,`claims_v1`,`credit_notes_v1`,`invoices_v1`) — push returns them in `rejected`, pull omits them. See [[2026-09-30-Cross-Device-Sync]] · [[2026-10-01-Staff-Access]] |
+| `/pwa-lookup` | `pwaLookupRoutes.js` | PWA access token | barcode auto-fill: `GET /:barcode` → `{found,name,category,brand}` via an Open Food Facts proxy (server-side). Name/category only — never shop-specific fields. See [[2026-10-01-Scan-Autofill-Lookup]] |
+| `/pwa-notify` | `pwaNotifyRoutes.js` | PWA token (+ shared-secret run) | daily digest prefs/preview: `GET/PUT /prefs` (PUT owner/manager), `GET /preview` (compute, no send). `POST /run` drives `runDue` for an external scheduler — gated by `x-notify-token: NOTIFY_RUN_TOKEN`, **404 unless that env is set**. Email off unless `NOTIFY_EMAIL_PROVIDER=sendgrid`+`SENDGRID_API_KEY` (`configured:false` otherwise). See [[2026-10-01-Notifications]] |
+| `/pwa-invoice-ocr` | `pwaInvoiceOcrRoutes.js` | PWA access token | optional invoice OCR (off unless `INVOICE_OCR_PROVIDER`+key set): `GET /status` → `{configured}`, `POST /` `{dataUrl}` → `{configured, text?}` (raw text only, never fabricated structured fields). See [[2026-10-01-Invoice-Mandate-P0-P1.1]] |
+
+## Public (no JWT)
+| Mount | File | Purpose |
+|---|---|---|
+| `/auth` | `authRoutes.js` | login, refresh, register; `GET /auth/stores` (public store picker) |
+| `/receipt` | `receiptRoutes.js` (publicRouter) | public receipt viewer |
+| `/subscriptions` | `subscriptionRoutes.js` (publicRouter) | Stripe webhook |
+
+## Authenticated
+| Mount | File | Domain |
+|---|---|---|
+| `/sales` | `saleRoutes.js` | [[POS-and-Checkout]] |
+| `/products` | `productRoutes.js` | inventory |
+| `/customers` | `customerRoutes.js` | CRM |
+| `/staff` | `staffRoutes.js` | people |
+| `/cash-drawer` | `cashDrawerRoutes.js` | cash mgmt |
+| `/loss-prevention` | `lossPreventionRoutes.js` | security |
+| `/reports` | `reportRoutes.js` | analytics |
+| `/suppliers` | `supplierRoutes.js` | supply |
+| `/purchase-orders` | `purchaseOrderRoutes.js` | supply |
+| `/invoices` | `invoiceRoutes.js` | supply |
+| `/promotions` | `promotionRoutes.js` | promos |
+| `/gift-cards` | `giftCardRoutes.js` | promos |
+| `/smart-reorder` | `smartReorderRoutes.js` | inventory AI |
+| `/hardware` | `hardwareRoutes.js` | peripherals |
+| `/subscriptions` | `subscriptionRoutes.js` | billing |
+| `/display` | `displayRoutes.js` | customer display |
+| `/digital-receipts` | `digitalReceiptRoutes.js` | receipts |
+| `/wallet-passes` | `walletPassRoutes.js` | Apple/Google wallet |
+| `/open-banking` | `openBankingRoutes.js` | payments |
+| `/schedule` | `scheduleRoutes.js` | rota |
+| `/stock-take` | `stockTakeRoutes.js` | inventory |
+| `/settings` | `settingsRoutes.js` | config |
+| `/pos/parked` | `posParkedRoutes.js` | POS |
+| `/pos/promotions` | `posPromotionRoutes.js` | POS |
+| `/pos/quick-keys` | `posQuickKeyRoutes.js` | POS |
+| `/pos/stock-take` | `posStockTakeRoutes.js` | POS |
+| `/pos/training` | `posTrainingRoutes.js` | POS |
+| `/challenge25` | `challenge25Routes.js` | age verification |
+| `/receipts` | `receiptRoutes.js` | receipts |
+| `/collection-orders` | `collectionOrderRoutes.js` | click & collect |
+| `/pos/self-checkout` | `selfCheckoutRoutes.js` | self-checkout |
+| `/payments/tap-to-pay` | `tapToPayRoutes.js` | payments |
+| `/pos/queue-bust` | `queueBustRoutes.js` | queue busting |
+| `/expiry` | `expiryRoutes.js` | expiry mgmt |
+| `/ai` | `aiRoutes.js` | AI features |
+| `/invoice-reader` | `invoiceReaderRoutes.js` | OCR invoices |
+| `/market` | `marketIntelRoutes.js` | market intel |
+| `/accounting` | `accountingRoutes.js` | [[Accounting]] |
+| `/margins` | `marginRoutes.js` | pricing — store default + per-category, plus **per-product overrides**: `GET /margins/products`, `PUT /margins/products/:id` (set/clear + optional reprice). `GET /margins/calculate` accepts a `targetMargin` override. See [[Accounting]] |
+| `/overview` | `overviewRoutes.js` | [[Overview-Dashboard]] — `GET /overview/this-week` (incl. `today` block), `GET /overview/daily-summary` (end-of-day recap + shareable `shareText`), `GET/PUT /overview/summary-settings` + `POST /overview/summary-settings/test`, `GET /overview/notifications` (manager — nightly WhatsApp auto-delivery + delivery history) |
+
+> **Payroll** is served under `/accounting/payroll` (in `accountingRoutes.js`), not a top-level `/payroll`. A stray `payrollRoutes.js` stub that crashed boot was removed — see [[2026-07-13-Fix-Payroll-Route-Mount]].
+
+## Accounting sub-routes (active area)
+Under `/accounting` (`accountingRoutes.js`), all `requireRole('supervisor')`:
+- `GET /dashboard`
+- VAT: `GET /vat`, `POST /vat/preview`, `POST /vat`, `GET/PATCH/DELETE /vat/:id`
+- Payroll: `GET /payroll`, `POST /payroll/calculate`, `POST /payroll`, `GET/PATCH/DELETE /payroll/:id`, `PUT/DELETE /payroll/:runId/employee/:staffId`, `GET /payroll/:runId/payslip/:staffId`
+- Expenses: `GET/POST /expenses`, `GET/PATCH/DELETE /expenses/:id`
+- `GET /pl` (profit & loss)
+- Settings: `GET/PUT /settings`
+
+See [[Accounting]] for the full breakdown.

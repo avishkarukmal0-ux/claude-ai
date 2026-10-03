@@ -47,7 +47,6 @@ const CustomerSchema = new Schema({
 
 CustomerSchema.index({ store: 1, phone: 1 });
 CustomerSchema.index({ store: 1, email: 1 });
-CustomerSchema.index({ customerCode: 1 });
 CustomerSchema.index({ 'loyalty.enrolled': 1 });
 
 module.exports = model('Customer', CustomerSchema);

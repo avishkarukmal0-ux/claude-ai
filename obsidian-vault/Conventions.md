@@ -1,0 +1,86 @@
+# Conventions
+
+Back to [[Home]] · Related: [[Architecture]] · [[Work-Log]]
+
+House style observed across the codebase — follow these when adding code.
+
+## Git workflow
+- Active branch: **`claude/vendora-pos-v3-KPnI0`** — all work commits here.
+- Push with `git push -u origin claude/vendora-pos-v3-KPnI0`.
+- Commit messages: conventional prefixes — `feat:`, `fix:`, `chore:`, `docs:`.
+- Keep the working tree clean; don't commit `package-lock.json` churn from incidental `npm install`.
+
+## Backend patterns
+- **Thin routes, fat services.** Routes validate + auth + shape the response; calculations live in [[Services]].
+- Every route wrapped in `try/catch` → `next(err)`; central `errorHandler` formats.
+- Throw `new AppError(message, statusCode)` for expected errors.
+- Scope every query by `store: req.storeId` (multi-tenant).
+- Role gate: `router.use(requireRole('supervisor'))` or per-route.
+- Money helpers: round to 2dp with a local `r2()` (`Math.round(n*100)/100`).
+- Response shape: `{ success: true, ...data }` or `{ success:false, error:{ code, message } }`.
+
+## PWA local-first patterns (2026-09-30, see [[ADR-002-App-Till-Separation]])
+- **All on-device storage goes through `lib/storage.js`** — never `localStorage.getItem/setItem` directly
+  in a store. It scopes keys to the active workspace, surfaces write failures (don't swallow them), and
+  since 2026-09-30 (infra Stage 1, [[2026-09-30-IndexedDB-Durability]]) keeps a synchronous in-memory
+  cache mirrored to **IndexedDB** (`lib/idb.js`): writes overflow past localStorage's ~5MB cap and
+  `initStorage()` (called in `main.jsx`) restores data localStorage lost. localStorage stays
+  authoritative; IndexedDB recovery only fills gaps. Keep the storage API synchronous — don't make stores async.
+- Stock only changes via a **typed movement** (`movementStore`): a manual qty edit is `stock_adjustment`,
+  a sale is `sale` (`sellUnits`), binning is `waste` (`recordWaste`). Never infer a sale from any decrease.
+- Every movement is built through `buildRecord` (movementStore), so each row carries `actor`/`actorId`/
+  `actorRole` from the signed-in member ("Owner" for guest). Don't write ledger rows any other way.
+- **Reverse, don't delete.** Undoing a stock action appends a compensating entry via `reverseByBatch`
+  (`reversalOf` + negated delta), never removes history. `removeByBatch` survives ONLY for sales-import undo
+  (re-importing the same file must become possible again).
+- **Shared-device safety (Phase 1.4):** signing out or switching accounts purges the departing shop's
+  `vendora:<ws>:*` from localStorage + MEM + IndexedDB (`storage.purgeWorkspace`, via `account.logout`/
+  `activate`). Use `session.signOut` (flush + final push first) for any sign-out UI; pass `{purge:false}`
+  only for an explicit "keep on this device" choice.
+- **Revocation bites on the data path:** PWA data routes (sync, notify) re-check a member token with
+  `pwaAuthService.assertMemberActive` (cached 30s, invalidated on member admin writes). Add it to any new
+  member-accessible data route; owner tokens skip it.
+- **Sync is not a backup.** Cross-device sync keeps only the latest value. Recoverable server versions are
+  opt-in behind `SYNC_HISTORY` (`SyncBlobHistory` + `/history`/`/restore`); the always-available restore
+  point is the local Export. Say so in any UI that might be read as "backed up".
+
+## Decimal-safe money (2026-10-01)
+- All currency arithmetic goes through `lib/money.js` (FE) / `utils/money.js` (BE): integer pence, round
+  **half away from zero** to the penny. The legacy `r2()` note above is superseded — use the money helpers.
+- **Unknown ≠ zero.** `margin()` and valuations return null / exclude unknown-cost items; show coverage.
+- Persist **deterministically**: read → compute → `persist()` synchronously → `setState` → then log the
+  movement. Don't read a value you assigned inside a `setState` updater (it runs later).
+- Backups: validate → snapshot → write → rollback on failure; never touch non-app (token/account) keys.
+- Frontend tests: **Vitest** (`npm test` in `frontend`). Backend DB-free tests: `npm run test:unit`;
+  integration needs Mongo (`VENDORA_TEST_URI`). Don't weaken assertions to go green — split, don't skip.
+
+## Local-first storage (PWA)
+- **`readJSON(name, fallback)` returns `fallback` for missing OR stored-null.** It has a `fallback = null`
+  default param, so passing `undefined` explicitly yields `null` — never pass `undefined` and branch on it.
+  Always pass the real fallback (`readJSON('x_v1', [])`). This bug once made stocktake history load as `null`
+  and crashed two screens (see [[2026-10-02-Review-Phase1-Crashes]]).
+- Every store `load()` coerces: `const a = readJSON(NAME, []); return Array.isArray(a) ? a : [];`.
+- Pure report/aggregation functions should coerce array inputs too (`Array.isArray(v) ? v : []`): a `= []`
+  default only catches `undefined`, not an explicit `null` passed from a hook.
+- Screens under `HomePage` render inside a per-screen `<ErrorBoundary key={screen} onReset={…}>` — a crash in
+  one screen must never blank the whole app.
+
+## Frontend patterns
+- One `services/*.js` module per API domain, each a thin axios wrapper.
+- Pages fetch via `useCallback` + `useEffect`; toast on error.
+- Tailwind utility classes inline; lucide-react icons.
+- Optimistic UI updates where safe, with server reconciliation.
+- `fmt(n)` → `£${Number(n||0).toFixed(2)}` for currency display.
+- Modals: fixed overlay `fixed inset-0 bg-black/50 flex items-center justify-center z-50`.
+- ⚠️ Never put `flex` directly on a `<td>` (renders as table-cell). Wrap children in a `<div className="flex">`.
+
+## UK domain rules (important!)
+- **Tax year 2025/26** constants live in `backend/src/services/payrollService.js` and are mirrored client-side in payroll components. Keep them in sync. See [[Accounting]].
+- VAT, NI thresholds, NMW, PAYE bands are UK-specific — don't "simplify" without checking HMRC figures.
+- **Dates are UK dd/mm/yyyy.** When parsing user/CSV dates, handle `dd/mm/yyyy` explicitly before falling back to `Date.parse` — JS reads `02/03/2026` as mm/dd (US). See `lib/salesImportStore.js` `parseDate`.
+
+## Naming
+- Models: PascalCase singular (`PayrollRun`, `VatReturn`).
+- Routes files: `<domain>Routes.js`.
+- Services: `<domain>Service.js`.
+- Frontend pages: `<Name>Page.jsx`.

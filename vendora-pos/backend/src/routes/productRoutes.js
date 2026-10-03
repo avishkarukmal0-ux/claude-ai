@@ -4,9 +4,64 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
+const ExpiryMarkdownRule = require('../models/ExpiryMarkdownRule');
 const AppError = require('../utils/AppError');
 const { requireRole } = require('../middleware/permissions');
 const { todayStart } = require('../utils/helpers');
+
+const msPerDay = 1000 * 60 * 60 * 24;
+
+function computeExpiryStatus(product, rules) {
+  if (!product.expiryBatches || product.expiryBatches.length === 0) {
+    return { hasExpiryBatch: false };
+  }
+  // FIFO: find oldest non-depleted batch
+  const active = product.expiryBatches
+    .filter(b => b.quantity > 0)
+    .sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+  if (active.length === 0) return { hasExpiryBatch: false };
+
+  const batch = active[0];
+  const daysLeft = Math.floor((new Date(batch.expiryDate) - new Date()) / msPerDay);
+  let status = 'ok';
+  if (daysLeft < 0) status = 'expired';
+  else if (daysLeft <= 3) status = 'expiring_soon';
+
+  const retailPrice = product.pricing?.retailPrice || 0;
+  let autoDiscountApplied = false;
+  let discountedPrice = retailPrice;
+  let discountPercent = 0;
+
+  if (rules && rules.length && status !== 'ok') {
+    const applicable = rules
+      .filter(r => r.active && daysLeft <= r.daysBeforeExpiry)
+      .sort((a, b) => a.daysBeforeExpiry - b.daysBeforeExpiry);
+    if (applicable.length) {
+      const rule = applicable[0];
+      if (rule.discountType === 'percentage') {
+        discountPercent = rule.discountAmount;
+        discountedPrice = Math.round(retailPrice * (1 - rule.discountAmount / 100) * 100) / 100;
+      } else {
+        discountedPrice = Math.max(0, Math.round((retailPrice - rule.discountAmount) * 100) / 100);
+        discountPercent = Math.round(((retailPrice - discountedPrice) / retailPrice) * 100);
+      }
+      autoDiscountApplied = true;
+    }
+  }
+
+  return {
+    hasExpiryBatch: true,
+    nearestExpiry: batch.expiryDate,
+    daysLeft,
+    status,
+    autoDiscountApplied,
+    originalPrice: retailPrice,
+    discountedPrice,
+    discountPercent,
+    batchId: batch.batchId,
+  };
+}
 
 // GET /api/products/barcode/:code  — PRIMARY POS endpoint
 router.get('/barcode/:code', async (req, res, next) => {
@@ -17,7 +72,15 @@ router.get('/barcode/:code', async (req, res, next) => {
       isActive: true,
     }).lean();
     if (!product) return next(AppError.barcodeNotFound(req.params.code));
-    res.json({ success: true, product });
+
+    // Enrich with expiry status using FIFO + markdown rules
+    let expiryStatus = { hasExpiryBatch: false };
+    try {
+      const rules = await ExpiryMarkdownRule.find({ store: req.storeId, active: true }).lean();
+      expiryStatus = computeExpiryStatus(product, rules);
+    } catch (_) { /* non-fatal */ }
+
+    res.json({ success: true, product, expiryStatus });
   } catch (err) {
     next(err);
   }
@@ -201,6 +264,62 @@ router.post('/:id/adjust-stock', requireRole('supervisor'), async (req, res, nex
   }
 });
 
+// GET /api/products/:id/insights (#74) — sales velocity, margin, stock history
+router.get('/:id/insights', async (req, res, next) => {
+  try {
+    const Sale = require('../models/Sale');
+    const product = await Product.findOne({ _id: req.params.id, store: req.storeId }).lean();
+    if (!product) return next(AppError.notFound('Product'));
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000);
+
+    // Sales velocity: units sold in last 7 and 30 days
+    const [sold30, sold7, movements] = await Promise.all([
+      Sale.aggregate([
+        { $match: { store: req.storeId, createdAt: { $gte: thirtyDaysAgo }, isVoid: { $ne: true } } },
+        { $unwind: '$items' },
+        { $match: { $or: [{ 'items.productId': product._id }, { 'items.barcode': product.barcode }] } },
+        { $group: { _id: null, qty: { $sum: '$items.quantity' }, revenue: { $sum: '$items.lineTotal' } } },
+      ]),
+      Sale.aggregate([
+        { $match: { store: req.storeId, createdAt: { $gte: sevenDaysAgo }, isVoid: { $ne: true } } },
+        { $unwind: '$items' },
+        { $match: { $or: [{ 'items.productId': product._id }, { 'items.barcode': product.barcode }] } },
+        { $group: { _id: null, qty: { $sum: '$items.quantity' } } },
+      ]),
+      StockMovement.find({ store: req.storeId, product: product._id }).sort({ createdAt: -1 }).limit(20).lean(),
+    ]);
+
+    const unitsSold30 = sold30[0]?.qty || 0;
+    const revenue30 = sold30[0]?.revenue || 0;
+    const unitsSold7 = sold7[0]?.qty || 0;
+    const costPrice = product.pricing?.costPrice || 0;
+    const retailPrice = product.pricing?.retailPrice || 0;
+    const margin = costPrice > 0 ? ((retailPrice - costPrice) / retailPrice * 100).toFixed(1) : null;
+    const dailyVelocity = unitsSold30 > 0 ? (unitsSold30 / 30).toFixed(2) : 0;
+    const daysOfStock = dailyVelocity > 0 ? Math.round(product.stock?.quantity / dailyVelocity) : null;
+
+    res.json({
+      success: true,
+      product,
+      insights: {
+        unitsSold7,
+        unitsSold30,
+        revenue30,
+        dailyVelocity: Number(dailyVelocity),
+        daysOfStock,
+        marginPct: margin ? Number(margin) : null,
+        costPrice,
+        retailPrice,
+        currentStock: product.stock?.quantity || 0,
+        lowStockThreshold: product.stock?.lowStockThreshold || 5,
+      },
+      stockHistory: movements,
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/products/import
 router.post('/import', requireRole('manager'), async (req, res, next) => {
   try {
@@ -222,6 +341,56 @@ router.post('/import', requireRole('manager'), async (req, res, next) => {
     }
 
     res.json({ success: true, results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/products/suggest-price — authenticated
+// Uses store's own MarginSettings (falls back to UK defaults)
+router.post('/suggest-price', async (req, res, next) => {
+  try {
+    const { costPrice, category, vatRate } = req.body;
+
+    if (costPrice === undefined || costPrice === null) {
+      return next(AppError.validationError('costPrice is required'));
+    }
+    if (!category) {
+      return next(AppError.validationError('category is required'));
+    }
+
+    const cost = Number(costPrice);
+    if (isNaN(cost) || cost < 0) {
+      return next(AppError.validationError('costPrice must be a non-negative number'));
+    }
+
+    const { getOrCreate, getRule, calcBreakdown } = require('../services/marginService');
+    const settings = await getOrCreate(req.storeId);
+    const rule = getRule(settings, category);
+    if (vatRate !== undefined) rule.vatRate = parseInt(vatRate) || rule.vatRate;
+
+    const breakdown = calcBreakdown(cost, rule);
+    const margin = breakdown.actualMargin / 100;
+
+    let marginRating;
+    if (breakdown.actualMargin >= rule.minMargin * 1.5) marginRating = 'good';
+    else if (breakdown.actualMargin >= rule.minMargin)   marginRating = 'amber';
+    else                                                  marginRating = 'poor';
+
+    res.json({
+      success: true,
+      suggestedPrice:  breakdown.suggestedRetailIncVat,
+      margin:          Math.round(margin * 10000) / 10000,
+      marginPercent:   Math.round(breakdown.actualMargin),
+      marginPct:       Math.round(breakdown.actualMargin),
+      reasoning:       `Based on ${category} category (target ${rule.targetMargin}% margin) from your margin settings`,
+      priceRange: {
+        min: breakdown.minRetailPrice,
+        max: breakdown.maxRetailPrice || breakdown.suggestedRetailIncVat,
+      },
+      marginRating,
+      breakdown,
+    });
   } catch (err) {
     next(err);
   }

@@ -105,10 +105,13 @@ router.post('/', async (req, res, next) => {
       loyaltyMonetaryValue = redemption.monetaryValue;
     }
 
-    // Calculate totals
+    // Calculate totals. Loyalty redemption is a monetary discount the customer is spending
+    // their points on, so it MUST reduce the amount payable (previously it was added to the
+    // displayed discount total but never subtracted from `total`, so points were burned for
+    // nothing and the customer still paid full price).
     const subtotal = round2(enrichedItems.reduce((s, i) => s + i.lineTotal, 0));
     const discountTotal = round2(totalDiscount + (loyaltyMonetaryValue || 0));
-    const total = round2(Math.max(0, subtotal - totalDiscount));
+    const total = round2(Math.max(0, subtotal - totalDiscount - (loyaltyMonetaryValue || 0)));
 
     // Validate payment totals
     const paymentTotal = round2(payments.reduce((s, p) => s + (p.amount || 0), 0));
@@ -342,8 +345,11 @@ router.post('/:id/void', requirePermission('canVoid'), async (req, res, next) =>
     // Check staff void limit
     await lossPreventionService.checkStaffLimit(staff._id, 'void', sale.total);
 
-    // Supervisor PIN gate if required
-    if (req.store && req.store.settings.requirePinForVoid && authorisedPin) {
+    // Supervisor PIN gate — REQUIRED when shop policy demands it. An omitted PIN must FAIL
+    // (previously the check was skipped when no PIN was supplied — a bypass). We verify the
+    // PIN server-side against active supervisors; we never trust a client-supplied identity.
+    if (req.store && req.store.settings && req.store.settings.requirePinForVoid) {
+      if (!authorisedPin) return next(AppError.validation('Supervisor PIN required to void this sale'));
       const bcrypt = require('bcryptjs');
       const Staff = require('../models/Staff');
       const allStaff = await Staff.find({ store: storeId, status: 'active', role: { $in: ['supervisor', 'manager', 'owner'] } });
@@ -415,17 +421,18 @@ router.post('/:id/void', requirePermission('canVoid'), async (req, res, next) =>
 router.post('/:id/refund', requirePermission('canRefund'), async (req, res, next) => {
   try {
     const { items, refundMethod, reason, authorisedPin } = req.body;
-    const { refund, refundAmount, refundReceiptNumber } = await refundService.processRefund(
-      req.params.id,
-      items,
+    const { refund, refundAmount, refundReceiptNumber } = await refundService.processRefund({
+      saleId: req.params.id,
+      storeId: req.storeId, // shop isolation — never refund another shop's sale
+      itemsToRefund: items,
       refundMethod,
       reason,
-      req.user._id,
-      req.user.displayName,
-      req.user._id,
-      req.user.displayName,
-      req.io
-    );
+      staffId: req.user._id,
+      staffName: req.user.displayName,
+      authorisedById: req.user._id,
+      authorisedByName: req.user.displayName,
+      io: req.io,
+    });
 
     await lossPreventionService.incrementStaffCounter(req.user._id, 'refund', refundAmount);
 

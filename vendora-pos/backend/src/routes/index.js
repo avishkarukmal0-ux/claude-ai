@@ -1,64 +1,151 @@
 const express = require('express');
 const router = express.Router();
+const config = require('../config');
 const { authenticate } = require('../middleware/auth');
+const storeContext = require('../middleware/storeContext');
 
-const authRoutes           = require('./authRoutes');
-const saleRoutes           = require('./saleRoutes');
-const productRoutes        = require('./productRoutes');
-const customerRoutes       = require('./customerRoutes');
-const staffRoutes          = require('./staffRoutes');
-const cashDrawerRoutes     = require('./cashDrawerRoutes');
-const lossPreventionRoutes = require('./lossPreventionRoutes');
-const reportRoutes         = require('./reportRoutes');
-const supplierRoutes       = require('./supplierRoutes');
-const purchaseOrderRoutes  = require('./purchaseOrderRoutes');
-const invoiceRoutes        = require('./invoiceRoutes');
-const promotionRoutes      = require('./promotionRoutes');
-const giftCardRoutes       = require('./giftCardRoutes');
-const smartReorderRoutes   = require('./smartReorderRoutes');
-const hardwareRoutes       = require('./hardwareRoutes');
-const subscriptionRoutes   = require('./subscriptionRoutes');
-const posParkedRoutes      = require('./posParkedRoutes');
-const posPromotionRoutes   = require('./posPromotionRoutes');
-const posQuickKeyRoutes    = require('./posQuickKeyRoutes');
-const posStockTakeRoutes   = require('./posStockTakeRoutes');
-const posTrainingRoutes    = require('./posTrainingRoutes');
-const displayRoutes        = require('./displayRoutes');
-const digitalReceiptRoutes = require('./digitalReceiptRoutes');
-const walletPassRoutes     = require('./walletPassRoutes');
-const openBankingRoutes    = require('./openBankingRoutes');
-const scheduleRoutes       = require('./scheduleRoutes');
+// ── PWA shop-owner accounts — the LIVE product. Always mounted, no till dependency (ADR-002). ──
+const pwaAuthRoutes = require('./pwaAuthRoutes');
+router.use('/pwa-auth', pwaAuthRoutes);
 
-// Public routes
-router.use('/auth', authRoutes);
+// ── PWA cross-device sync (infra Stage 3). Always mounted; each route requires a PWA access token. ──
+const pwaSyncRoutes = require('./pwaSyncRoutes');
+router.use('/pwa-sync', pwaSyncRoutes);
 
-// All routes below require a valid JWT
-router.use(authenticate);
+// ── PWA document backup (Phase 3). Invoice photos/PDFs → GridFS. OFF unless DOC_BACKUP=true (the routes
+//    then report enabled:false / 503). PWA token required; owner/manager only. ──
+const pwaDocRoutes = require('./pwaDocRoutes');
+router.use('/pwa-docs', pwaDocRoutes);
 
-router.use('/sales',            saleRoutes);
-router.use('/products',         productRoutes);
-router.use('/customers',        customerRoutes);
-router.use('/staff',            staffRoutes);
-router.use('/cash-drawer',      cashDrawerRoutes);
-router.use('/loss-prevention',  lossPreventionRoutes);
-router.use('/reports',          reportRoutes);
-router.use('/suppliers',        supplierRoutes);
-router.use('/purchase-orders',  purchaseOrderRoutes);
-router.use('/invoices',         invoiceRoutes);
-router.use('/promotions',       promotionRoutes);
-router.use('/gift-cards',       giftCardRoutes);
-router.use('/smart-reorder',    smartReorderRoutes);
-router.use('/hardware',         hardwareRoutes);
-router.use('/subscriptions',    subscriptionRoutes);
-router.use('/display',          displayRoutes);
-router.use('/digital-receipts', digitalReceiptRoutes);
-router.use('/wallet-passes',    walletPassRoutes);
-router.use('/open-banking',     openBankingRoutes);
-router.use('/schedule',         scheduleRoutes);
-router.use('/pos/parked',       posParkedRoutes);
-router.use('/pos/promotions',   posPromotionRoutes);
-router.use('/pos/quick-keys',   posQuickKeyRoutes);
-router.use('/pos/stock-take',   posStockTakeRoutes);
-router.use('/pos/training',     posTrainingRoutes);
+// ── PWA product images (core). Product photos → GridFS, shop-scoped, all roles. OFF unless
+//    PRODUCT_IMAGES=true (routes then report enabled:false / 503). PWA token required. ──
+const pwaImageRoutes = require('./pwaImageRoutes');
+router.use('/pwa-images', pwaImageRoutes);
+
+// ── Neighbourhood Insights (optional PAID add-on). Mounted ONLY when INSIGHTS_ENABLED=true, so the core PWA
+//    is unaffected when off. Owner/manager + server-enforced paid entitlement. ──
+if (config.neighbourhoodInsights && config.neighbourhoodInsights.enabled) {
+  const pwaInsightsRoutes = require('./pwaInsightsRoutes');
+  router.use('/pwa-insights', pwaInsightsRoutes);
+}
+
+// ── Real neighbourhood data for the store's area (postcodes.io → ONS/Nomis, cached). Mounted ONLY when
+//    NEIGHBOURHOOD_ENABLED=true. Owner/manager; NOT the paid add-on (no entitlement gate). ──
+if (config.neighbourhood && config.neighbourhood.enabled) {
+  const pwaNeighbourhoodRoutes = require('./pwaNeighbourhoodRoutes');
+  router.use('/pwa-neighbourhood', pwaNeighbourhoodRoutes);
+}
+
+// ── PWA barcode auto-fill (scan → name/category via Open Food Facts proxy). PWA token required. ──
+const pwaLookupRoutes = require('./pwaLookupRoutes');
+router.use('/pwa-lookup', pwaLookupRoutes);
+
+// ── PWA invoice OCR (optional; off unless a provider is configured). PWA token required. ──
+const pwaInvoiceOcrRoutes = require('./pwaInvoiceOcrRoutes');
+router.use('/pwa-invoice-ocr', pwaInvoiceOcrRoutes);
+
+// ── PWA daily digest notifications (optional; email off unless configured). Prefs/preview need a PWA
+//    token; POST /run is gated by a shared secret for an external scheduler. ──
+const pwaNotifyRoutes = require('./pwaNotifyRoutes');
+router.use('/pwa-notify', pwaNotifyRoutes);
+
+// ── Till / back-office API (DEFERRED). Mounted only when TILL_ENABLED=true. In the PWA-only pilot the
+//    whole till surface — auth, sales, refunds, self-checkout, staff, customers, stocktake, billing,
+//    sockets — is simply not mounted, so every till/financial/auth route returns 404 and none of the
+//    audited till findings are reachable. Reversible via env once those findings are fixed + verified. ──
+if (config.till.enabled) {
+  const { publicRouter: receiptPublicRouter } = require('./receiptRoutes');
+  const authRoutes           = require('./authRoutes');
+  const saleRoutes           = require('./saleRoutes');
+  const productRoutes        = require('./productRoutes');
+  const customerRoutes       = require('./customerRoutes');
+  const staffRoutes          = require('./staffRoutes');
+  const cashDrawerRoutes     = require('./cashDrawerRoutes');
+  const lossPreventionRoutes = require('./lossPreventionRoutes');
+  const reportRoutes         = require('./reportRoutes');
+  const supplierRoutes       = require('./supplierRoutes');
+  const purchaseOrderRoutes  = require('./purchaseOrderRoutes');
+  const invoiceRoutes        = require('./invoiceRoutes');
+  const promotionRoutes      = require('./promotionRoutes');
+  const giftCardRoutes       = require('./giftCardRoutes');
+  const smartReorderRoutes   = require('./smartReorderRoutes');
+  const hardwareRoutes       = require('./hardwareRoutes');
+  const { publicRouter: subscriptionPublicRouter, router: subscriptionRoutes } = require('./subscriptionRoutes');
+  const posParkedRoutes      = require('./posParkedRoutes');
+  const posPromotionRoutes   = require('./posPromotionRoutes');
+  const posQuickKeyRoutes    = require('./posQuickKeyRoutes');
+  const posStockTakeRoutes   = require('./posStockTakeRoutes');
+  const posTrainingRoutes    = require('./posTrainingRoutes');
+  const displayRoutes        = require('./displayRoutes');
+  const digitalReceiptRoutes = require('./digitalReceiptRoutes');
+  const walletPassRoutes     = require('./walletPassRoutes');
+  const openBankingRoutes    = require('./openBankingRoutes');
+  const scheduleRoutes       = require('./scheduleRoutes');
+  const stockTakeRoutes      = require('./stockTakeRoutes');
+  const settingsRoutes       = require('./settingsRoutes');
+  const challenge25Routes    = require('./challenge25Routes');
+  const receiptRoutes        = require('./receiptRoutes');
+  const collectionOrderRoutes = require('./collectionOrderRoutes');
+  const selfCheckoutRoutes   = require('./selfCheckoutRoutes');
+  const tapToPayRoutes       = require('./tapToPayRoutes');
+  const queueBustRoutes      = require('./queueBustRoutes');
+  const expiryRoutes         = require('./expiryRoutes');
+  const aiRoutes             = require('./aiRoutes');
+  const invoiceReaderRoutes  = require('./invoiceReaderRoutes');
+  const marketIntelRoutes    = require('./marketIntelRoutes');
+  const accountingRoutes     = require('./accountingRoutes');
+  const marginRoutes         = require('./marginRoutes');
+  const overviewRoutes       = require('./overviewRoutes');
+
+  // Public till routes (no auth)
+  router.use('/auth', authRoutes);
+  router.use('/receipt', receiptPublicRouter);
+  router.use('/subscriptions', subscriptionPublicRouter);
+
+  // All routes below require a valid Staff JWT, THEN load the authorised shop context.
+  router.use(authenticate);
+  router.use(storeContext);
+
+  router.use('/sales',            saleRoutes);
+  router.use('/products',         productRoutes);
+  router.use('/customers',        customerRoutes);
+  router.use('/staff',            staffRoutes);
+  router.use('/cash-drawer',      cashDrawerRoutes);
+  router.use('/loss-prevention',  lossPreventionRoutes);
+  router.use('/reports',          reportRoutes);
+  router.use('/suppliers',        supplierRoutes);
+  router.use('/purchase-orders',  purchaseOrderRoutes);
+  router.use('/invoices',         invoiceRoutes);
+  router.use('/promotions',       promotionRoutes);
+  router.use('/gift-cards',       giftCardRoutes);
+  router.use('/smart-reorder',    smartReorderRoutes);
+  router.use('/hardware',         hardwareRoutes);
+  router.use('/subscriptions',    subscriptionRoutes);
+  router.use('/display',          displayRoutes);
+  router.use('/digital-receipts', digitalReceiptRoutes);
+  router.use('/wallet-passes',    walletPassRoutes);
+  router.use('/open-banking',     openBankingRoutes);
+  router.use('/schedule',         scheduleRoutes);
+  router.use('/stock-take',       stockTakeRoutes);
+  router.use('/settings',         settingsRoutes);
+  router.use('/pos/parked',       posParkedRoutes);
+  router.use('/pos/promotions',   posPromotionRoutes);
+  router.use('/pos/quick-keys',   posQuickKeyRoutes);
+  router.use('/pos/stock-take',   posStockTakeRoutes);
+  router.use('/pos/training',     posTrainingRoutes);
+  router.use('/challenge25',      challenge25Routes);
+  router.use('/receipts',              receiptRoutes);
+  router.use('/collection-orders',     collectionOrderRoutes);
+  router.use('/pos/self-checkout',     selfCheckoutRoutes);
+  router.use('/payments/tap-to-pay',   tapToPayRoutes);
+  router.use('/pos/queue-bust',        queueBustRoutes);
+  router.use('/expiry',                expiryRoutes);
+  router.use('/ai',                    aiRoutes);
+  router.use('/invoice-reader',        invoiceReaderRoutes);
+  router.use('/market',                marketIntelRoutes);
+  router.use('/accounting',            accountingRoutes);
+  router.use('/margins',               marginRoutes);
+  router.use('/overview',              overviewRoutes);
+}
 
 module.exports = router;

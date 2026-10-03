@@ -1,7 +1,156 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, Edit2, AlertTriangle, Package, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Search, Plus, Edit2, AlertTriangle, Package, ChevronLeft, ChevronRight, X, BarChart2, Lightbulb, TrendingDown, CheckCircle, RefreshCw } from 'lucide-react';
 import * as productsSvc from '../services/products';
+import * as marginSvc from '../services/margins';
+import api from '../services/api';
 import toast from 'react-hot-toast';
+
+// ── Margin helpers ────────────────────────────────────────────────────────────
+function getMarginRule(settings, category) {
+  if (!settings) return null;
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cats = settings.categories || [];
+  let m = cats.find(c => norm(c.name) === norm(category || ''));
+  if (!m) m = cats.find(c => norm(category || '').includes(norm(c.name)) || norm(c.name).includes(norm(category || '')));
+  return m || { targetMargin: settings.defaultMargin || 30, minMargin: Math.round((settings.defaultMargin || 30) * 0.6), maxMargin: 0, vatRate: 20 };
+}
+
+function calcActualMargin(retailPrice, costPrice, vatRate = 20) {
+  if (!retailPrice || !costPrice || costPrice <= 0) return null;
+  const excVat = retailPrice / (1 + vatRate / 100);
+  return ((excVat - costPrice) / excVat) * 100;
+}
+
+function calcSuggestedRetailInc(costPrice, rule) {
+  const { targetMargin = 30, vatRate = 20 } = rule;
+  if (targetMargin >= 100) return costPrice * (1 + vatRate / 100);
+  return Math.ceil((costPrice / (1 - targetMargin / 100)) * (1 + vatRate / 100) * 20) / 20;
+}
+
+function MarginBadge({ retailPrice, costPrice, vatRate, rule }) {
+  if (!rule || !costPrice || costPrice <= 0 || !retailPrice) return null;
+  const actual = calcActualMargin(retailPrice, costPrice, vatRate ?? 20);
+  if (actual === null) return null;
+  const { minMargin } = rule;
+  const isRed = actual < minMargin;
+  const isAmber = !isRed && actual < minMargin * 1.2;
+  const color = isRed ? 'text-red-600' : isAmber ? 'text-amber-600' : 'text-green-600';
+  const bg    = isRed ? 'bg-red-50'    : isAmber ? 'bg-amber-50'    : 'bg-green-50';
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-bold ${bg} ${color}`}>
+      {isRed ? '▼' : isAmber ? '⚠' : '✓'} {Math.round(actual)}%
+    </span>
+  );
+}
+
+// ── Bulk Margin Fix Modal ─────────────────────────────────────────────────────
+function BulkMarginFixModal({ issues, onClose, onFixed }) {
+  const [selected, setSelected] = useState(() => {
+    const s = {};
+    issues.forEach((_, i) => { s[i] = true; });
+    return s;
+  });
+  const [customPrices, setCustomPrices] = useState({});
+  const [fixing, setFixing] = useState(false);
+
+  const toggleAll = (val) => {
+    const s = {};
+    issues.forEach((_, i) => { s[i] = val; });
+    setSelected(s);
+  };
+
+  const handleFix = async () => {
+    setFixing(true);
+    const toFix = issues.filter((_, i) => selected[i]);
+    let fixed = 0;
+    for (const item of toFix) {
+      try {
+        const newPrice = customPrices[item._id]
+          ? parseFloat(customPrices[item._id])
+          : calcSuggestedRetailInc(item.costPrice || item.pricing?.costPrice || 0, item._rule);
+        await api.put(`/products/${item._id}`, { 'pricing.retailPrice': newPrice });
+        fixed++;
+      } catch { /* skip */ }
+    }
+    toast.success(`Fixed retail price on ${fixed} product${fixed !== 1 ? 's' : ''}`);
+    setFixing(false);
+    onFixed();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <TrendingDown size={18} className="text-red-500" /> Fix Margin Issues
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">{issues.length} product{issues.length !== 1 ? 's' : ''} below minimum margin</p>
+          </div>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-5 py-3 border-b flex gap-3">
+            <button onClick={() => toggleAll(true)} className="text-xs text-blue-600 font-semibold hover:underline">Select All</button>
+            <button onClick={() => toggleAll(false)} className="text-xs text-gray-400 hover:underline">Deselect All</button>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-4 py-2 w-8"></th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Product</th>
+                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Cost</th>
+                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Current Retail</th>
+                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Suggested Retail</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {issues.map((item, i) => {
+                const cost = item.costPrice || item.pricing?.costPrice || 0;
+                const suggested = calcSuggestedRetailInc(cost, item._rule);
+                const retail = item.retailPrice || item.pricing?.retailPrice || 0;
+                return (
+                  <tr key={item._id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <input type="checkbox" checked={!!selected[i]} onChange={() => setSelected(s => ({ ...s, [i]: !s[i] }))} className="accent-blue-600" />
+                    </td>
+                    <td className="px-4 py-2">
+                      <p className="font-medium text-gray-900">{item.name}</p>
+                      <p className="text-xs text-gray-400">{item.category} · {item._rule.targetMargin}% target</p>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono">£{Number(cost).toFixed(2)}</td>
+                    <td className="px-4 py-2 text-right">
+                      <span className="font-mono text-red-600 font-bold">£{Number(retail).toFixed(2)}</span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <input
+                        type="number" step="0.01" min="0"
+                        className="w-20 border rounded px-2 py-1 text-xs text-right font-mono focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                        value={customPrices[item._id] !== undefined ? customPrices[item._id] : suggested.toFixed(2)}
+                        onChange={e => setCustomPrices(p => ({ ...p, [item._id]: e.target.value }))}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-5 border-t flex gap-3">
+          <button onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm font-medium hover:bg-gray-50">Cancel</button>
+          <button
+            onClick={handleFix}
+            disabled={fixing || Object.values(selected).every(v => !v)}
+            className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {fixing ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+            Apply {Object.values(selected).filter(Boolean).length} Price Fixes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const VAT_RATES = [
   { value: 0, label: '0% Zero-rated' },
@@ -11,7 +160,8 @@ const VAT_RATES = [
 
 const CATEGORIES = [
   'Beer & Cider', 'Spirits', 'Wine', 'Soft Drinks', 'Confectionery',
-  'Tobacco', 'Snacks', 'Household', 'Top-Up Cards', 'Newspapers & Mags', 'Other',
+  'Tobacco', 'Snacks', 'Household', 'Top-Up Cards', 'Mobile Top-Up',
+  'Newspapers & Mags', 'Lottery', 'Other',
 ];
 
 function ProductModal({ product, onClose, onSaved }) {
@@ -36,8 +186,29 @@ function ProductModal({ product, onClose, onSaved }) {
     ageRestricted: false, requiresChallenge25: false, isActive: true,
   });
   const [saving, setSaving] = useState(false);
+  const [suggestedPrice, setSuggestedPrice] = useState(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSuggestPrice = async () => {
+    if (!form.costPrice || parseFloat(form.costPrice) <= 0) {
+      toast.error('Enter cost price first');
+      return;
+    }
+    setSuggestLoading(true);
+    try {
+      const res = await api.post('/products/suggest-price', {
+        costPrice: parseFloat(form.costPrice),
+        category: form.category,
+      });
+      setSuggestedPrice(res);
+    } catch {
+      toast.error('Could not fetch price suggestion');
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -81,8 +252,60 @@ function ProductModal({ product, onClose, onSaved }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Retail Price (£) *</label>
-              <input type="number" step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.retailPrice} onChange={e => set('retailPrice', e.target.value)} required />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Retail Price (£) *</label>
+                <button
+                  type="button"
+                  onClick={handleSuggestPrice}
+                  disabled={suggestLoading}
+                  className="flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium disabled:opacity-50"
+                >
+                  {suggestLoading
+                    ? <span className="animate-spin inline-block w-3 h-3 border border-amber-500 border-t-transparent rounded-full" />
+                    : <Lightbulb size={12} />}
+                  Suggest
+                </button>
+              </div>
+              <input type="number" step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" value={form.retailPrice} onChange={e => { set('retailPrice', e.target.value); setSuggestedPrice(null); }} required />
+              {suggestedPrice && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <div className="flex items-start gap-2 mb-2">
+                    <Lightbulb size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-amber-900">
+                        Suggested: £{Number(suggestedPrice.suggestedPrice || 0).toFixed(2)}
+                        {suggestedPrice.marginPct != null && (
+                          <span className={`ml-2 text-xs font-bold ${
+                            suggestedPrice.marginPct >= 30 ? 'text-green-700' :
+                            suggestedPrice.marginPct >= 15 ? 'text-amber-700' : 'text-red-600'
+                          }`}>
+                            ({suggestedPrice.marginPct}% margin)
+                          </span>
+                        )}
+                      </p>
+                      {suggestedPrice.reason && (
+                        <p className="text-xs text-amber-700 mt-0.5">{suggestedPrice.reason}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { set('retailPrice', suggestedPrice.suggestedPrice); setSuggestedPrice(null); }}
+                      className="flex-1 bg-amber-600 text-white px-2 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-700"
+                    >
+                      Use This Price
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggestedPrice(null)}
+                      className="flex-1 border border-amber-300 text-amber-700 px-2 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-100"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Cost Price (£)</label>
@@ -131,6 +354,73 @@ function ProductModal({ product, onClose, onSaved }) {
   );
 }
 
+// Product Insights Modal (#74)
+function InsightsModal({ productId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/products/${productId}/insights`)
+      .then(r => setData(r.data))
+      .catch(() => toast.error('Failed to load insights'))
+      .finally(() => setLoading(false));
+  }, [productId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h2 className="font-bold text-gray-900">Product Insights</h2>
+            {data && <p className="text-sm text-gray-500">{data.product.name}</p>}
+          </div>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        {loading ? (
+          <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" /></div>
+        ) : data ? (
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['Units Sold (7d)', data.insights.unitsSold7, '📦'],
+                ['Units Sold (30d)', data.insights.unitsSold30, '📦'],
+                ['Revenue (30d)', `£${Number(data.insights.revenue30).toFixed(2)}`, '💷'],
+                ['Daily Velocity', `${data.insights.dailyVelocity}/day`, '📈'],
+                ['Days of Stock', data.insights.daysOfStock !== null ? `${data.insights.daysOfStock}d` : '—', '🗓️'],
+                ['Margin', data.insights.marginPct !== null ? `${data.insights.marginPct}%` : '—', '💰'],
+              ].map(([label, value, icon]) => (
+                <div key={label} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500">{icon} {label}</p>
+                  <p className="text-xl font-bold text-gray-900 mt-1">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+              <p className="font-medium text-gray-700">Pricing</p>
+              <div className="flex justify-between"><span className="text-gray-500">Cost Price</span><span className="font-mono">£{Number(data.insights.costPrice).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Retail Price</span><span className="font-mono font-bold">£{Number(data.insights.retailPrice).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Current Stock</span><span className={`font-bold ${data.insights.currentStock <= data.insights.lowStockThreshold ? 'text-red-600' : 'text-green-600'}`}>{data.insights.currentStock} units</span></div>
+            </div>
+            {data.stockHistory.length > 0 && (
+              <div>
+                <p className="font-medium text-gray-700 mb-2 text-sm">Recent Stock Movements</p>
+                <div className="space-y-1">
+                  {data.stockHistory.slice(0, 8).map((m, i) => (
+                    <div key={i} className="flex justify-between text-xs bg-gray-50 rounded px-3 py-2">
+                      <span className="text-gray-600 capitalize">{m.type?.replace(/_/g, ' ')}</span>
+                      <span className={m.quantity >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{m.quantity >= 0 ? '+' : ''}{m.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +431,9 @@ export default function ProductsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [editProduct, setEditProduct] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [insightsProductId, setInsightsProductId] = useState(null);
+  const [marginSettings, setMarginSettings] = useState(null);
+  const [showBulkFix, setShowBulkFix] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,11 +448,23 @@ export default function ProductsPage() {
   }, [search, category, lowStock, page]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { marginSvc.getMarginSettings().then(r => setMarginSettings(r.settings)).catch(() => {}); }, []);
 
   function openAdd() { setEditProduct(null); setShowModal(true); }
   function openEdit(p) { setEditProduct(p); setShowModal(true); }
   function closeModal() { setShowModal(false); setEditProduct(null); }
   function onSaved() { closeModal(); load(); }
+
+  // Compute low-margin products (only those with cost price set)
+  const marginIssues = products.filter(p => {
+    const cost = p.costPrice || p.pricing?.costPrice;
+    const retail = p.retailPrice || p.pricing?.retailPrice;
+    if (!cost || cost <= 0 || !retail) return false;
+    const rule = getMarginRule(marginSettings, p.category);
+    if (!rule) return false;
+    const actual = calcActualMargin(retail, cost, p.vatRate ?? p.pricing?.vatRate ?? 20);
+    return actual !== null && actual < rule.minMargin;
+  }).map(p => ({ ...p, _rule: getMarginRule(marginSettings, p.category) }));
 
   return (
     <div className="p-6">
@@ -168,9 +473,20 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Products</h1>
           <p className="text-sm text-gray-500 mt-1">Manage your product catalogue</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90">
-          <Plus size={18} /> Add Product
-        </button>
+        <div className="flex gap-2">
+          {marginIssues.length > 0 && (
+            <button
+              onClick={() => setShowBulkFix(true)}
+              className="flex items-center gap-1.5 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100"
+            >
+              <TrendingDown size={15} />
+              {marginIssues.length} margin issue{marginIssues.length !== 1 ? 's' : ''}
+            </button>
+          )}
+          <button onClick={openAdd} className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90">
+            <Plus size={18} /> Add Product
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-3 mb-6 flex-wrap">
@@ -213,6 +529,7 @@ export default function ProductsPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Barcode</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Category</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Price</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-600">Margin</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Stock</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-3"></th>
@@ -228,6 +545,14 @@ export default function ProductsPage() {
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.barcode || '—'}</td>
                   <td className="px-4 py-3 text-gray-500">{p.category}</td>
                   <td className="px-4 py-3 text-right font-medium">£{Number(p.retailPrice).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <MarginBadge
+                      retailPrice={p.retailPrice || p.pricing?.retailPrice}
+                      costPrice={p.costPrice || p.pricing?.costPrice}
+                      vatRate={p.vatRate ?? p.pricing?.vatRate ?? 20}
+                      rule={getMarginRule(marginSettings, p.category)}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <span className={`font-medium ${p.stockQuantity <= p.lowStockThreshold ? 'text-yellow-600' : 'text-gray-900'}`}>
                       {p.stockQuantity}
@@ -240,9 +565,14 @@ export default function ProductsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700">
-                      <Edit2 size={15} />
-                    </button>
+                    <div className="flex gap-1">
+                      <button onClick={() => setInsightsProductId(p._id)} className="p-1.5 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600" title="Product Insights">
+                        <BarChart2 size={15} />
+                      </button>
+                      <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700">
+                        <Edit2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -264,6 +594,14 @@ export default function ProductsPage() {
       )}
 
       {showModal && <ProductModal product={editProduct} onClose={closeModal} onSaved={onSaved} />}
+      {insightsProductId && <InsightsModal productId={insightsProductId} onClose={() => setInsightsProductId(null)} />}
+      {showBulkFix && (
+        <BulkMarginFixModal
+          issues={marginIssues}
+          onClose={() => setShowBulkFix(false)}
+          onFixed={() => { setShowBulkFix(false); load(); }}
+        />
+      )}
     </div>
   );
 }

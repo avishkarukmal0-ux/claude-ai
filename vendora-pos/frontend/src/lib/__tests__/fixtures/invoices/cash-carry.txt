@@ -1,0 +1,12 @@
+BESTWAY WHOLESALE
+Invoice No: 88213   Date: 01/10/2026
+----------------------------------------
+24  COCA COLA 330ML CAN        9.60
+12  WALKERS CRISPS 32.5G       4.80
+6 x RED BULL 250ML             7.50
+PEPSI MAX 2L                   1.20
+----------------------------------------
+Subtotal                      23.10
+VAT                            4.62
+TOTAL                         27.72
+Thank you for your business

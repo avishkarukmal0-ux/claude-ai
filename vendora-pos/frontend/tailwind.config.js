@@ -35,6 +35,10 @@ export default {
         'cash-green': '#15803D',
         'cash-bg':    '#F0FDF4',
         'alert-red':  '#B91C1C',
+        'bg-primary': 'var(--bg-primary)',
+        'bg-card-v2': 'var(--bg-card)',
+        'bg-hover-v2': 'var(--bg-hover)',
+        'border-v2': 'var(--border)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

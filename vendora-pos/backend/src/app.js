@@ -2,12 +2,31 @@
 
 require('dotenv').config();
 
+// ── Startup security checks ───────────────────────────────────────────────────
+// In PRODUCTION, refuse to start with missing/weak JWT secrets — issuing forgeable tokens is
+// worse than being down. Outside production, warn (keeps local/test explicit and unblocked).
+// Secret VALUES are never printed. Env is available here (dotenv + platform inject before start).
+const { checkSecrets } = require('./config/validateSecrets');
+const secretCheck = checkSecrets({
+  jwtSecret: process.env.JWT_SECRET,
+  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET,
+  isProd: process.env.NODE_ENV === 'production',
+});
+if (secretCheck.fatal) {
+  console.error(`\n✗ FATAL: insecure or missing secret(s): ${secretCheck.problems.join(', ')}`);
+  console.error('   Set strong 32+ char secrets in your host env (Railway → Variables).');
+  console.error('   Generate: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"\n');
+  throw new Error(`Refusing to start in production with insecure secrets: ${secretCheck.problems.join(', ')}`);
+} else if (!secretCheck.ok) {
+  console.warn(`\n⚠  WARNING: insecure/missing secret(s): ${secretCheck.problems.join(', ')} — allowed in ${process.env.NODE_ENV || 'development'} only.\n`);
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const requestLogger = require('./middleware/requestLogger');
+const auditLog = require('./middleware/auditLog');
 const errorHandler = require('./middleware/errorHandler');
-const storeContext = require('./middleware/storeContext');
 const { generalLimiter } = require('./middleware/rateLimit');
 const routes = require('./routes');
 const path = require('path');
@@ -18,16 +37,96 @@ const app = express();
 // Trust proxy (for rate limiting behind nginx)
 app.set('trust proxy', 1);
 
-// Security
-app.use(helmet({ crossOriginEmbedderPolicy: false }));
+// ── Health check + root — registered FIRST so Railway/load-balancer probes always respond ──
+// Must be before helmet, CORS, rate-limiting, and all other middleware. Always 200 so the
+// platform probe passes even before the DB is up; the `db` field lets you verify the
+// MongoDB connection after deploy (open <backend-url>/health and look for db:"connected").
+const mongoose = require('mongoose');
+const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+const healthHandler = (req, res) => {
+  res.json({
+    status: 'ok',
+    db: DB_STATES[mongoose.connection.readyState] || 'unknown',
+    timestamp: new Date().toISOString(),
+    version: '3.0.0',
+    env: process.env.NODE_ENV,
+  });
+};
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+app.get('/', (req, res) => {
+  res.json({ message: 'Vendora POS API', version: '3.0.0', status: 'running' });
+});
 
-// CORS
+// Security headers
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  hsts: process.env.NODE_ENV === 'production'
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:     ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc:      ["'self'", 'data:', 'blob:'],
+      connectSrc:  ["'self'",
+        'https://*.mongodb.net',
+        'https://*.upstash.io',
+        'wss://localhost:*', 'ws://localhost:*',
+        ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : []),
+      ],
+      objectSrc:   ["'none'"],
+      frameSrc:    ["'none'"],
+      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+    },
+  },
+}));
+
+// HTTPS redirect in production (#178)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (!req.secure && req.get('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, 'https://' + req.headers.host + req.url);
+    }
+    next();
+  });
+}
+
+// CORS — explicit origins + wildcard patterns for Vercel/Railway deployments
+const explicitOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean);
+
+if (process.env.FRONTEND_URL) explicitOrigins.push(process.env.FRONTEND_URL.trim());
+
+const ORIGIN_PATTERNS = [
+  /^https?:\/\/.*\.vercel\.app$/,
+  /^https?:\/\/.*\.railway\.app$/,
+];
+
+function isOriginAllowed(origin) {
+  if (!origin) return true; // curl, same-origin, mobile apps
+  if (process.env.NODE_ENV !== 'production' && /^http:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (explicitOrigins.includes(origin)) return true;
+  if (ORIGIN_PATTERNS.some(re => re.test(origin))) return true;
+  return false;
+}
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (isOriginAllowed(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Stripe webhooks must verify the signature against the UNPARSED body, so this one path gets the raw bytes
+// BEFORE express.json() would consume them. (The till's own Stripe webhook, if enabled, parses its own raw
+// body inside subscriptionRoutes; this is the separate PWA/insights endpoint.)
+app.use('/api/pwa-insights/billing/stripe/webhook', express.raw({ type: '*/*', limit: '1mb' }));
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
@@ -36,13 +135,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Request logging
 app.use(requestLogger);
 
+// Security audit log (sensitive routes)
+app.use('/api', auditLog);
+
 // Rate limiting
 app.use('/api', generalLimiter);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0' });
-});
 
 // Uploads directory
 const uploadPath = process.env.UPLOAD_PATH || './uploads';
@@ -55,10 +152,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Store context (loads store doc for authenticated requests)
-app.use('/api', storeContext);
-
-// API routes
+// API routes. NOTE: storeContext (loads req.store) runs INSIDE the router, immediately
+// after authenticate — see routes/index.js. Mounting it here (before auth) meant req.storeId
+// wasn't set yet, so req.store was never populated (and PIN/permission gates that depend on
+// it silently no-op'd).
 app.use('/api', routes);
 
 // 404 handler

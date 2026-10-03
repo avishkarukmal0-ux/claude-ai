@@ -1,3 +1,5 @@
+@import './styles/design-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -68,3 +70,146 @@
 
 /* POS dark scrollbars */
 .pos-scroll::-webkit-scrollbar-thumb { @apply bg-slate-600; }
+
+/* ── Scrollbars ──────────────────────────────────────────── */
+.pos-scroll::-webkit-scrollbar { width: 4px; }
+.pos-scroll::-webkit-scrollbar-track { background: transparent; }
+.pos-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+.pos-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── Micro-interactions ──────────────────────────────────── */
+@keyframes slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes slide-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes flash-green {
+  0%   { background-color: transparent; }
+  30%  { background-color: rgba(22, 163, 74, 0.25); }
+  100% { background-color: transparent; }
+}
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+}
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+@keyframes spin-in {
+  from { transform: scale(0.8) rotate(-10deg); opacity: 0; }
+  to   { transform: scale(1)   rotate(0);      opacity: 1; }
+}
+@keyframes check-pop {
+  0%   { transform: scale(0);   opacity: 0; }
+  60%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+.animate-slide-in-right { animation: slide-in-right 0.2s ease; }
+.animate-slide-up        { animation: slide-up 0.2s ease; }
+.animate-flash-green     { animation: flash-green 0.6s ease; }
+.animate-pulse-red       { animation: pulse-red 1.5s ease-in-out infinite; }
+.animate-pulse-amber     { animation: pulse-amber 2s ease-in-out infinite; }
+.animate-spin-in         { animation: spin-in 0.25s ease; }
+.animate-check-pop       { animation: check-pop 0.35s cubic-bezier(0.175,0.885,0.32,1.275); }
+
+/* ── Category top-bar colors ─────────────────────────────── */
+.cat-bar-beer     { background: #D97706; }
+.cat-bar-spirits  { background: #7C3AED; }
+.cat-bar-soft     { background: #0891B2; }
+.cat-bar-snacks   { background: #16A34A; }
+.cat-bar-tobacco  { background: #64748B; }
+.cat-bar-lottery  { background: linear-gradient(90deg,#D97706,#F59E0B); }
+.cat-bar-topup    { background: #16A34A; }
+.cat-bar-default  { background: #2563EB; }
+
+/* ── Premium input style ─────────────────────────────────── */
+.vd-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  transition: var(--transition);
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  width: 100%;
+}
+.vd-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-dim);
+}
+.vd-input::placeholder { color: var(--text-muted); }
+
+/* ── Premium table rows ──────────────────────────────────── */
+.vd-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.vd-table tbody tr:hover { background: var(--bg-hover); }
+.vd-table thead th {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.vd-table tbody td { padding: 12px 16px; font-size: 13px; }
+
+/* ── Accessibility (Phase 3.9) ────────────────────────────────
+   Systemic a11y that the per-component Tailwind classes miss. */
+
+/* Respect the OS "reduce motion" setting — the app had none, so the infinite pulse/spin animations ran
+   unconditionally. Near-instant everything (and stop the looping ones) when the user asks for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A visible keyboard-focus ring everywhere. Many components use Tailwind's `focus:outline-none` without a
+   replacement; this guarantees a focus indicator for keyboard users (mouse/touch focus is unaffected).
+   !important is needed to beat the utility's `:focus` outline. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus-ring, #2563eb) !important;
+  outline-offset: 2px !important;
+  border-radius: 6px;
+}
+
+/* Lift the pervasive secondary-text colour to meet WCAG AA (4.5:1). `text-gray-400` (#9CA3AF ≈ 2.8:1 on
+   white) was used widely for sub-labels; map it to ~#5b6472 (≈5:1). Declared after @tailwind utilities so
+   source order wins. gray-300 stays for genuinely decorative dividers/chevrons. */
+.text-gray-400 { color: #5b6472; }
+
+/* Skip-to-content link (hidden until focused). */
+.skip-link {
+  position: absolute; left: 8px; top: -48px; z-index: 50;
+  background: #111827; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 8px; }
+
+/* ── Pill badge ──────────────────────────────────────────── */
+.vd-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600; }
+.vd-badge-blue   { background: var(--blue-dim);   color: var(--blue-light); }
+.vd-badge-green  { background: var(--green-dim);  color: var(--green-light); }
+.vd-badge-red    { background: var(--red-dim);    color: var(--red-light); }
+.vd-badge-amber  { background: var(--amber-dim);  color: var(--amber-light); }
+.vd-badge-purple { background: var(--purple-dim); color: var(--purple-light); }
+.vd-badge-muted  { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
