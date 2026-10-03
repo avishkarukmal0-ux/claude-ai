@@ -10,6 +10,21 @@
 import React from 'react';
 import toast from 'react-hot-toast';
 
+// Audit FE6: only the tab whose user tapped "Refresh" should reload on controllerchange — other open tabs
+// (possibly mid-form) must keep their page. This module flag records that THIS tab consented.
+let _userAskedRefresh = false;
+
+// Post the exact hashed JS/CSS this page loaded to a worker so it can precache them for offline use.
+function warmAssets(sw) {
+  if (!sw) return;
+  try {
+    const urls = [...document.querySelectorAll('script[src], link[rel="stylesheet"][href]')]
+      .map((el) => el.src || el.href)
+      .filter((u) => u && u.startsWith(self.location.origin));
+    if (urls.length) sw.postMessage({ type: 'CACHE_ASSETS', urls });
+  } catch { /* best-effort warming */ }
+}
+
 // A dismissible toast with a Refresh button. Built with createElement so this .js file needs no JSX
 // transform. Tapping Refresh tells the waiting worker to take over; controllerchange then reloads.
 function promptRefresh(waitingWorker) {
@@ -23,7 +38,7 @@ function promptRefresh(waitingWorker) {
         'button',
         {
           type: 'button',
-          onClick: () => { toast.dismiss(t.id); try { waitingWorker.postMessage('SKIP_WAITING'); } catch { /* ignore */ } },
+          onClick: () => { _userAskedRefresh = true; toast.dismiss(t.id); try { waitingWorker.postMessage('SKIP_WAITING'); } catch { /* ignore */ } },
           className: 'shrink-0 rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-white',
         },
         'Refresh',
@@ -44,7 +59,11 @@ export function registerServiceWorker() {
 
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || refreshing) return; // first install, or already reloading — don't loop
+    // FE7: on first install the worker now controls the page — warm its cache with this page's assets so an
+    // immediate offline reopen has them (registration-time warming ran before any controller existed).
+    if (!hadController) { warmAssets(navigator.serviceWorker.controller); return; }
+    // FE6: only reload if THIS tab accepted the update. A Refresh in another tab must not reload this one.
+    if (refreshing || !_userAskedRefresh) return;
     refreshing = true;
     window.location.reload();
   });
@@ -65,17 +84,9 @@ export function registerServiceWorker() {
         // Nudge the browser to look for a newer sw.js on each load.
         try { registration.update(); } catch { /* ignore */ }
 
-        // Tell the active worker the exact (hashed) JS/CSS this page loaded, so it can precache them for
-        // offline use — a fresh install opened offline would otherwise have the shell but no assets.
-        try {
-          const sw = navigator.serviceWorker.controller;
-          if (sw) {
-            const urls = [...document.querySelectorAll('script[src], link[rel="stylesheet"][href]')]
-              .map((el) => el.src || el.href)
-              .filter((u) => u && u.startsWith(self.location.origin));
-            if (urls.length) sw.postMessage({ type: 'CACHE_ASSETS', urls });
-          }
-        } catch { /* best-effort warming */ }
+        // Warm the active worker's cache with this page's assets. If there's no controller yet (first
+        // install), the controllerchange handler above warms it once the worker takes control (FE7).
+        warmAssets(navigator.serviceWorker.controller);
 
         // An update may already be sitting waiting from a previous visit — offer it now.
         if (registration.waiting && navigator.serviceWorker.controller) {

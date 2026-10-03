@@ -79,21 +79,24 @@ export default function WasteView({ onBack }) {
   // close the markdown with the reported sold + binned split. "Sold" is reported-only (estimated), never a
   // confirmed sale and never a stock change here.
   function closeMarkdown(m, soldReported, binned) {
-    const n = Number(binned) || 0;
-    if (n > 0) {
+    const want = Number(binned) || 0;
+    let appliedBinned = 0;
+    if (want > 0) {
       const p = products.find((x) => x.id === m.productId);
-      if (p) {
-        const opGroupId = newOpId();
-        const valuation = (p.cost ?? 0);
-        const res = m.batchId
-          ? wasteBatch({ id: p.id, batchId: m.batchId, qty: n, valuation, reason: 'marked down — unsold, binned', opGroupId })
-          : recordWaste({ id: p.id, qty: n, valuation, reason: 'marked down — unsold, binned', batchId: opGroupId });
-        if (res && res.ok) {
-          addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: m.batchId || undefined, batchInfo: res.batch, reason: 'marked down — unsold' });
-        }
-      }
+      if (!p) { toast.error('That product no longer exists — markdown left open.'); return; }
+      const opGroupId = newOpId();
+      // Audit D11: don't pass a single-unit valuation (the store values it at cost × actual applied), and do
+      // NOT report binning or close the markdown unless the waste actually committed. Record the ACTUAL applied
+      // quantity, not the requested one (stock may have been sold/removed since, or be less than requested).
+      const res = m.batchId
+        ? wasteBatch({ id: p.id, batchId: m.batchId, qty: want, reason: 'marked down — unsold, binned', opGroupId })
+        : recordWaste({ id: p.id, qty: want, reason: 'marked down — unsold, binned', batchId: opGroupId });
+      if (!res || !res.ok) { toast.error((res && res.error) || 'Couldn’t bin that stock — markdown left open to try again.'); return; }
+      appliedBinned = res.applied;
+      addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: m.batchId || undefined, batchInfo: res.batch, reason: 'marked down — unsold' });
+      if (appliedBinned < want) toast(`Only ${appliedBinned} of ${want} were still in stock to bin.`, { icon: 'ℹ️' });
     }
-    recordOutcome(m.id, { soldReported: Number(soldReported) || 0, binned: n, close: true });
+    recordOutcome(m.id, { soldReported: Number(soldReported) || 0, binned: appliedBinned, close: true });
     toast.success('Markdown closed');
   }
 
