@@ -21,6 +21,8 @@ export const INVOICES_ENABLED = flag('VITE_INVOICES_ENABLED', true);
 // VITE_INSIGHTS_ENABLED=true AND the backend INSIGHTS_ENABLED is on. The core PWA is fully usable without it.
 export const INSIGHTS_ENABLED = flag('VITE_INSIGHTS_ENABLED', false);
 
-// Real neighbourhood area data (ONS/Nomis via our backend). Independent of the paid add-on; OFF by default.
-// Also requires the backend NEIGHBOURHOOD_ENABLED=true (+ a configured dataset) to return figures.
-export const NEIGHBOURHOOD_ENABLED = flag('VITE_NEIGHBOURHOOD_ENABLED', false);
+// Real neighbourhood area data (ONS/Nomis via our backend). Independent of the paid add-on. DEFAULT-ON (the
+// tile shows by default; set VITE_NEIGHBOURHOOD_ENABLED=false to hide it) — the backend route is the real
+// gate (NEIGHBOURHOOD_ENABLED + a configured dataset). When the backend is off/unconfigured the card simply
+// says so, so there's no harm in surfacing the tile. Default-on avoids depending on a build-time env var.
+export const NEIGHBOURHOOD_ENABLED = flag('VITE_NEIGHBOURHOOD_ENABLED', true);
