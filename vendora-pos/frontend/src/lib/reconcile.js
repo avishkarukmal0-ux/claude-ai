@@ -31,9 +31,20 @@ export function reconcile({ delivery, invoice, order } = {}) {
   const invoiceId = (invoice && invoice.id) || null;
   const invoiceRef = (invoice && invoice.reference) || '';
   const deliveryId = (delivery && delivery.id) || null;
-  const dByKey = new Map();
-  for (const dl of dLines) { const k = key(dl); if (k && !dByKey.has(k)) dByKey.set(k, dl); }
-  const usedDelivery = new Set();
+  // Audit D3: AGGREGATE delivered supply per product key (not first-line-only), and CONSUME it across invoice
+  // lines, so multiple delivery/invoice lines for the same product neither miss real shortages nor reuse the
+  // same delivered units. dAgg carries summed units, a units-weighted agreed unit cost, the first line (for
+  // refs/pack) and all delivery line ids.
+  const dAgg = new Map();
+  for (const dl of dLines) {
+    const k = key(dl); if (!k) continue;
+    const u = deliveredUnits(dl); const c = deliveryUnitCost(dl);
+    const a = dAgg.get(k) || { units: 0, costWeighted: 0, first: dl, lineIds: [] };
+    a.units += u; a.costWeighted += c * u; if (dl && dl.id) a.lineIds.push(dl.id);
+    dAgg.set(k, a);
+  }
+  const dAggCost = (a) => (a && a.units > 0 ? a.costWeighted / a.units : 0);
+  const consumed = new Map(); // key → delivered units already matched to earlier invoice lines
   const discrepancies = [];
   // Common source refs attached to every discrepancy so a claim item can trace back to its documents.
   const refs = (il, dl) => ({
@@ -49,8 +60,9 @@ export function reconcile({ delivery, invoice, order } = {}) {
     const invCost = invoiceUnitCost(il);
     if (invU <= 0) continue;
 
-    const dl = k ? dByKey.get(k) : null;
-    if (!dl) {
+    const agg = k ? dAgg.get(k) : null;
+    const dl = agg ? agg.first : null;
+    if (!agg) {
       // Billed for something that isn't on the delivery at all.
       discrepancies.push({
         type: 'not_delivered', claimReason: 'missing', name, productId: il.productId || null, barcode: il.barcode || '',
@@ -59,9 +71,15 @@ export function reconcile({ delivery, invoice, order } = {}) {
       });
       continue;
     }
-    usedDelivery.add(k);
-    const delU = deliveredUnits(dl);
-    const delCost = deliveryUnitCost(dl);
+    // D3: delivered units are a shared pool per product — consume what earlier invoice lines already matched so
+    // a second invoice line for the same product can't re-bill the same delivered units (would miss a real
+    // shortage), and summed delivery lines can't be under-counted (would invent a shortage). matchU = units
+    // this line can legitimately draw from the remaining delivered supply.
+    const alreadyUsed = consumed.get(k) || 0;
+    const available = r2(agg.units - alreadyUsed);
+    const matchU = r2(Math.min(invU, Math.max(0, available)));
+    consumed.set(k, r2(alreadyUsed + matchU));
+    const delCost = dAggCost(agg); // units-weighted agreed £/unit across all delivery lines for this product
 
     // Pack-size mismatch is informational — we always compare in single units, but flag it so the owner
     // knows why the figures differ.
@@ -73,43 +91,36 @@ export function reconcile({ delivery, invoice, order } = {}) {
       });
     }
 
-    // Shortage: billed for more units than delivered → the shortfall units are the claim.
-    if (invU - delU > EPS) {
-      const short = r2(invU - delU);
+    // Shortage: billed for more units than the remaining delivered supply covers → the shortfall is the claim.
+    if (invU - matchU > EPS) {
+      const short = r2(invU - matchU);
       discrepancies.push({
         type: 'shortage', claimReason: 'missing', name, productId: il.productId || null, barcode: il.barcode || '',
         units: short, overcharge: mul(invCost, short), ...refs(il, dl),
-        detail: `Invoiced ${invU}, delivered ${delU} → ${short} short × ${money(invCost)}/unit = ${money(mul(invCost, short))}.`,
-      });
-    } else if (delU - invU > EPS) {
-      discrepancies.push({
-        type: 'extra_delivered', claimReason: null, name, productId: il.productId || null,
-        units: r2(delU - invU), overcharge: 0, ...refs(il, dl),
-        detail: `Delivered ${delU} but only invoiced ${invU} — more delivered than billed (no claim).`,
+        detail: `Invoiced ${invU}, ${matchU} covered by the delivery → ${short} short × ${money(invCost)}/unit = ${money(mul(invCost, short))}.`,
       });
     }
 
-    // Overcharge: invoice unit price above the delivered (agreed) unit price, on the units actually billed+delivered.
-    if (delCost > 0 && invCost - delCost > EPS) {
-      const units = r2(Math.min(invU, delU));
-      if (units > 0) {
-        discrepancies.push({
-          type: 'overcharge', claimReason: 'wrong_price', name, productId: il.productId || null, barcode: il.barcode || '',
-          units, unitBilled: r2(invCost), unitAgreed: r2(delCost), overcharge: mul(invCost - delCost, units), ...refs(il, dl),
-          detail: `Invoiced ${money(invCost)}/unit vs ${money(delCost)}/unit agreed → ${money(invCost - delCost)} × ${units} = ${money(mul(invCost - delCost, units))}.`,
-        });
-      }
+    // Overcharge: invoice unit price above the delivered (agreed) unit price, on the units actually matched.
+    if (delCost > 0 && invCost - delCost > EPS && matchU > 0) {
+      discrepancies.push({
+        type: 'overcharge', claimReason: 'wrong_price', name, productId: il.productId || null, barcode: il.barcode || '',
+        units: matchU, unitBilled: r2(invCost), unitAgreed: r2(delCost), overcharge: mul(invCost - delCost, matchU), ...refs(il, dl),
+        detail: `Invoiced ${money(invCost)}/unit vs ${money(delCost)}/unit agreed → ${money(invCost - delCost)} × ${matchU} = ${money(mul(invCost - delCost, matchU))}.`,
+      });
     }
   }
 
-  // Delivery lines that never matched an invoice line (delivered, not billed) — info only.
-  for (const dl of dLines) {
-    const k = key(dl);
-    if (k && !usedDelivery.has(k) && deliveredUnits(dl) > 0) {
+  // Delivered units left unconsumed after every invoice line is accounted for (delivered more than billed, or a
+  // product delivered but not on the invoice at all) — info only, one line per product.
+  for (const [k, agg] of dAgg) {
+    const leftover = r2(agg.units - (consumed.get(k) || 0));
+    if (leftover > EPS) {
+      const dl = agg.first;
       discrepancies.push({
         type: 'extra_delivered', claimReason: null, name: dl.name || 'Item', productId: dl.productId || null,
-        units: deliveredUnits(dl), overcharge: 0, ...refs(null, dl),
-        detail: `Delivered ${deliveredUnits(dl)} of "${dl.name || 'item'}" but it's not on the invoice (no claim).`,
+        units: leftover, overcharge: 0, ...refs(null, dl),
+        detail: `Delivered ${agg.units} of "${dl.name || 'item'}" but only ${r2(consumed.get(k) || 0)} invoiced — ${leftover} more delivered than billed (no claim).`,
       });
     }
   }
@@ -127,9 +138,10 @@ export function reconcile({ delivery, invoice, order } = {}) {
       const name = ol.name || (ol.barcode ? `#${ol.barcode}` : 'Item');
       const orderedQty = Number(ol.qty) || 0;
       if (orderedQty <= 0) continue;
-      const dl = k ? dByKey.get(k) : null;
+      const agg = k ? dAgg.get(k) : null;
+      const dl = agg ? agg.first : null;
       const il = k ? iByKey.get(k) : null;
-      const delU = dl ? deliveredUnits(dl) : 0;
+      const delU = agg ? r2(agg.units) : 0; // D3: total delivered across all lines for this product
       // Ordered vs delivered (under-delivery against the order).
       if (orderedQty - delU > EPS) {
         discrepancies.push({
@@ -158,7 +170,7 @@ export function reconcile({ delivery, invoice, order } = {}) {
     overcharge: sumMoney(claimable.map((d) => d.overcharge)),
     claimable: claimable.length,
     info: discrepancies.length - claimable.length,
-    matched: usedDelivery.size,
+    matched: [...consumed.values()].filter((u) => u > EPS).length,
   };
   return { discrepancies, summary };
 }

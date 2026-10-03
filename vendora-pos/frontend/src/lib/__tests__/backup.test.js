@@ -105,3 +105,30 @@ describe('backup — corrupt stores rejected (audit W17)', () => {
     expect(res.data.inventory_v1).toBe('[{"id":"a"}]');
   });
 });
+
+describe('backup — per-store shape validation (audit D10)', () => {
+  it('rejects valid JSON of the WRONG shape for an array store and writes nothing', () => {
+    writeJSON('inventory_v1', [{ id: 'safe' }]);
+    // Parses fine, but inventory_v1 must be an array — an object here would crash the first .map() on load.
+    const file = JSON.stringify({ app: 'vendora', version: 2, data: { inventory_v1: '{"not":"an array"}' } });
+    const res = readBackup(file);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/corrupt/i);
+    expect(readJSON('inventory_v1', [])).toEqual([{ id: 'safe' }]); // untouched
+  });
+
+  it('rejects an array where the stock-count session expects an object', () => {
+    const file = JSON.stringify({ app: 'vendora', version: 2, data: { stocktake_v1: '[1,2,3]' } });
+    expect(readBackup(file).ok).toBe(false);
+  });
+
+  it('accepts the stock-count session as an object', () => {
+    const file = JSON.stringify({ app: 'vendora', version: 2, data: { stocktake_v1: '{"id":"s1","counts":{}}' } });
+    expect(readBackup(file).ok).toBe(true);
+  });
+
+  it('accepts shop_type as a plain token (not JSON)', () => {
+    const file = JSON.stringify({ app: 'vendora', version: 2, data: { shop_type: 'grocery-age:convenience' } });
+    expect(readBackup(file).ok).toBe(true);
+  });
+});

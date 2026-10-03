@@ -75,6 +75,31 @@ describe('claimStore.applyCredit — allocation (audit W-credit)', () => {
   });
 });
 
+describe('credit allocation — £0 clears BOTH ledgers (audit D6, no double-count)', () => {
+  it('reducing an allocation to £0 frees it on the note AND removes the claim credit', () => {
+    const notesHook = renderHook(() => useCreditNotes());
+    const claimsHook = renderHook(() => useClaims());
+    let noteId, claimId;
+    act(() => { noteId = notesHook.result.current.saveNote({ supplierName: 'Booker', reference: 'CN-1', amount: 10 }).note.id; });
+    act(() => { claimId = claimsHook.result.current.createClaim({ supplierName: 'Booker', items: [{ name: 'Cola', qty: 1, reason: 'missing', amount: 10 }] }).id; });
+    act(() => { claimsHook.result.current.advance(claimId, 'submitted'); claimsHook.result.current.advance(claimId, 'approved'); });
+
+    // Allocate the full note to the claim — both ledgers move together.
+    act(() => { notesHook.result.current.setAllocation(noteId, claimId, 10); });
+    act(() => { claimsHook.result.current.applyCredit(claimId, { creditNoteId: noteId, amount: 10 }); });
+    expect(remainingToAllocate(notesHook.result.current.notes.find((n) => n.id === noteId))).toBeCloseTo(0);
+    expect(claimsHook.result.current.claims.find((c) => c.id === claimId).receivedAmount).toBeCloseTo(10);
+
+    // D6: setting it to £0 must clear BOTH sides. The view routes £0 through setAllocation(0) + removeCredit —
+    // previously applyCredit(…,0) was a no-op, so the claim kept the £10 while the note read "unallocated",
+    // letting the same £10 be re-allocated elsewhere (double-count).
+    act(() => { notesHook.result.current.setAllocation(noteId, claimId, 0); });
+    act(() => { claimsHook.result.current.removeCredit(claimId, noteId); });
+    expect(remainingToAllocate(notesHook.result.current.notes.find((n) => n.id === noteId))).toBeCloseTo(10); // fully free again
+    expect(claimsHook.result.current.claims.find((c) => c.id === claimId).receivedAmount).toBeNull();        // claim no longer credited
+  });
+});
+
 describe('useCreditNotes — over-allocation guard', () => {
   it('cannot allocate more than the credit note amount across claims', () => {
     const { result } = renderHook(() => useCreditNotes());

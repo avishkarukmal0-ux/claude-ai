@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Receipt, Plus, Trash2, Check, Link2 } from 'lucide-react';
 import { useCreditNotes, suggestClaims, remainingToAllocate, allocatedTotal, claimOutstanding } from '../../lib/creditNoteStore';
+import { round2 as r2 } from '../../lib/money';
 import { useClaims } from '../../lib/claimStore';
 import { useSuppliers } from '../../lib/supplierStore';
 
@@ -65,12 +66,35 @@ export default function CreditNotesView({ onBack }) {
                   <Allocator
                     note={cn} claims={claims}
                     onApply={(claim, amount) => {
-                      const r = setAllocation(cn.id, claim.id, amount);
+                      const amt = r2(amount);
+                      // Audit D6: £0 (or blank) means REMOVE the allocation on BOTH ledgers. Previously this cleared
+                      // only the note side (applyCredit ignores £0), leaving the claim still crediting the money while
+                      // the note read "unallocated" — so it could be re-allocated elsewhere and double-count. Route an
+                      // empty amount through the same both-sides removal as the Remove button.
+                      if (!(amt > 0)) {
+                        const r = setAllocation(cn.id, claim.id, 0);
+                        if (!r.ok) { toast.error(r.error || 'Couldn’t update'); return; }
+                        removeCredit(claim.id, cn.id);
+                        toast('Allocation removed');
+                        return;
+                      }
+                      const r = setAllocation(cn.id, claim.id, amt);
                       if (!r.ok) { toast.error(r.error || 'Couldn’t allocate'); return; }
-                      applyCredit(claim.id, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount });
-                      toast.success(`Allocated ${gbp(amount)} to ${claim.supplierName || 'claim'}`);
+                      const applied = applyCredit(claim.id, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount: amt });
+                      if (!applied) {
+                        // Claim side didn't record — roll the note allocation back so the two ledgers can't diverge.
+                        setAllocation(cn.id, claim.id, 0);
+                        toast.error('Couldn’t record the credit on the claim');
+                        return;
+                      }
+                      toast.success(`Allocated ${gbp(amt)} to ${claim.supplierName || 'claim'}`);
                     }}
-                    onUnapply={(claim) => { setAllocation(cn.id, claim.id, 0); removeCredit(claim.id, cn.id); toast('Allocation removed'); }}
+                    onUnapply={(claim) => {
+                      const r = setAllocation(cn.id, claim.id, 0);
+                      if (!r.ok) { toast.error(r.error || 'Couldn’t update'); return; }
+                      removeCredit(claim.id, cn.id);
+                      toast('Allocation removed');
+                    }}
                   />
                 )}
               </li>
@@ -107,12 +131,23 @@ function Allocator({ note, claims, onApply, onUnapply }) {
   const suggestions = useMemo(() => suggestClaims(note, claims), [note, claims]);
   const allocatedTo = new Map((note.allocations || []).map((a) => [a.claimId, a.amount]));
   const left = remainingToAllocate(note);
-  if (suggestions.length === 0 && allocatedTo.size === 0) {
+  // Audit D5: once a claim is fully covered its outstanding is £0, so suggestClaims drops it — but the owner
+  // still needs to see and CORRECT (reduce/remove) that allocation. Start from the suggestions, then append any
+  // claim this note already credits that isn't already shown, so its Update/Remove row is always reachable.
+  const rows = [...suggestions];
+  const shown = new Set(suggestions.map((s) => s.claim.id));
+  for (const claimId of allocatedTo.keys()) {
+    if (shown.has(claimId)) continue;
+    const claim = claims.find((c) => c.id === claimId);
+    if (!claim) continue; // claim gone — the note delete/void path reverses orphaned allocations
+    rows.push({ claim, outstanding: claimOutstanding(claim) });
+  }
+  if (rows.length === 0) {
     return <p className="mt-2 rounded-lg bg-gray-50 px-2.5 py-2 text-[11px] text-gray-400">No open claims with an outstanding balance for this supplier.</p>;
   }
   return (
     <div className="mt-2 space-y-1.5">
-      {suggestions.map(({ claim, outstanding }) => {
+      {rows.map(({ claim, outstanding }) => {
         const already = allocatedTo.get(claim.id) || 0;
         const suggested = Math.min(left + already, outstanding);
         return <AllocRow key={claim.id} claim={claim} outstanding={outstanding} already={already} suggested={suggested} onApply={onApply} onUnapply={onUnapply} />;

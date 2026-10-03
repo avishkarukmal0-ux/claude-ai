@@ -118,6 +118,46 @@ describe('reconcile — discrepancy types', () => {
     expect(discrepancies.some((d) => d.type === 'extra_delivered' && d.name === 'Water')).toBe(true);
   });
 
+  // Audit D3: delivered units are a shared pool per product. Multiple delivery lines must be summed, and
+  // multiple invoice lines must consume (not reuse) that pool.
+  it('D3: two delivery lines for one product sum — no false shortage against a single invoice line', () => {
+    const delivery = { lines: [
+      dl({ barcode: '1', name: 'Cola', deliveredQty: 5, unitCost: 1 }),
+      dl({ barcode: '1', name: 'Cola', deliveredQty: 5, unitCost: 1 }),
+    ] };
+    const invoice = { lines: [il({ barcode: '1', name: 'Cola', qty: 10, unitCost: 1 })] };
+    const { discrepancies, summary } = reconcile({ delivery, invoice });
+    expect(summary.claimable).toBe(0); // 5+5 delivered covers the 10 invoiced
+    expect(discrepancies.some((d) => d.type === 'shortage')).toBe(false);
+  });
+
+  it('D3: two invoice lines for one product consume delivered units once — real shortage caught', () => {
+    const delivery = { lines: [dl({ barcode: '1', name: 'Cola', deliveredQty: 5, unitCost: 1 })] };
+    const invoice = { lines: [
+      il({ barcode: '1', name: 'Cola', qty: 5, unitCost: 1 }),
+      il({ barcode: '1', name: 'Cola', qty: 5, unitCost: 1 }),
+    ] };
+    const { discrepancies, summary } = reconcile({ delivery, invoice });
+    // Only 5 delivered but 10 invoiced across two lines → 5-unit shortage, not reused away to zero.
+    const shortages = discrepancies.filter((d) => d.type === 'shortage');
+    expect(shortages.length).toBe(1); // the second line is entirely short
+    expect(shortages[0].units).toBe(5);
+    expect(summary.overcharge).toBe(5); // 5 short × £1
+  });
+
+  it('D3: units-weighted agreed price drives overcharge across mixed-cost delivery lines', () => {
+    const delivery = { lines: [
+      dl({ barcode: '1', name: 'Cola', deliveredQty: 5, unitCost: 1 }),   // £1 × 5
+      dl({ barcode: '1', name: 'Cola', deliveredQty: 5, unitCost: 2 }),   // £2 × 5 → weighted £1.50
+    ] };
+    const invoice = { lines: [il({ barcode: '1', name: 'Cola', qty: 10, unitCost: 2 })] };
+    const { discrepancies } = reconcile({ delivery, invoice });
+    const over = discrepancies.find((d) => d.type === 'overcharge');
+    expect(over).toBeTruthy();
+    expect(over.unitAgreed).toBeCloseTo(1.5); // (1×5 + 2×5)/10
+    expect(over.overcharge).toBeCloseTo((2 - 1.5) * 10); // £0.50 × 10
+  });
+
   it('discrepanciesToClaimItems maps only claimable rows into claim-item shape', () => {
     const delivery = { lines: [dl({ barcode: '1', name: 'Cola', deliveredQty: 8, unitCost: 1 })] };
     const invoice = { lines: [il({ barcode: '1', name: 'Cola', qty: 10, unitCost: 1.5 })] };

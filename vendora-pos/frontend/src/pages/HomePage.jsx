@@ -16,6 +16,7 @@ import TodayActions from '../components/home/TodayActions';
 import FirstRunCard from '../components/home/FirstRunCard';
 import InstallCard from '../components/account/InstallCard';
 import { isDemoActive, exitDemo } from '../lib/demo';
+import { useDialog } from '../lib/useDialog';
 import InventoryView from '../components/inventory/InventoryView';
 import DeliveryReceivingView from '../components/delivery/DeliveryReceivingView';
 import WasteView from '../components/waste/WasteView';
@@ -88,6 +89,8 @@ export default function HomePage() {
   const [tab, setTab] = useState('today');
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
+  // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.
+  const toolDialogRef = useDialog(!!activeTool, () => setActiveTool(null));
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
   const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt);
   const restoreInputRef = useRef(null);
@@ -367,7 +370,7 @@ export default function HomePage() {
 
       {activeTool && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setActiveTool(null)} role="dialog" aria-modal="true" aria-label={activeTool.label}>
-          <div className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+          <div ref={toolDialogRef} className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <h3 className="text-base font-bold text-gray-900">{activeTool.label}</h3>
               <button type="button" onClick={() => setActiveTool(null)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close"><X className="h-5 w-5" /></button>

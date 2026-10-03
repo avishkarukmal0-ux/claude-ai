@@ -40,9 +40,10 @@ export default function WorkerBoard({ onBack }) {
       {/* Quick note to owner */}
       <div className="mb-5 flex gap-2">
         <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendNote(); }}
+          aria-label="Note to the owner"
           placeholder="Tell the owner something…" className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <button type="button" onClick={sendNote} className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white active:scale-95">
-          <Send className="h-4 w-4" />
+        <button type="button" onClick={sendNote} aria-label="Send note to owner" className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white active:scale-95">
+          <Send className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
 
@@ -60,8 +61,8 @@ export default function WorkerBoard({ onBack }) {
                   {info.daysLeft < 0 ? `${Math.abs(info.daysLeft)}d over` : `in ${info.daysLeft}d`}{info.mustPull ? ' · pull now' : ''}
                 </span>
               </span>
-              <button type="button" onClick={() => flag('markdown', p.name)} className="shrink-0 rounded-lg bg-warning-light px-2.5 py-1.5 text-[11px] font-semibold text-warning-dark active:scale-95">
-                <Flag className="mr-1 inline h-3 w-3" />Mark down
+              <button type="button" onClick={() => flag('markdown', p.name)} aria-label={`Flag ${p.name} to mark down`} className="shrink-0 rounded-lg bg-warning-light px-2.5 py-1.5 text-[11px] font-semibold text-warning-dark active:scale-95">
+                <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Mark down
               </button>
             </li>
           ))}
@@ -80,8 +81,8 @@ export default function WorkerBoard({ onBack }) {
                 <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
                 <span className="block text-[11px] text-gray-500">{Number(p.qty) || 0} left</span>
               </span>
-              <button type="button" onClick={() => flag('stock', p.name)} className="shrink-0 rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary active:scale-95">
-                <Flag className="mr-1 inline h-3 w-3" />Stock this
+              <button type="button" onClick={() => flag('stock', p.name)} aria-label={`Flag ${p.name} to restock`} className="shrink-0 rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary active:scale-95">
+                <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Stock this
               </button>
             </li>
           ))}

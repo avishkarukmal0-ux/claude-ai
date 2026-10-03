@@ -72,6 +72,27 @@ export async function shareBackup(ws = getActiveWorkspace()) {
 // --- parse + validate (no mutation) ---------------------------------------
 const LEGACY_PREFIX = 'vendora_';
 
+// Audit D10: a value that merely PARSES as JSON isn't necessarily the right shape for its store. Every store
+// holds a JSON array except the active stock-count session (an object, or null when idle) and shop_type (a
+// plain token). Restoring an object where the app expects an array (or vice-versa) passes JSON.parse but then
+// crashes the first .map()/.filter() on load — so the KIND is validated before a restore is ever allowed. A
+// store NOT listed here is accepted as any valid JSON, so adding a new store can't be silently rejected.
+const STORE_SHAPE = {
+  shop_type: 'token',
+  stocktake_v1: 'object',
+  inventory_v1: 'array', suppliers_v1: 'array', buylist_v1: 'array', waste_v1: 'array',
+  takings_v1: 'array', movements_v1: 'array', suggestions_v1: 'array', stocktake_history_v1: 'array',
+  deliveries_v1: 'array', orders_v1: 'array', claims_v1: 'array', price_alerts_v1: 'array',
+  tasks_v1: 'array', handovers_v1: 'array', requests_v1: 'array', sales_imports_v1: 'array',
+  invoices_v1: 'array', credit_notes_v1: 'array', markdowns_v1: 'array', trials_v1: 'array',
+};
+function shapeOk(name, parsed) {
+  const kind = STORE_SHAPE[name];
+  if (kind === 'array') return Array.isArray(parsed);
+  if (kind === 'object') return parsed === null || (typeof parsed === 'object' && !Array.isArray(parsed));
+  return true; // unknown / future store → accept any valid JSON
+}
+
 /** Normalise a backup's data into { logicalName: rawString } and validate. */
 export function readBackup(text) {
   let parsed;
@@ -102,6 +123,7 @@ export function readBackup(text) {
     } else {
       try {
         const v = JSON.parse(value);
+        if (!shapeOk(name, v)) { corrupt.push(name); continue; } // right JSON, wrong shape for this store (D10)
         summary[name] = Array.isArray(v) ? v.length : 1;
       } catch { corrupt.push(name); continue; }
     }
