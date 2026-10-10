@@ -65,9 +65,27 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
             if (f.kind === 'imd') return <DeprivationFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
             return <CountFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
           })}
-          <p className="flex items-start gap-1 text-[10px] leading-snug text-gray-400"><Info className="mt-0.5 h-2.5 w-2.5 shrink-0" /> {result.attribution} · Census 2021 · figures are estimates for the shop’s immediate area (LSOA).</p>
+          <SourcesNote figures={result.figures} />
         </div>
       )}
+    </div>
+  );
+}
+
+// Attribution for EACH source actually shown (required by the Open Government Licence v3.0). Census figures →
+// ONS; deprivation → MHCLG's English Indices of Deprivation 2025; the postcode→area lookup (and the ward/
+// district labels) → the ONS Postcode Directory, which carries OS, Royal Mail and National Statistics credits.
+// We no longer apply a blanket "Census 2021" label, because the deprivation (2025) and mid-year population
+// figures are not from the census — each figure already shows its own reference date in its provenance line.
+function SourcesNote({ figures = [] }) {
+  const hasImd = figures.some((f) => f.kind === 'imd');
+  const hasCensus = figures.some((f) => f.kind !== 'imd');
+  return (
+    <div className="mt-1 space-y-0.5 text-[10px] leading-snug text-gray-400">
+      <p className="flex items-start gap-1"><Info className="mt-0.5 h-2.5 w-2.5 shrink-0" /> Official statistics, licensed under the Open Government Licence v3.0. Figures are estimates for the shop’s immediate area (LSOA).</p>
+      {hasCensus && <p>Population, age, households, economic activity &amp; qualifications: Source: Office for National Statistics, Census 2021, licensed under the Open Government Licence v3.0.</p>}
+      {hasImd && <p>Deprivation: English Indices of Deprivation 2025, Ministry of Housing, Communities &amp; Local Government. © Crown copyright 2025. Open Government Licence v3.0.</p>}
+      <p>Area lookup uses the ONS Postcode Directory: contains OS data, Royal Mail data and National Statistics data, © Crown copyright and database right, under the Open Government Licence v3.0.</p>
     </div>
   );
 }
@@ -102,7 +120,10 @@ function DeprivationFigure({ f, fallbackDate }) {
 }
 
 function BreakdownFigure({ f }) {
-  const rows = (f.rows || []).slice(0, 6);
+  // Show every category the parser returned. Truncating (previously .slice(0,6)) dropped a real category — e.g.
+  // TS067 qualifications has 7 (…“Other qualifications”), so the shown shares summed to ~97% and looked wrong.
+  // These breakdowns are complete partitions of a known base, so all rows together sum to ~100%.
+  const rows = f.rows || [];
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{f.label} (est.)</h4>

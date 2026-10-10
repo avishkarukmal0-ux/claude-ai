@@ -520,3 +520,67 @@ Download the CSV from gov.uk (assets.publishing.service.gov.uk/media/691ded56d14
 the LSOA/score/rank/decile columns tolerantly, sets rankOf = number of England LSOAs (~33,755), upserts, and
 prints the E01000036 sample (expect decile 4, rank 10,874, score 25.385). Attribution wording for IMD is an
 ASSUMPTION pending confirmation ("Source: English indices of deprivation 2025 … OGL v3.0").
+
+### LIVE (2026-10-10) — verification, IMD import as-run, Atlas rotation, attribution finalised
+Neighbourhood is **live** on Render (`NEIGHBOURHOOD_ENABLED=true`, `source=nomis`). Verified in the deployed PWA
+from the owner's machine on 2026-10-10 (sandbox still cannot reach postcodes.io/ONS/Nomis, so all live checks
+are owner-run):
+
+- **RM10 8AA → E01000036** returns real figures: **1,470** usual residents (TS001/NM_2021_1), **471** households
+  (TS041/NM_2059_1), age mix (TS007A/NM_2020_1), economic activity (TS066/NM_2083_1), qualifications
+  (TS067/NM_2084_1), and **IMD 2025 decile 4** (rank 10,874 of 33,755, score 25.385). `/health` db connected.
+- **IMD import done** on **vendora_test** and **vendora_pilot** (33,755 England rows; E01000036 sample line matched).
+
+**IMD import as actually run (records the two gotchas):**
+```powershell
+cd vendora-pos\backend
+# 1) Atlas: add the running machine's public IP to the cluster's IP Access List first, or the connect hangs/times out.
+# 2) DNS SRV lookup for mongodb+srv:// can fail on some networks → force a public resolver via the bundled shim:
+$env:NODE_OPTIONS="--require ./scripts/dns-8888.js"
+$env:MONGODB_URI="<Atlas SRV URI …/vendora_test>"   # test DB first
+node scripts/import-imd.js "C:\path\File_7_IoD2025_All_Ranks_Scores_Deciles_Population_Denominators.csv"
+# repeat with …/vendora_pilot once the test run prints the expected E01000036 line
+```
+`scripts/dns-8888.js` points Node's DNS at a public resolver (8.8.8.8) so the `mongodb+srv` SRV record resolves;
+it is only needed where the local network's resolver blocks SRV. (Secrets are never stored in the repo — the URI
+is passed via the session env only.)
+
+**Atlas credential rotation (2026-10-10):** the Atlas DB user password was rotated; **Render `MONGODB_URI` was
+updated** to the new secret in the Render dashboard (not in any file/commit). After rotation, confirm `/health`
+shows db connected and one `/area` lookup still returns figures.
+
+**Config gaps found while verifying (see Work-Log 2026-10-10):**
+- **Mid-year population (NM_2014_1) not showing** — root cause is **config, not code**: the live Render env set
+  the six census/IMD ids but **not `NEIGHBOURHOOD_DS_POP_MID`**, so `configuredFigureDefs()` skips it and the card
+  never receives it. The dual-population rendering (commit `d96adb9`) is correct. **To show it:** add
+  `NEIGHBOURHOOD_DS_POP_MID=NM_2014_1` on Render and redeploy, then verify the returned period matches the
+  "mid-year estimate" label (Nomis `time=latest` — confirm the year with `neighbourhood-live-check.js`; expect
+  ≈1,513 for E01000036). The four population-style figures stay **separate and source-labelled** and are never
+  merged (Census 2021 = 1,470 · TS007A age total = 1,471 · mid-year = ~1,513 · IMD denominator mid-2022 = 1,436).
+- **`NEIGHBOURHOOD_DS_DEPRIVATION=NM_2031_1` (TS011) is now a NO-OP** — deprivation comes from the IMD 2025 import,
+  and no `FIGURE_DEF` consumes `figuresConfig.deprivation`. Safe to leave set, but it does nothing; can be removed.
+
+**Attribution finalised (card footer now credits each source actually shown).** Verbatim strings used, with the
+source each was taken from and a confirmed/unconfirmed note (sandbox blocked the primary PDFs; wording taken from
+the licence guidance + provider pages via search):
+- Lead: *"Official statistics, licensed under the Open Government Licence v3.0."* — the OGL default form is
+  *"Contains public sector information licensed under the Open Government Licence v3.0."* (National Archives OGL
+  v3.0 / copyright-notices guidance). **Confirmed** (default form); our lead is a shortened lead-in with the
+  per-source credits below.
+- Census: *"Source: Office for National Statistics, Census 2021, licensed under the Open Government Licence
+  v3.0."* — ONS's own stated attribution form. **Confirmed** (ONS standard statement).
+- Deprivation: *"English Indices of Deprivation 2025, Ministry of Housing, Communities & Local Government.
+  © Crown copyright 2025. Open Government Licence v3.0."* — publisher (**MHCLG**), year (**2025**) and OGL v3.0
+  **confirmed** from the IoD 2025 Technical/Research reports (gov.uk); the one-line *sentence* is our composition
+  per OGL guidance (no fixed sentence is mandated).
+- Area lookup (postcodes.io → ONS Postcode Directory): *"Area lookup uses the ONS Postcode Directory: contains OS
+  data, Royal Mail data and National Statistics data, © Crown copyright and database right, under the Open
+  Government Licence v3.0."* — the ONSPD requires **three** owner credits (OS, Royal Mail, National Statistics),
+  **confirmed** via an ONS FOI quoting the ONSPD User Guide. **UNCONFIRMED:** the strict per-owner form carries a
+  `[year]` on the OS and Royal Mail lines (the ONSPD *edition* year). We omitted the numeric year rather than
+  guess it; to be strictly exact, add the current ONSPD edition year to the OS/Royal Mail statements.
+
+Sources consulted (via web search; primary PDFs were egress-blocked in the sandbox): National Archives OGL v3.0
+copyright-notices guidance; ONS ONSPD/NSPL FOI (FOI/2022/3481); MHCLG IoD 2025 Technical/Research reports on
+gov.uk. The old blanket *"· Census 2021"* footer label was **removed** — it was wrong for the IMD (2025) and
+mid-year population figures; each figure already shows its own reference date in its provenance line.
