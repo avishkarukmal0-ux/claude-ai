@@ -42,8 +42,14 @@ export default function RadiusMap({ point, radiusM, fetchTile }) {
     let map;
     try {
       // Give the map a valid view IMMEDIATELY (sets the pixel origin) before adding layers or fitting bounds.
-      map = L.map(elRef.current, { zoomControl: true, scrollWheelZoom: false, attributionControl: true })
-        .setView([point.lat, point.lng], 14);
+      // Full zoom: +/- buttons, scroll-wheel / trackpad, double-click, box-zoom, and pinch on touch. maxZoom 19
+      // matches the OSM tiles (the proxy rejects higher). The user's manual zoom persists until they move the
+      // radius slider (which re-frames the circle).
+      map = L.map(elRef.current, {
+        zoomControl: true, attributionControl: true,
+        scrollWheelZoom: true, doubleClickZoom: true, boxZoom: true, touchZoom: true,
+        minZoom: 3, maxZoom: 19, zoomSnap: 0.25, wheelPxPerZoomLevel: 80,
+      }).setView([point.lat, point.lng], 14);
       mapRef.current = map;
       new AuthTileLayer('{z}/{x}/{y}', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors', fetchTile }).addTo(map);
       L.circleMarker([point.lat, point.lng], { radius: 6, color: ACCENT, fillColor: ACCENT, fillOpacity: 1, weight: 2 })
