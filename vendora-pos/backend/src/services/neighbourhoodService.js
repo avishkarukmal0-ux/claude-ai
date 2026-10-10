@@ -150,7 +150,7 @@ function shapeResponse(record, { online = true, now = Date.now() } = {}) {
   return {
     available: (record.figures || []).length > 0,
     postcode: record.postcode,
-    area: { lsoa21: record.lsoa21, msoa21: record.msoa21, ward: record.ward, district: record.district, country: record.country },
+    area: { lsoa21: record.lsoa21, msoa21: record.msoa21, ward: record.ward, district: record.district, country: record.country, point: (record.lat != null && record.lng != null) ? { lat: record.lat, lng: record.lng } : null },
     figures: (record.figures || []).map((f) => ({
       key: f.key, label: f.label, kind: f.kind || 'count', value: f.value, unit: f.unit,
       rows: f.rows || undefined,
@@ -219,6 +219,7 @@ async function resolvePostcode(postcode) {
   if (res.status !== 200 || !res.body || !res.body.result) { const e = new Error('Couldn’t reach the postcode service.'); e.statusCode = 502; throw e; }
   const r = res.body.result;
   const codes = r.codes || {};
+  const lat = Number(r.latitude); const lng = Number(r.longitude);
   return {
     postcode: r.postcode ? r.postcode.toUpperCase().replace(/\s+/g, '') : pc,
     lsoa21: codes.lsoa || r.lsoa || null,
@@ -227,6 +228,9 @@ async function resolvePostcode(postcode) {
     wardCode: codes.admin_ward || null,
     district: r.admin_district || null,
     country: r.country || null,
+    // The shop's own coordinates (postcodes.io returns them) — used to centre the catchment map. Not personal
+    // data (a business postcode's centroid), and nothing is fetched from the browser to get it.
+    point: (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat, lng } : null,
   };
 }
 
@@ -322,7 +326,7 @@ async function getAreaProfile(postcode, { force = false, now = Date.now() } = {}
       { postcode: pc },
       // Record the attempt (keys + time) alongside the figures so a figure that FAILED this run (so it's not in
       // `fetched`) isn't re-requested on every subsequent call — decideRefresh backs it off for an hour.
-      { postcode: pc, lsoa21: area.lsoa21, msoa21: area.msoa21, ward: area.ward, district: area.district, country: area.country, figures: stamped, fetchedAt: new Date(now), attemptedKeys: configuredKeys, lastAttemptAt: new Date(now) },
+      { postcode: pc, lsoa21: area.lsoa21, msoa21: area.msoa21, ward: area.ward, district: area.district, country: area.country, lat: area.point ? area.point.lat : null, lng: area.point ? area.point.lng : null, figures: stamped, fetchedAt: new Date(now), attemptedKeys: configuredKeys, lastAttemptAt: new Date(now) },
       { upsert: true, new: true },
     ).lean();
     return shapeResponse(doc, { online: true, now });

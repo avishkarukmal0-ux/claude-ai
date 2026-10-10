@@ -46,6 +46,8 @@ const schema = new mongoose.Schema(
     ward: { type: String, default: null },
     district: { type: String, default: null },
     country: { type: String, default: null },
+    lat: { type: Number, default: null },   // shop coordinates (for the catchment map); optional/additive
+    lng: { type: Number, default: null },
     figures: { type: [figureSchema], default: [] },
     fetchedAt: { type: Date, default: Date.now },
     // Which configured figure keys we last TRIED to fetch, and when. Lets the service re-fetch once when a

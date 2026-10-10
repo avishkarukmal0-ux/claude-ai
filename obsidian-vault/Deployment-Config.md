@@ -666,3 +666,11 @@ set up. The **figures inside** the circle still require the OA-centroid file (`I
 `INSIGHTS_DATA_PROVIDER=nomis` — unset → the map shows but figures honestly say "not configured" (never faked).
 Verified offline: BE `insightsService`+`insightsTiles` 22/22, app loads; FE 376/376 + build. Live tiles + live
 `/profile` figures are owner-verified (needs entitlement + centroids + deployed backend).
+
+**Also on the free "Your area" card (2026-10-10):** the catchment **map + radius circle** were added to the free
+`NeighbourhoodAreaCard` too (owner was testing on that screen and it was paid-view-only). The circle is a visual
+guide around the shop; the free card's figures stay single-LSOA (the radius-aggregated people figures remain the
+paid add-on). Works with `NEIGHBOURHOOD_ENABLED` alone. `neighbourhoodService.resolvePostcode` now returns the
+shop `point {lat,lng}` (surfaced in `/area` as `area.point`), and a tile route `GET /api/pwa-neighbourhood/tiles/
+:z/:x/:y.png` (owner/manager) reuses the same server-side OSM proxy — independent of `INSIGHTS_ENABLED`, no CSP
+change. Requires a backend redeploy for the new route + `area.point`.

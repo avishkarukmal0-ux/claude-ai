@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
 const neighbourhood = require('../services/neighbourhoodService');
+const insightsTiles = require('../services/insightsTiles');
 const config = require('../config');
 const AppError = require('../utils/AppError');
 
@@ -46,6 +47,24 @@ router.get('/area', ownerOrManager, async (req, res, next) => {
     res.json({ success: true, ...out });
   } catch (err) {
     if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, 'NEIGHBOURHOOD'));
+    next(err);
+  }
+});
+
+// GET /tiles/:z/:x/:y.png → OSM map tile for the catchment circle on the "Your area" card. Proxied server-side
+// (owner/manager; the browser never calls the tile host directly, so no CSP change). Available with the free
+// neighbourhood feature — it does NOT depend on the paid Insights flag. Coordinates validated before any fetch.
+router.get('/tiles/:z/:x/:y.png', ownerOrManager, async (req, res, next) => {
+  try {
+    const { z, x, y } = req.params;
+    if (!insightsTiles.isValidTile(z, x, y)) throw new AppError('Invalid tile coordinate.', 400, 'BAD_TILE');
+    const tile = await insightsTiles.fetchTile(Number(z), Number(x), Number(y));
+    if (tile.status !== 200 || !tile.body || !tile.body.length) throw new AppError('Tile unavailable.', 502, 'TILE_UPSTREAM');
+    res.set('Content-Type', tile.contentType || 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(tile.body);
+  } catch (err) {
+    if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, err.code || 'TILE'));
     next(err);
   }
 });

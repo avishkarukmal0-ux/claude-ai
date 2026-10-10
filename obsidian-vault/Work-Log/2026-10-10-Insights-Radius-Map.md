@@ -61,7 +61,22 @@ card, auth, or billing.
 ## Commit(s)
 - `feat(insights): catchment map + adjustable km/mile radius (paid Insights view)`
 
+## Follow-up (same day) — map + radius ALSO on the free "Your area" card (for testing/visibility)
+The owner was on the free "Your area" card and couldn't see the radius (it was paid-view only). They asked to see
+it there for testing. Added the **catchment map + radius control to the free `NeighbourhoodAreaCard`** too — the
+circle is a VISUAL guide around the shop (its own coordinates), while the radius-AGGREGATED census figures remain
+the paid add-on (the free card's figures stay single-LSOA, clearly labelled "not the circle"). Works with just
+`NEIGHBOURHOOD_ENABLED` — no subscription, no `INSIGHTS_ENABLED` needed.
+- Backend: `neighbourhoodService.resolvePostcode` now returns `point {lat,lng}` (postcodes.io already provides
+  them); stored on the cache doc (`lat`/`lng`, additive) and surfaced in the `/area` response `area.point`. New
+  tile route `GET /api/pwa-neighbourhood/tiles/:z/:x/:y.png` (owner/manager) reusing `insightsTiles` — so tiles
+  work under the free flag, independent of the paid Insights mount.
+- Frontend: extracted `lib/radiusUnits.js` + `RadiusControl.jsx` (shared by both views, no drift); `RadiusMap`
+  takes an injectable `fetchTile`; `neighbourhoodClient` got `tileUrl`/`fetchTileObjectURL`
+  (`/api/pwa-neighbourhood/tiles`); the card shows the control + map when `area.point` exists (online only).
+- Verify: BE neighbourhood+insights+tiles 43/43 + app loads; FE 376/376 + build green.
+
 ## Follow-ups
-- [ ] Owner: redeploy; with an entitled shop + centroids loaded, confirm the map tiles load and the figures
-      update as the radius changes.
+- [ ] Owner: redeploy backend (for `/api/pwa-neighbourhood/tiles` + `area.point`); on "Your area" confirm the map
+      tiles load and the circle resizes with the radius. (Paid Insights still adds the people-by-radius figures.)
 - [ ] Optional: raise `INSIGHTS_MAX_RADIUS_M` only if the OA cap is also raised for dense areas.

@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { getArea } from '../../lib/neighbourhoodClient';
+import { getArea, fetchTileObjectURL } from '../../lib/neighbourhoodClient';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
+import RadiusControl from './RadiusControl';
+import RadiusMap from './RadiusMap';
+import { fmtRadius } from '../../lib/radiusUnits';
+
+// The catchment circle on the free card is a VISUAL guide around the shop (its own location). The figures below
+// are for the shop's immediate area (LSOA) and do NOT change with the circle — radius-aggregated figures are the
+// separate paid Neighbourhood Insights add-on. Bounds mirror the server's insights defaults.
+const RADIUS_BOUNDS = { min: 250, max: 5000 };
 
 // Real, official area figure for the store's postcode (Census 2021 via our backend). Shows source, date and
 // the OGL attribution; works offline from the last stored copy (clearly labelled); never blocks any screen and
@@ -14,6 +22,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [postcode, setPostcode] = useState(defaultPostcode);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  const [unit, setUnit] = useState('mi');
+  const [radiusM, setRadiusM] = useState(1000);
 
   if (!NEIGHBOURHOOD_ENABLED) return null;
 
@@ -67,6 +77,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               </button>
             )}
           </div>
+          {result.area && result.area.point && !result.offline && (
+            <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
+              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} />
+              <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} /></div>
+              <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is a visual guide around your shop; the figures below are for your immediate area (LSOA), not the circle. People-by-radius is in the paid Neighbourhood Insights.</p>
+            </section>
+          )}
           {(result.figures || []).map((f) => {
             if (f.kind === 'breakdown') return <BreakdownFigure key={f.key} f={f} />;
             if (f.kind === 'imd') return <DeprivationFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;

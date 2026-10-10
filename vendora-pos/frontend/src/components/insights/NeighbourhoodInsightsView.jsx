@@ -7,16 +7,9 @@ import { getStatus, getPreview, getProfile, startCheckout, cancelAddon } from '.
 import TrialsPanel from './TrialsPanel';
 import NeighbourhoodAreaCard from './NeighbourhoodAreaCard';
 import RadiusMap from './RadiusMap';
+import RadiusControl from './RadiusControl';
+import { fmtRadius } from '../../lib/radiusUnits';
 
-// Radius units. Owners think in miles (UK retail) by default, with a km toggle. Presets are in the chosen unit;
-// a slider covers everything in between, clamped to the server's allowed min/max.
-const METRES_PER_MILE = 1609.344;
-const UNITS = {
-  mi: { label: 'miles', abbr: 'mi', factor: METRES_PER_MILE, dp: 2, step: 0.05, presets: [0.25, 0.5, 1, 2, 3] },
-  km: { label: 'km', abbr: 'km', factor: 1000, dp: 1, step: 0.1, presets: [0.5, 1, 2, 3, 5] },
-};
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const fmtRadius = (m, unit) => `${(m / UNITS[unit].factor).toFixed(UNITS[unit].dp)} ${UNITS[unit].abbr}`;
 const CAT_LABEL = { ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
 
 // Neighbourhood Insights (paid add-on). Aggregate ONS Census 2021 area profile around the shop, grounded in
@@ -98,29 +91,9 @@ export default function NeighbourhoodInsightsView({ onBack }) {
               <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Your shop postcode</label>
                 <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="e.g. E1 6AN" aria-label="Shop postcode" className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm uppercase focus:border-primary focus:outline-none" />
-                <div className="mb-1 flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-gray-700">Radius — {fmtRadius(radiusM, unit)}</label>
-                  <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-[11px] font-semibold">
-                    {Object.keys(UNITS).map((u) => (
-                      <button key={u} type="button" onClick={() => setUnit(u)} className={`px-2.5 py-1 ${unit === u ? 'bg-primary text-white' : 'bg-white text-gray-600'}`}>{UNITS[u].abbr}</button>
-                    ))}
-                  </div>
+                <div className="mb-3">
+                  <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={bounds} />
                 </div>
-                <div className="mb-2 flex flex-wrap gap-2">
-                  {UNITS[unit].presets.map((p) => {
-                    const m = Math.round(clamp(p * UNITS[unit].factor, bounds.min, bounds.max));
-                    const active = Math.abs(m - radiusM) < 1;
-                    return (
-                      <button key={p} type="button" onClick={() => setRadiusM(m)} className={`rounded-xl border px-3 py-1.5 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}>{p} {UNITS[unit].abbr}</button>
-                    );
-                  })}
-                </div>
-                <input
-                  type="range" min={bounds.min} max={bounds.max} step={Math.round(UNITS[unit].step * UNITS[unit].factor)}
-                  value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))}
-                  aria-label={`Radius in ${UNITS[unit].label}`} className="mb-1 w-full accent-primary"
-                />
-                <div className="mb-3 flex justify-between text-[10px] text-gray-400"><span>{fmtRadius(bounds.min, unit)}</span><span>{fmtRadius(bounds.max, unit)}</span></div>
                 <button type="button" disabled={busy} onClick={() => build()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50">
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />} {result ? 'Update area profile' : 'Build area profile'}
                 </button>

@@ -22,6 +22,16 @@ function putStored(postcode, data) {
 let _fetch = (url, opts) => fetch(url, opts);
 export function __setFetch(fn) { _fetch = fn || ((url, opts) => fetch(url, opts)); }
 
+// Map tiles for the "Your area" catchment circle. Proxied through our backend (/api/pwa-neighbourhood/tiles) so
+// the browser never calls the tile host directly (no CSP change) and it works with the free neighbourhood flag —
+// no paid Insights dependency. Fetched WITH the bearer header → blob URL (Leaflet <img> can't send headers).
+export function tileUrl(z, x, y) { return `${BASE}/tiles/${z}/${x}/${y}.png`; }
+export async function fetchTileObjectURL(z, x, y) {
+  const res = await _fetch(tileUrl(z, x, y), { headers: authHeader() });
+  if (!res.ok) throw new Error(`tile ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+}
+
 /**
  * Get the area figure for a store postcode. Online → fresh data (and caches it); offline / timeout / error →
  * the last stored copy flagged `offline:true`; nothing stored → { available:false, unavailable:true }.
