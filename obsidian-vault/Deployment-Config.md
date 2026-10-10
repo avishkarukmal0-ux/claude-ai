@@ -627,3 +627,12 @@ a screenshot-stitch artefact, not a clipped/overlapping card.
 - **`NEIGHBOURHOOD_DS_DEPRIVATION=NM_2031_1` (TS011) is a NO-OP** — deprivation comes from the IMD 2025 import;
   no `FIGURE_DEF` consumes `figuresConfig.deprivation`. Safe to leave or remove.
 - Render maintenance window noted: **14 Oct 01:00-02:00 UTC** (free tier sleeps; no static IP).
+
+### LIVE (2026-10-10, part 3) — Age card in age order (frontend only)
+The Age breakdown (TS007A) was value-sorted (biggest band first), which reads wrong for an age histogram, and the
+8-row cap hid the 40+ bands. `BreakdownFigure` now, **only when `f.key === 'age'`**, sorts bands in age order by
+the first number in each label (parsed, nothing hardcoded; "4 years and under" → 4 … "85 years and over" → 85),
+shows **all** bands with **no cap/toggle**, copies the array before sorting (never mutates `f.rows`), and falls
+back to the given order if any label can't be parsed. All other breakdowns (qualifications, economic activity)
+are unchanged: value-sorted, 8-row cap + "Show all N". Frontend-only; backend/parser/cache untouched. FE 376/376
+(incl. 5 new `NeighbourhoodAreaCard` tests) + build green.

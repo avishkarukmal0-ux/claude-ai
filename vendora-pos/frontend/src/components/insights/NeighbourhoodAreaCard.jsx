@@ -132,10 +132,24 @@ function DeprivationFigure({ f, fallbackDate }) {
 // qualifications/economic activity still show every category and sum to ~100%.)
 const BREAKDOWN_DEFAULT_ROWS = 8;
 
-function BreakdownFigure({ f }) {
-  const all = f.rows || [];
+// The first integer in a band label ("Aged 4 years and under" → 4, "5 to 9" → 5, "85 years and over" → 85),
+// or null if none. Used to order the AGE breakdown as a histogram instead of by size.
+const firstNumInLabel = (label) => { const m = String(label == null ? '' : label).match(/\d+/); return m ? Number(m[0]) : null; };
+
+export function BreakdownFigure({ f }) {
   const [expanded, setExpanded] = useState(false);
-  const rows = expanded ? all : all.slice(0, BREAKDOWN_DEFAULT_ROWS);
+  const all = f.rows || [];
+  const isAge = f.key === 'age';
+  // Age is read as a histogram, so show every band in AGE order (derived from the first number in each label —
+  // nothing hardcoded) with no row cap. Copy before sorting (never mutate f.rows). If any label can't be parsed,
+  // fall back to the given (value-sorted) order and still show all. Every other breakdown is unchanged:
+  // value-sorted with the 8-row cap + "Show all" toggle.
+  let ordered = all;
+  if (isAge && all.length && all.every((r) => firstNumInLabel(r.label) != null)) {
+    ordered = [...all].sort((a, b) => firstNumInLabel(a.label) - firstNumInLabel(b.label));
+  }
+  const showToggle = !isAge && all.length > BREAKDOWN_DEFAULT_ROWS;
+  const rows = isAge || expanded ? ordered : ordered.slice(0, BREAKDOWN_DEFAULT_ROWS);
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{f.label} (est.)</h4>
@@ -150,7 +164,7 @@ function BreakdownFigure({ f }) {
           </li>
         ))}
       </ul>
-      {all.length > BREAKDOWN_DEFAULT_ROWS && (
+      {showToggle && (
         <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-2 text-[11px] font-medium text-primary hover:underline">
           {expanded ? 'Show fewer' : `Show all ${all.length}`}
         </button>
