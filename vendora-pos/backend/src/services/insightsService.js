@@ -12,6 +12,7 @@
 const config = require('../config');
 const loc = require('./insightsLocation');
 const geo = require('./insightsGeo');
+const centroids = require('./insightsData/centroids');
 
 // The categories we present, each mapped to its ONS Census 2021 bulk table. Used both for the real fetch
 // (when a provider is configured) and for the no-data PREVIEW (labels only, never invented values).
@@ -61,6 +62,24 @@ function status() {
     licence: config.neighbourhoodInsights.licence,
     radii: radii(),
     radiusBounds: radiusBounds(),
+  };
+}
+
+/** Whether the census DATA is actually ready to produce radius figures: a provider is configured AND the OA
+ *  centroids are present (counted cheaply, without loading them all into memory). For the owner's status screen. */
+async function dataStatus() {
+  const provider = config.neighbourhoodInsights.dataProvider || null;
+  let centroidCount = null;
+  try { centroidCount = await centroids.count(); } catch { centroidCount = null; }
+  const ready = !!provider && typeof centroidCount === 'number' && centroidCount > 0;
+  return {
+    provider,
+    centroids: {
+      source: config.neighbourhoodInsights.data.centroidsPath ? 'file' : 'mongo',
+      count: centroidCount,
+      loaded: typeof centroidCount === 'number' ? centroidCount > 0 : null,
+    },
+    ready, // provider set + centroids present → radius figures will compute
   };
 }
 
@@ -118,4 +137,4 @@ async function buildProfile({ postcode, radiusM }) {
   return { ok: true, supported: true, configured: true, location: locOut, profile };
 }
 
-module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, preview, buildProfile, radii, radiusBounds, CATEGORIES };
+module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, dataStatus, preview, buildProfile, radii, radiusBounds, CATEGORIES };

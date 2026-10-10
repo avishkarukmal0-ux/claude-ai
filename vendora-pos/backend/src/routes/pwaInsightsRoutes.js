@@ -88,6 +88,7 @@ router.get('/status', ownerOrManager, async (req, res, next) => {
     res.json({
       success: true,
       ...insights.status(),
+      data: await insights.dataStatus(), // provider + whether the OA centroids are loaded (radius-figure readiness)
       purchasingAvailable: purchasingAvailable(),
       saleMode: saleMode(),
       entitled: entitlements.isActive(ent),

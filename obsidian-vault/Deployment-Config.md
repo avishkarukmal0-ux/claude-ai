@@ -674,3 +674,23 @@ paid add-on). Works with `NEIGHBOURHOOD_ENABLED` alone. `neighbourhoodService.re
 shop `point {lat,lng}` (surfaced in `/area` as `area.point`), and a tile route `GET /api/pwa-neighbourhood/tiles/
 :z/:x/:y.png` (owner/manager) reuses the same server-side OSM proxy — independent of `INSIGHTS_ENABLED`, no CSP
 change. Requires a backend redeploy for the new route + `area.point`.
+
+### Paid radius FIGURES — OA centroids now in MongoDB (2026-10-10)
+The paid radius figures (people/households that re-sum as the circle moves) need the ONS OA population-weighted
+centroids (~190k rows). They were loaded from a FILE, but Render free has an **ephemeral filesystem**, so now
+they're stored in **MongoDB** (durable, like the IMD import). `centroids.load()` still prefers a file if
+`INSIGHTS_CENTROIDS_PATH` is set (back-compat); otherwise it reads from the `OaCentroid` collection.
+
+**Owner steps to switch paid radius figures ON:**
+```powershell
+cd vendora-pos\backend
+$env:NODE_OPTIONS="--require ./scripts/dns-8888.js"   # if the mongodb+srv SRV lookup is blocked
+$env:MONGODB_URI="<Atlas URI …/vendora_test>"         # test DB first, then vendora_pilot
+# Download ONS "Output Areas (Dec 2021) PWC (V3)" centroids CSV (lat/long) from geoportal.statistics.gov.uk
+node scripts/import-centroids.js "C:\path\Output_Areas_2021_PWC.csv"   # expect ~188,880
+```
+Then on Render: `INSIGHTS_ENABLED=true`, `INSIGHTS_DATA_PROVIDER=nomis`, and **leave `INSIGHTS_CENTROIDS_PATH`
+UNSET** (so it reads from Mongo). Redeploy. Verify with `GET /api/pwa-insights/status` → `data.ready: true` and
+`data.centroids.count > 0`. Then an **entitled** shop sees the radius figures re-sum as the radius changes on the
+Neighbourhood Insights screen. With no provider or no centroids, `/profile` honestly returns `configured:false`
+(never fabricated). First radius request after a cold start loads the centroids into memory once (then cached).
