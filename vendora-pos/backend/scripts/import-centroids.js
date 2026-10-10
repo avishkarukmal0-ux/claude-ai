@@ -6,20 +6,27 @@
  * is ephemeral, so we store the centroids in Mongo (like the IMD import) rather than a file on disk. Idempotent
  * (upserts by OA code). Open data, OGL v3.0.
  *
- * Download (ONS Open Geography Portal): "Output Areas (December 2021) PWC (V3)" / population-weighted centroids,
- * England & Wales, as CSV or NDJSON. The standard ONS export gives the centres as British National Grid
- * eastings/northings (x, y) — that's FINE: the importer auto-converts BNG → lat/long. Lat/long columns are also
- * accepted if your file has them. ~190k rows.
- *   https://geoportal.statistics.gov.uk/  (search: Output Areas 2021 population weighted centroids)
+ * Download (ONS Open Geography Portal, geoportal.statistics.gov.uk): "Output Areas (December 2021) EW Population
+ * Weighted Centroids (V4)" (V3 is superseded / now inaccessible). Download the CSV (~22 MB, 188,880 rows =
+ * 178,605 England + 10,275 Wales). Columns include UPPERCASE X, Y = British National Grid eastings/northings
+ * (plus FID, OA21CD, GlobalID, GlobalID_2; a BOM is present) — that's FINE: the importer reads uppercase X/Y and
+ * auto-converts BNG → WGS84 lat/long. Lat/long columns are also accepted if your file has them. Owner-verified
+ * 11 Oct 2026: all 188,880 rows parsed, 0 unparsed; lat 49.913–55.786, lng -6.353–1.756.
  *
- * Usage (PowerShell), from a machine with the file + DB access (NOT the build sandbox):
+ * Usage (PowerShell), from a machine with the file + DB access (NOT the build sandbox). NEVER type, echo, print,
+ * Substring or Write-Host the connection string — a password shown on screen must be treated as exposed. Use
+ * Get-Credential so the password is prompted, not pasted into your command history:
  *   cd vendora-pos\backend
- *   # If the mongodb+srv SRV lookup is blocked on your network, force a public resolver:
- *   $env:NODE_OPTIONS="--require ./scripts/dns-8888.js"
- *   $env:MONGODB_URI="<Atlas URI …/vendora_test>"   # test DB first, then vendora_pilot
- *   node scripts/import-centroids.js "C:\path\Output_Areas_2021_PWC.csv"
+ *   $env:NODE_OPTIONS="--require ./scripts/dns-8888.js"        # only if the mongodb+srv SRV lookup is blocked
+ *   $cred = Get-Credential -UserName "vendora_test" -Message "Atlas password"
+ *   $pw   = [System.Net.NetworkCredential]::new('', $cred.Password).Password
+ *   $env:MONGODB_URI = "mongodb+srv://$($cred.UserName):$pw@<cluster-host>/vendora_test?retryWrites=true&w=majority"
+ *   node scripts/import-centroids.js "C:\path\Output_Areas_2021_EW_PWC_V4.csv"   # test DB first, then vendora_pilot
+ *   Remove-Item Env:MONGODB_URI                                # clear the secret from the session
  *
- * Expect it to print a running count and finish with ~188,880 (E&W) centroids. Re-running is safe (upsert).
+ * Expect a running count finishing ~188,880 centroids (upsert — re-running is safe). If the URI (hence the
+ * password) was ever pasted or shown on screen, ROTATE the DB user's password afterwards and update MONGODB_URI
+ * on Render.
  */
 /* eslint-disable no-console */
 

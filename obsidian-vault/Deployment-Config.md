@@ -681,19 +681,43 @@ centroids (~190k rows). They were loaded from a FILE, but Render free has an **e
 they're stored in **MongoDB** (durable, like the IMD import). `centroids.load()` still prefers a file if
 `INSIGHTS_CENTROIDS_PATH` is set (back-compat); otherwise it reads from the `OaCentroid` collection.
 
-**Owner steps to switch paid radius figures ON:**
+**Dataset (owner-verified 11 Oct 2026):** ONS **"Output Areas (December 2021) EW Population Weighted Centroids
+(V4)"** on the Open Geography Portal (geoportal.statistics.gov.uk) — **V3 is superseded / now inaccessible**.
+CSV ~22 MB, **188,880 rows** (178,605 England + 10,275 Wales), 0 duplicates. Columns: UPPERCASE **X, Y = British
+National Grid eastings/northings** (+ FID, OA21CD, GlobalID, GlobalID_2; BOM present). The importer reads
+uppercase X/Y and **auto-converts BNG → WGS84** (verified: all 188,880 parsed, 0 unparsed; lat 49.913–55.786,
+lng -6.353–1.756; E00000001 → 51.520, -0.095). Imported into **vendora_test AND vendora_pilot** ("upserted
+188880, 0 skipped"); Atlas `oacentroids` ~189K docs, ~9 MB data + ~19 MB indexes (~28 MB of the 512 MB free tier).
+
+**Import — SAFE PowerShell (never print the connection string; use Get-Credential):**
 ```powershell
 cd vendora-pos\backend
-$env:NODE_OPTIONS="--require ./scripts/dns-8888.js"   # if the mongodb+srv SRV lookup is blocked
-$env:MONGODB_URI="<Atlas URI …/vendora_test>"         # test DB first, then vendora_pilot
-# Download ONS "Output Areas (Dec 2021) PWC (V3)" centroids CSV (lat/long) from geoportal.statistics.gov.uk
-node scripts/import-centroids.js "C:\path\Output_Areas_2021_PWC.csv"   # expect ~188,880
+$env:NODE_OPTIONS="--require ./scripts/dns-8888.js"   # only if the mongodb+srv SRV lookup is blocked
+$cred = Get-Credential -UserName "vendora_test" -Message "Atlas password"   # prompts; not in history
+$pw   = [System.Net.NetworkCredential]::new('', $cred.Password).Password
+$env:MONGODB_URI = "mongodb+srv://$($cred.UserName):$pw@<cluster-host>/vendora_test?retryWrites=true&w=majority"
+node scripts/import-centroids.js "C:\path\Output_Areas_2021_EW_PWC_V4.csv"   # test DB first, then vendora_pilot
+Remove-Item Env:MONGODB_URI                            # clear the secret from the session afterwards
 ```
-Then on Render: `INSIGHTS_ENABLED=true`, `INSIGHTS_DATA_PROVIDER=nomis`, and **leave `INSIGHTS_CENTROIDS_PATH`
-UNSET** (so it reads from Mongo). Redeploy. Verify with `GET /api/pwa-insights/status` → `data.ready: true` and
-`data.centroids.count > 0`. Then an **entitled** shop sees the radius figures re-sum as the radius changes on the
-Neighbourhood Insights screen. With no provider or no centroids, `/profile` honestly returns `configured:false`
-(never fabricated). First radius request after a cold start loads the centroids into memory once (then cached).
+**NEVER** `Write-Host`, `Substring`, echo or otherwise print `$env:MONGODB_URI` — it contains the password. If the
+URI/password was ever pasted or shown on screen, **rotate the DB user's password** and update `MONGODB_URI` on
+Render (see the incident note at the end of this section).
+
+**Radius figures are still OFF (as of 11 Oct 2026)** — the import is done but the data provider isn't enabled.
+To turn them ON (no env changed yet; do these on Render then redeploy):
+- Paid Insights screen (entitled customers): `INSIGHTS_ENABLED=true` + `INSIGHTS_DATA_PROVIDER=nomis`, leave
+  `INSIGHTS_CENTROIDS_PATH` **UNSET** (read from Mongo), + an **entitled** test shop. Verify `GET /api/pwa-insights/
+  status` → `data.ready: true`, `data.centroids.count > 0`.
+- Free "Your area" card for TESTING (no subscription): `INSIGHTS_DATA_PROVIDER=nomis` + `INSIGHTS_TEST_UNLOCK=true`
+  (INSIGHTS_ENABLED not required for this path). Then the "People in this radius" block re-sums with the slider.
+With no provider or no centroids, `/profile` honestly returns `configured:false` (never fabricated). First radius
+request after a cold start loads the centroids into memory once (then cached).
+
+**SECURITY INCIDENT (11 Oct 2026):** a PowerShell helper line suggested in chat printed part of the Atlas
+connection string, exposing the `vendora_test` DB user's password on screen. Remediation: password **rotated**
+and Render `MONGODB_URI` updated by the owner (date: 11 Oct 2026). No password or URI is recorded here. Follow-up
+hardening: the import docs now mandate `Get-Credential` and forbid printing the URI; consider a least-privilege
+Render app DB user (readWrite on the app DB) instead of the shared `vendora_test`/`atlasAdmin`.
 
 **Testing the radius figures WITHOUT a subscription (2026-10-10):** set `INSIGHTS_TEST_UNLOCK=true` on Render. That
 exposes `GET /api/pwa-neighbourhood/radius?postcode=&radiusM=` (owner/manager) which runs the same
