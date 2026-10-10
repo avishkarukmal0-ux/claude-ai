@@ -29,6 +29,35 @@ describe('centroids loader — no file, no DB connection', () => {
   });
 });
 
+describe('centroids — BNG easting/northing → WGS84 conversion (ONS PWC files)', () => {
+  test('osgbToWgs84 converts BNG to WGS84 (verified vs an independent landmark)', () => {
+    // Charing Cross, E 530000 / N 180000 → ~51.504°N, -0.128°E (WGS84).
+    const cc = centroids.osgbToWgs84(530000, 180000);
+    expect(cc.lat).toBeCloseTo(51.5040, 3);
+    expect(cc.lng).toBeCloseTo(-0.1283, 3);
+    // OS benchmark point E 651409.903 / N 313177.270 → WGS84 (post-Helmert, not the OSGB36 worked-example value).
+    const os = centroids.osgbToWgs84(651409.903, 313177.270);
+    expect(os.lat).toBeCloseTo(52.65798, 4);
+    expect(os.lng).toBeCloseTo(1.71605, 4);
+  });
+
+  test('parseLatLng converts a BNG x/y row, and passes lat/long rows through', () => {
+    // BNG (big numbers) → converted:
+    const bng = centroids.parseLatLng({ OA21CD: 'E00000001', x: '651409.903', y: '313177.270' });
+    expect(bng.oa).toBe('E00000001');
+    expect(bng.lat).toBeCloseTo(52.65798, 3);
+    expect(bng.lng).toBeCloseTo(1.71605, 3);
+    // Explicit lat/long → used as-is:
+    const ll = centroids.parseLatLng({ OA21CD: 'E00000002', lat: '51.5', long: '-0.1' });
+    expect(ll).toEqual({ oa: 'E00000002', lat: 51.5, lng: -0.1 });
+    // Small x/y treated as lng/lat:
+    const sm = centroids.parseLatLng({ oa: 'E00000003', x: '-0.12', y: '51.51' });
+    expect(sm).toEqual({ oa: 'E00000003', lat: 51.51, lng: -0.12 });
+    // No usable coords → null:
+    expect(centroids.parseLatLng({ x: '1', y: '2' })).toBeNull();
+  });
+});
+
 describe('centroids test seam', () => {
   test('__setForTest injects centroids in memory (used by the geo/data tests)', () => {
     centroids.__setForTest([{ oa: 'E00000001', lat: 51.5, lng: -0.1 }, { oa: 'E00000002', lat: 51.51, lng: -0.09 }]);

@@ -7,7 +7,9 @@
  * (upserts by OA code). Open data, OGL v3.0.
  *
  * Download (ONS Open Geography Portal): "Output Areas (December 2021) PWC (V3)" / population-weighted centroids,
- * England & Wales, exported as CSV with lat/long columns (OA21CD, lat, long) — or NDJSON. ~190k rows.
+ * England & Wales, as CSV or NDJSON. The standard ONS export gives the centres as British National Grid
+ * eastings/northings (x, y) — that's FINE: the importer auto-converts BNG → lat/long. Lat/long columns are also
+ * accepted if your file has them. ~190k rows.
  *   https://geoportal.statistics.gov.uk/  (search: Output Areas 2021 population weighted centroids)
  *
  * Usage (PowerShell), from a machine with the file + DB access (NOT the build sandbox):

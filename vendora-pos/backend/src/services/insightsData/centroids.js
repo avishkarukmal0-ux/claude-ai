@@ -20,14 +20,74 @@ let _Model = null;
 function model() { _Model = _Model || require('../../models/OaCentroid'); return _Model; }
 function dbReady() { try { return mongoose.connection.readyState === 1; } catch { return false; } }
 
+// Convert OSGB36 British National Grid eastings/northings (metres) to WGS84 lat/lng (degrees). The ONS Output
+// Area PWC export gives the centres in BNG (x = easting, y = northing), so we convert on import. Standard OS
+// reverse-projection + 7-parameter Helmert transform; accurate to a few metres, ample for radius selection.
+function osgbToWgs84(E, N) {
+  const a = 6377563.396; const b = 6356256.909; const F0 = 0.9996012717; // Airy 1830
+  const lat0 = 49 * Math.PI / 180; const lon0 = -2 * Math.PI / 180;
+  const N0 = -100000; const E0 = 400000; const e2 = 1 - (b * b) / (a * a);
+  const n = (a - b) / (a + b); const n2 = n * n; const n3 = n * n * n;
+  let lat = lat0; let M = 0;
+  do {
+    lat = (N - N0 - M) / (a * F0) + lat;
+    const Ma = (1 + n + 1.25 * n2 + 1.25 * n3) * (lat - lat0);
+    const Mb = (3 * n + 3 * n2 + 2.625 * n3) * Math.sin(lat - lat0) * Math.cos(lat + lat0);
+    const Mc = (1.875 * n2 + 1.875 * n3) * Math.sin(2 * (lat - lat0)) * Math.cos(2 * (lat + lat0));
+    const Md = (35 / 24) * n3 * Math.sin(3 * (lat - lat0)) * Math.cos(3 * (lat + lat0));
+    M = b * F0 * (Ma - Mb + Mc - Md);
+  } while (Math.abs(N - N0 - M) >= 0.00001);
+  const sinLat = Math.sin(lat); const cosLat = Math.cos(lat);
+  const nu = a * F0 / Math.sqrt(1 - e2 * sinLat * sinLat);
+  const rho = a * F0 * (1 - e2) / Math.pow(1 - e2 * sinLat * sinLat, 1.5);
+  const eta2 = nu / rho - 1;
+  const tanLat = Math.tan(lat); const t2 = tanLat * tanLat; const t4 = t2 * t2; const t6 = t4 * t2;
+  const sec = 1 / cosLat; const nu3 = nu * nu * nu; const nu5 = nu3 * nu * nu; const nu7 = nu5 * nu * nu;
+  const VII = tanLat / (2 * rho * nu);
+  const VIII = tanLat / (24 * rho * nu3) * (5 + 3 * t2 + eta2 - 9 * t2 * eta2);
+  const IX = tanLat / (720 * rho * nu5) * (61 + 90 * t2 + 45 * t4);
+  const X = sec / nu; const XI = sec / (6 * nu3) * (nu / rho + 2 * t2);
+  const XII = sec / (120 * nu5) * (5 + 28 * t2 + 24 * t4);
+  const XIIA = sec / (5040 * nu7) * (61 + 662 * t2 + 1320 * t4 + 720 * t6);
+  const dE = E - E0; const dE2 = dE * dE; const dE3 = dE2 * dE; const dE4 = dE2 * dE2; const dE5 = dE3 * dE2; const dE6 = dE4 * dE2; const dE7 = dE5 * dE2;
+  const latA = lat - VII * dE2 + VIII * dE4 - IX * dE6;
+  const lonA = lon0 + X * dE - XI * dE3 + XII * dE5 - XIIA * dE7;
+  // Airy1830 geodetic -> cartesian
+  const eA = 1 - (b * b) / (a * a);
+  const v1 = a / Math.sqrt(1 - eA * Math.sin(latA) ** 2);
+  const x1 = v1 * Math.cos(latA) * Math.cos(lonA);
+  const y1 = v1 * Math.cos(latA) * Math.sin(lonA);
+  const z1 = (1 - eA) * v1 * Math.sin(latA);
+  // Helmert OSGB36 -> WGS84
+  const tx = 446.448; const ty = -125.157; const tz = 542.060; const s = -20.4894e-6;
+  const rx = (0.1502 / 3600) * Math.PI / 180; const ry = (0.2470 / 3600) * Math.PI / 180; const rz = (0.8421 / 3600) * Math.PI / 180;
+  const x2 = tx + x1 * (1 + s) - y1 * rz + z1 * ry;
+  const y2 = ty + x1 * rz + y1 * (1 + s) - z1 * rx;
+  const z2 = tz - x1 * ry + y1 * rx + z1 * (1 + s);
+  const a2 = 6378137.000; const b2 = 6356752.3142; const e2b = 1 - (b2 * b2) / (a2 * a2);
+  const p = Math.sqrt(x2 * x2 + y2 * y2);
+  let latW = Math.atan2(z2, p * (1 - e2b)); let prev;
+  do { const v2 = a2 / Math.sqrt(1 - e2b * Math.sin(latW) ** 2); prev = latW; latW = Math.atan2(z2 + e2b * v2 * Math.sin(latW), p); } while (Math.abs(latW - prev) > 1e-11);
+  return { lat: latW * 180 / Math.PI, lng: Math.atan2(y2, x2) * 180 / Math.PI };
+}
+
 function parseLatLng(row) {
-  // Accept common column spellings from the ONS export. Lat/long preferred; we don't convert easting/northing
-  // here (ask for a lat/long export) — a row without usable lat/long is skipped.
   const oa = row.OA21CD || row.oa21cd || row.oa || row.OA || row.code || null;
-  const lat = Number(row.lat ?? row.latitude ?? row.y ?? row.LAT ?? row.Latitude);
-  const lng = Number(row.long ?? row.lng ?? row.longitude ?? row.x ?? row.LONG ?? row.Longitude);
-  if (!oa || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { oa: String(oa), lat, lng };
+  if (!oa) return null;
+  // 1) Explicit lat/long columns win.
+  const lat = Number(row.lat ?? row.latitude ?? row.LAT ?? row.Latitude);
+  const lng = Number(row.long ?? row.lng ?? row.longitude ?? row.LONG ?? row.Longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    return { oa: String(oa), lat, lng };
+  }
+  // 2) Otherwise x/y: small values are already lat/long (x=lng, y=lat); large values are BNG eastings/northings.
+  const x = Number(row.x ?? row.X ?? row.easting ?? row.EASTING ?? row.east ?? row.BNG_E);
+  const y = Number(row.y ?? row.Y ?? row.northing ?? row.NORTHING ?? row.north ?? row.BNG_N);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return { oa: String(oa), lat: y, lng: x };
+  const c = osgbToWgs84(x, y);
+  if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
+  return { oa: String(oa), lat: c.lat, lng: c.lng };
 }
 
 function parseCsvLine(line, headers) {
@@ -105,4 +165,4 @@ function status() {
 // Test seam: inject centroids directly without a file or DB.
 function __setForTest(list) { _cache = list ? { list, loadedAt: Date.now(), count: list.length, source: 'test', path: '__test__' } : null; }
 
-module.exports = { load, all, isLoaded, status, count, parseLatLng, __setForTest };
+module.exports = { load, all, isLoaded, status, count, parseLatLng, osgbToWgs84, __setForTest };
