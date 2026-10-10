@@ -34,27 +34,39 @@ export default function RadiusMap({ point, radiusM, fetchTile }) {
   const mapRef = useRef(null);
   const circleRef = useRef(null);
 
-  // Create the map once we have a point (and tear it down on unmount / point change).
+  // Create the map once we have a point (and tear it down on unmount / point change). A map error must NEVER
+  // crash the surrounding card, so everything is wrapped in try/catch and the fit happens AFTER the container has
+  // a real size (otherwise Leaflet projects against a 0×0/undefined pane → "layerPointToLatLng" on undefined).
   useEffect(() => {
     if (!point || !elRef.current || mapRef.current) return undefined;
-    const map = L.map(elRef.current, { zoomControl: true, scrollWheelZoom: false, attributionControl: true });
-    mapRef.current = map;
-    new AuthTileLayer('{z}/{x}/{y}', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors', fetchTile }).addTo(map);
-    L.circleMarker([point.lat, point.lng], { radius: 6, color: ACCENT, fillColor: ACCENT, fillOpacity: 1, weight: 2 })
-      .addTo(map).bindTooltip('Your shop', { direction: 'top' });
-    circleRef.current = L.circle([point.lat, point.lng], { radius: radiusM, color: ACCENT, weight: 2, fillColor: ACCENT, fillOpacity: 0.08 }).addTo(map);
-    map.fitBounds(circleRef.current.getBounds(), { padding: [16, 16] });
-    // Leaflet needs a correct container size; it can init before layout settles.
-    setTimeout(() => map.invalidateSize(), 0);
-    return () => { map.remove(); mapRef.current = null; circleRef.current = null; };
+    let map;
+    try {
+      // Give the map a valid view IMMEDIATELY (sets the pixel origin) before adding layers or fitting bounds.
+      map = L.map(elRef.current, { zoomControl: true, scrollWheelZoom: false, attributionControl: true })
+        .setView([point.lat, point.lng], 14);
+      mapRef.current = map;
+      new AuthTileLayer('{z}/{x}/{y}', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors', fetchTile }).addTo(map);
+      L.circleMarker([point.lat, point.lng], { radius: 6, color: ACCENT, fillColor: ACCENT, fillOpacity: 1, weight: 2 })
+        .addTo(map).bindTooltip('Your shop', { direction: 'top' });
+      circleRef.current = L.circle([point.lat, point.lng], { radius: radiusM, color: ACCENT, weight: 2, fillColor: ACCENT, fillOpacity: 0.08 }).addTo(map);
+      // Fit to the circle only once the container is laid out and sized.
+      const raf = requestAnimationFrame(() => {
+        if (!mapRef.current) return;
+        try { map.invalidateSize(); if (circleRef.current) map.fitBounds(circleRef.current.getBounds(), { padding: [16, 16] }); } catch { /* keep the setView fallback */ }
+      });
+      return () => { cancelAnimationFrame(raf); try { map.remove(); } catch { /* ignore */ } mapRef.current = null; circleRef.current = null; };
+    } catch {
+      try { if (map) map.remove(); } catch { /* ignore */ }
+      mapRef.current = null; circleRef.current = null;
+      return undefined;
+    }
   }, [point && point.lat, point && point.lng]);
 
   // Update the circle (and re-fit) when only the radius changes.
   useEffect(() => {
     const map = mapRef.current; const circle = circleRef.current;
     if (!map || !circle) return;
-    circle.setRadius(radiusM);
-    map.fitBounds(circle.getBounds(), { padding: [16, 16] });
+    try { circle.setRadius(radiusM); map.fitBounds(circle.getBounds(), { padding: [16, 16] }); } catch { /* ignore transient */ }
   }, [radiusM]);
 
   if (!point) return null;
