@@ -37,10 +37,22 @@ require OK; `createTransport(...).sendMail` smoke passes; `pwaNotify.test.js` **
 yet:** a real SMTP send (no egress / `SENDGRID_API_KEY` in the sandbox) — owner confirms one live digest/receipt
 email after redeploy. Audit now: **4 moderate** remaining, 0 high/critical.
 
-## Remaining (breaking moderate — NOT done; need review + tests, owner approval)
-- **`csv-parse` 5 → 7 (moderate)** — used by the IMD import + sales import; API change.
-- **`uuid` 9 → 14 / `node-cron` 3 → 4 (moderate)** — API changes.
-- **`qs`** moderate advisory still shows via a held parent path even after the sweep.
+## Step 3 assessed — NOT upgraded (breaking majors vs advisories that aren't reachable)
+Reachability checked in our code; none justify a risky breaking bump now:
+- **`uuid` (moderate)** — advisory is only for **v3/v5/v6 when a `buf` arg is passed**. We use
+  `const { v4 } = require('uuid'); v4()` throughout (helpers, self-checkout, tap-to-pay) — **v4, no `buf` → not
+  reachable**. A 9→14 jump (ESM-first major) would risk breaking `require('uuid')` for zero security gain. **Hold.**
+- **`node-cron` (moderate)** — flagged **only** because it depends on that uuid → **not reachable**. v3→v4 changes
+  the `schedule` API and would risk all 9 cron jobs (`src/jobs/index.js`). **Hold.**
+- **`csv-parse` (moderate)** — "prototype replacement via columns path" needs a malicious CSV header; our only
+  `columns:true` use is the **operator-run IMD import** (trusted gov.uk file) + the shop's own sales import — not
+  an attacker-controlled request path → **low reachability**. v5→v7 is breaking; **optional** on a tested branch
+  (re-verify IMD import + sales import parse), not urgent.
+- **`qs` (moderate)** — transitive under express/body-parser; the non-breaking fix is blocked by a parent pin and
+  clears when they ship a patch. **Hold.**
+
+**Net:** 0 high/critical remain; the 4 moderates are either not reachable (uuid, node-cron), low-risk operator
+paths (csv-parse), or parent-pinned (qs). No further dependency changes made.
 
 ## Commit(s)
 - `chore(backend): npm audit fix (non-breaking) — clear critical proxy-addr + 7 highs + moderates`
