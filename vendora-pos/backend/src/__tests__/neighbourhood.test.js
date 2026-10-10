@@ -57,6 +57,41 @@ describe('pure helpers', () => {
   });
 });
 
+// Cache-invalidation for a newly-configured figure (2026-10-10). decideRefresh returning true means
+// getAreaProfile will re-fetch; false means it serves the cache WITHOUT any upstream call.
+describe('decideRefresh — missing configured figure (throttled)', () => {
+  const now = Date.now();
+  const recent = new Date(now - 3600000); // 1h old → well within the 168h TTL, so only the missing-key rule can fire
+  const base = { fetchedAt: recent, figures: [{ key: 'population' }, { key: 'age' }] };
+  const KEYS = ['population', 'age', 'populationMid']; // populationMid just added on the server, not yet cached
+
+  test('(a) newly-configured figure missing + never attempted → refetch once', () => {
+    expect(svc.decideRefresh(base, { now, configuredKeys: KEYS })).toBe(true);
+  });
+
+  test('(b) still missing but attempted <1h ago → serve cache (no upstream call)', () => {
+    const rec = { ...base, attemptedKeys: KEYS, lastAttemptAt: new Date(now - 10 * 60000) };
+    expect(svc.decideRefresh(rec, { now, configuredKeys: KEYS })).toBe(false);
+  });
+
+  test('(c) still missing and last attempt >1h ago → retry', () => {
+    const rec = { ...base, attemptedKeys: KEYS, lastAttemptAt: new Date(now - 2 * 3600000) };
+    expect(svc.decideRefresh(rec, { now, configuredKeys: KEYS })).toBe(true);
+  });
+
+  test('(d) IMD (deprivation) figure is unaffected — not a configured Nomis figure', () => {
+    // configuredKeys are the Nomis census figures only; deprivation is appended from the IMD import, so it is
+    // never in configuredKeys. Its absence must not force a refetch, and its presence must not matter.
+    expect(svc.decideRefresh(base, { now, configuredKeys: ['population', 'age'] })).toBe(false);
+    const withImd = { ...base, figures: [...base.figures, { key: 'deprivation', kind: 'imd' }] };
+    expect(svc.decideRefresh(withImd, { now, configuredKeys: ['population', 'age'] })).toBe(false);
+  });
+
+  test('back-compat: no configuredKeys → old TTL-only behaviour', () => {
+    expect(svc.decideRefresh(base, { now })).toBe(false);
+  });
+});
+
 // The transports below are FIXTURES (test-only mocked upstream responses). Production never contains mock or
 // sample data — the service returns "unavailable" instead of inventing numbers.
 describe('network layer (stubbed transport)', () => {

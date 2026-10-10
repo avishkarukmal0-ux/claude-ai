@@ -17,10 +17,10 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
 
   if (!NEIGHBOURHOOD_ENABLED) return null;
 
-  async function load() {
+  async function load(force = false) {
     if (!postcode.trim()) { toast.error('Enter your shop postcode'); return; }
     setBusy(true);
-    try { setResult(await getArea(postcode.trim())); }
+    try { setResult(await getArea(postcode.trim(), { force })); if (force) toast.success('Refreshed'); }
     finally { setBusy(false); }
   }
 
@@ -57,9 +57,16 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
           {result.freshness === 'out_of_date' && !result.offline && (
             <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> These figures are out of date — couldn’t refresh.</div>
           )}
-          {result.area && (result.area.ward || result.area.district) && (
-            <p className="text-[11px] text-gray-500">{[result.area.ward, result.area.district].filter(Boolean).join(' · ')}</p>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            {result.area && (result.area.ward || result.area.district) ? (
+              <p className="text-[11px] text-gray-500">{[result.area.ward, result.area.district].filter(Boolean).join(' · ')}</p>
+            ) : <span />}
+            {!result.offline && (
+              <button type="button" onClick={() => load(true)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-primary hover:underline disabled:opacity-50" aria-label="Refresh the latest figures for this area">
+                <RefreshCw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} /> Refresh latest
+              </button>
+            )}
+          </div>
           {(result.figures || []).map((f) => {
             if (f.kind === 'breakdown') return <BreakdownFigure key={f.key} f={f} />;
             if (f.kind === 'imd') return <DeprivationFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
@@ -119,11 +126,16 @@ function DeprivationFigure({ f, fallbackDate }) {
   );
 }
 
+// Default visible rows for a breakdown. Complete partitions (qualifications ≈7, economic activity ≈5) show in
+// full; long ones (age, ≈18 five-year bands) collapse to this with a "Show all" toggle — nothing is hidden, but
+// the card stays a sensible length. (Fixes the age card getting very long after the .slice(0,6) removal, while
+// qualifications/economic activity still show every category and sum to ~100%.)
+const BREAKDOWN_DEFAULT_ROWS = 8;
+
 function BreakdownFigure({ f }) {
-  // Show every category the parser returned. Truncating (previously .slice(0,6)) dropped a real category — e.g.
-  // TS067 qualifications has 7 (…“Other qualifications”), so the shown shares summed to ~97% and looked wrong.
-  // These breakdowns are complete partitions of a known base, so all rows together sum to ~100%.
-  const rows = f.rows || [];
+  const all = f.rows || [];
+  const [expanded, setExpanded] = useState(false);
+  const rows = expanded ? all : all.slice(0, BREAKDOWN_DEFAULT_ROWS);
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{f.label} (est.)</h4>
@@ -138,6 +150,11 @@ function BreakdownFigure({ f }) {
           </li>
         ))}
       </ul>
+      {all.length > BREAKDOWN_DEFAULT_ROWS && (
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-2 text-[11px] font-medium text-primary hover:underline">
+          {expanded ? 'Show fewer' : `Show all ${all.length}`}
+        </button>
+      )}
       <Provenance f={f} />
     </section>
   );

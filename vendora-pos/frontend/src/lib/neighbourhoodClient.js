@@ -27,12 +27,15 @@ export function __setFetch(fn) { _fetch = fn || ((url, opts) => fetch(url, opts)
  * the last stored copy flagged `offline:true`; nothing stored → { available:false, unavailable:true }.
  * Never throws for the "no data" case, so the UI can always render something sensible.
  */
-export async function getArea(postcode, { timeoutMs = COLD_START_MS } = {}) {
+export async function getArea(postcode, { timeoutMs = COLD_START_MS, force = false } = {}) {
   const pc = norm(postcode);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await _fetch(`${BASE}/area?postcode=${encodeURIComponent(pc)}`, { headers: authHeader(), signal: controller.signal });
+    // force=1 asks the backend to bypass its cache and re-fetch now (owner/manager only; the route enforces the
+    // role). Used by the card's "Refresh" action so an owner needn't wait for the TTL.
+    const qs = `postcode=${encodeURIComponent(pc)}${force ? '&force=1' : ''}`;
+    const res = await _fetch(`${BASE}/area?${qs}`, { headers: authHeader(), signal: controller.signal });
     let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
     if (!res.ok) throw Object.assign(new Error((body && body.message) || `Request failed (${res.status})`), { status: res.status });
     putStored(pc, body);

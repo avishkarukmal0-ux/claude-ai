@@ -584,3 +584,46 @@ Sources consulted (via web search; primary PDFs were egress-blocked in the sandb
 copyright-notices guidance; ONS ONSPD/NSPL FOI (FOI/2022/3481); MHCLG IoD 2025 Technical/Research reports on
 gov.uk. The old blanket *"· Census 2021"* footer label was **removed** — it was wrong for the IMD (2025) and
 mid-year population figures; each figure already shows its own reference date in its provenance line.
+
+### LIVE (2026-10-10, part 2) — cache invalidation for newly-added figures, force-refresh, age card length
+After adding `NEIGHBOURHOOD_DS_POP_MID=NM_2014_1` on Render (16 env vars now; the other 15 untouched), the
+mid-year population **still didn't appear** for RM10 8AA. **Root cause (code):** `decideRefresh` only re-fetched
+when the cached `NeighbourhoodArea` doc was older than `NEIGHBOURHOOD_TTL_HOURS` (default 168 h) or the dataset
+`last_updated` was newer; RM10 8AA had been cached earlier the same day *without* POP_MID, and the frontend
+never sent `?force=1`, so the new figure wouldn't show for ~7 days. Owner cleared it as a one-off by deleting
+that single Atlas doc.
+
+**Fix shipped:** `decideRefresh` now also re-fetches when the cache is **missing any currently-configured figure
+key**, throttled so a figure that keeps failing can't hit the upstream on every request:
+- a missing key that was **never attempted** triggers one refetch now;
+- the doc then records `attemptedKeys` + `lastAttemptAt` (new, optional, non-breaking fields);
+- a still-missing (already-attempted) key is only retried once **1 h** has passed.
+The attempt is recorded on every refetch outcome — success, "reachable but no figures", and upstream error — so
+an outage or a perpetually-missing figure backs off to hourly instead of per-request. TTL/`force` behaviour is
+unchanged, and the IMD (`deprivation`) figure is appended separately and is **not** a configured key, so it
+never drives this logic. (The manual doc-delete won't be needed again: a newly-configured figure now appears on
+the next request, bounded to one upstream attempt then hourly retries.)
+
+**Force refresh (owner/manager):** the `/area` route already accepted `?force=1`; the card now has a **"Refresh
+latest"** action (hidden when offline) that calls it, so an owner can re-pull without waiting for the TTL. Client
+`getArea(postcode, { force })` appends `&force=1`; the route enforces the owner/manager gate.
+
+**Age card length:** removing `.slice(0,6)` (commit `1d016b7`) also made the **age** card long (~18 five-year
+bands). `BreakdownFigure` now shows up to **8** rows by default with a **"Show all N / Show fewer"** toggle — so
+qualifications (7) and economic activity (approx 5) still show every category and sum to ~100%, while age
+collapses to a sensible length with nothing hidden. **No CSS overlap bug found:** `BreakdownFigure`/the card have
+no fixed height, `overflow`, or absolute/fixed positioning; cards stack with `space-y-2`. The faint
+"...and a full-time student" row seen under the age list is a **TS066 economic-activity** label (the next card) —
+a screenshot-stitch artefact, not a clipped/overlapping card.
+
+### Infra notes (2026-10-10) — Atlas access & DB user (recommendation)
+- **IP Access List** is currently `0.0.0.0/0` ("vendora test 2") + one `/32`. Render's free tier has **no static
+  outbound IP**, so locking the list to Render isn't possible on this plan — `0.0.0.0/0` is the pragmatic choice
+  **only because of that**. Mitigate with a strong DB password (rotated 2026-10-10) and least privilege (below).
+- **DB user:** a single user `vendora_test` with **`atlasAdmin`** is used by the app, the tests **and** the
+  imports. **Recommendation:** create a **least-privilege application user** (`readWrite` on the app DB only) for
+  Render, keeping `atlasAdmin` for admin/imports from the owner's machine — this limits blast radius if the app
+  credential leaks. (Not changed here: it's an Atlas console + Render `MONGODB_URI` change, no code impact.)
+- **`NEIGHBOURHOOD_DS_DEPRIVATION=NM_2031_1` (TS011) is a NO-OP** — deprivation comes from the IMD 2025 import;
+  no `FIGURE_DEF` consumes `figuresConfig.deprivation`. Safe to leave or remove.
+- Render maintenance window noted: **14 Oct 01:00-02:00 UTC** (free tier sleeps; no static IP).

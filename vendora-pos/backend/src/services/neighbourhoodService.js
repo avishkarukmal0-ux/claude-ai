@@ -105,14 +105,32 @@ function parseRetryAfter(header, now = Date.now()) {
   return null;
 }
 
-/** Should we re-fetch this cached record? Older than the TTL, or the dataset's last_updated is newer. */
-function decideRefresh(record, { ttlHours = C().ttlHours, now = Date.now(), datasetLastUpdated = null } = {}) {
+/**
+ * Should we re-fetch this cached record? Older than the TTL, the dataset's last_updated is newer, or the cache
+ * is MISSING a currently-configured figure (e.g. a new dataset id was just added on the server — without this a
+ * newly-configured figure wouldn't appear until the TTL expired, up to 7 days).
+ *
+ * Safeguard against a per-request refetch loop when a configured figure keeps failing: a missing key that was
+ * NEVER attempted triggers one refetch; after that the record carries attemptedKeys + lastAttemptAt, and a
+ * still-missing (already-attempted) key is only retried once `missingRetryMs` (default 1h) has passed.
+ */
+function decideRefresh(record, { ttlHours = C().ttlHours, now = Date.now(), datasetLastUpdated = null, configuredKeys = [], missingRetryMs = 3600000 } = {}) {
   if (!record || !record.fetchedAt) return true;
   const ageMs = now - new Date(record.fetchedAt).getTime();
   if (ageMs > ttlHours * 3600 * 1000) return true;
   if (datasetLastUpdated) {
     const known = record.figures && record.figures[0] && record.figures[0].lastUpdated;
     if (known && Date.parse(datasetLastUpdated) > Date.parse(known)) return true;
+  }
+  if (configuredKeys && configuredKeys.length) {
+    const have = new Set((record.figures || []).map((f) => f.key));
+    const missing = configuredKeys.filter((k) => !have.has(k));
+    if (missing.length) {
+      const attempted = new Set(record.attemptedKeys || []);
+      if (missing.some((k) => !attempted.has(k))) return true; // a newly-configured figure never tried → fetch now
+      const lastAttempt = record.lastAttemptAt ? new Date(record.lastAttemptAt).getTime() : 0;
+      if (now - lastAttempt > missingRetryMs) return true;      // tried before but due for a retry
+    }
   }
   return false;
 }
@@ -276,14 +294,15 @@ async function getAreaProfile(postcode, { force = false, now = Date.now() } = {}
   const pc = normalisePostcode(postcode);
   if (!isValidPostcode(pc)) { const e = new Error('Enter a valid UK postcode.'); e.statusCode = 400; throw e; }
 
+  const defs = configuredFigureDefs();
+  const configuredKeys = defs.map((d) => d.key);
   const existing = await NeighbourhoodArea.findOne({ postcode: pc }).lean();
-  if (existing && !force && !decideRefresh(existing, { now })) {
+  if (existing && !force && !decideRefresh(existing, { now, configuredKeys })) {
     return shapeResponse(existing, { online: true, now });
   }
 
   try {
     const area = await resolvePostcode(pc);
-    const defs = configuredFigureDefs();
     // Fetch every configured figure; the concurrency limiter throttles the upstream calls. A figure that fails
     // or returns nothing is simply omitted (never fabricated).
     const fetched = (await Promise.all(defs.map((d) => fetchFigure(area, d).catch(() => null)))).filter(Boolean);
@@ -291,18 +310,27 @@ async function getAreaProfile(postcode, { force = false, now = Date.now() } = {}
     try { const dep = await imd.getFigure(area.lsoa21); if (dep) fetched.push({ ...dep }); } catch { /* imd optional */ }
     if (!fetched.length) {
       // Upstream reachable but no usable figures (e.g. no dataset configured). Don't invent — serve stale if any.
-      if (existing) return { ...shapeResponse(existing, { online: true, now }), note: 'Showing last known data; a fresh figure isn’t available yet.' };
+      if (existing) {
+        // Record the attempt so a perpetually-missing figure backs off to hourly instead of refetching every call.
+        await NeighbourhoodArea.updateOne({ postcode: pc }, { $set: { attemptedKeys: configuredKeys, lastAttemptAt: new Date(now) } }).catch(() => {});
+        return { ...shapeResponse(existing, { online: true, now }), note: 'Showing last known data; a fresh figure isn’t available yet.' };
+      }
       return { available: false, reason: defs.length ? 'No figures available for this area yet.' : 'Neighbourhood data isn’t fully configured on the server yet.', area, attribution: OGL };
     }
     const stamped = fetched.map((f) => ({ ...f, fetchedAt: new Date(now) }));
     const doc = await NeighbourhoodArea.findOneAndUpdate(
       { postcode: pc },
-      { postcode: pc, lsoa21: area.lsoa21, msoa21: area.msoa21, ward: area.ward, district: area.district, country: area.country, figures: stamped, fetchedAt: new Date(now) },
+      // Record the attempt (keys + time) alongside the figures so a figure that FAILED this run (so it's not in
+      // `fetched`) isn't re-requested on every subsequent call — decideRefresh backs it off for an hour.
+      { postcode: pc, lsoa21: area.lsoa21, msoa21: area.msoa21, ward: area.ward, district: area.district, country: area.country, figures: stamped, fetchedAt: new Date(now), attemptedKeys: configuredKeys, lastAttemptAt: new Date(now) },
       { upsert: true, new: true },
     ).lean();
     return shapeResponse(doc, { online: true, now });
   } catch (err) {
     if (existing) {
+      // Upstream unreachable (e.g. postcodes.io down). Record the attempt so a missing-figure cache doesn't try
+      // the upstream on every request during an outage — it serves the stale copy and retries at most hourly.
+      await NeighbourhoodArea.updateOne({ postcode: pc }, { $set: { attemptedKeys: configuredKeys, lastAttemptAt: new Date(now) } }).catch(() => {});
       return { ...shapeResponse(existing, { online: true, now }), note: `Couldn’t refresh (${err.message}); showing last known data.` };
     }
     const e = new Error(err.message || 'Neighbourhood data is unavailable right now.');

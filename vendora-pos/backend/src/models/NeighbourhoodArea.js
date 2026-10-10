@@ -48,6 +48,11 @@ const schema = new mongoose.Schema(
     country: { type: String, default: null },
     figures: { type: [figureSchema], default: [] },
     fetchedAt: { type: Date, default: Date.now },
+    // Which configured figure keys we last TRIED to fetch, and when. Lets the service re-fetch once when a
+    // newly-configured figure is missing from the cache, then back off (hourly) so a figure that keeps failing
+    // doesn't hit the upstream on every request. Optional/additive — old docs without these still work.
+    attemptedKeys: { type: [String], default: undefined },
+    lastAttemptAt: { type: Date, default: undefined },
   },
   { timestamps: true },
 );
