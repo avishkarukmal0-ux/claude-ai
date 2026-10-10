@@ -25,6 +25,16 @@ export function __setFetch(fn) { _fetch = fn || ((url, opts) => fetch(url, opts)
 // Map tiles for the "Your area" catchment circle. Proxied through our backend (/api/pwa-neighbourhood/tiles) so
 // the browser never calls the tile host directly (no CSP change) and it works with the free neighbourhood flag —
 // no paid Insights dependency. Fetched WITH the bearer header → blob URL (Leaflet <img> can't send headers).
+// Radius-aggregated figures for the catchment circle (the paid Insights aggregation). Available on the free card
+// only when the server's INSIGHTS_TEST_UNLOCK is on (otherwise 403). Returns the buildProfile shape
+// ({ ok, configured, profile, ... }); throws with .status so the caller can hide on 403 (locked/production).
+export async function getRadiusProfile({ postcode, radiusM }) {
+  const res = await _fetch(`${BASE}/radius?postcode=${encodeURIComponent(norm(postcode))}&radiusM=${Math.round(radiusM)}`, { headers: authHeader() });
+  let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
+  if (!res.ok) { const e = new Error((body && body.message) || `radius ${res.status}`); e.status = res.status; throw e; }
+  return body || {};
+}
+
 export function tileUrl(z, x, y) { return `${BASE}/tiles/${z}/${x}/${y}.png`; }
 export async function fetchTileObjectURL(z, x, y) {
   const res = await _fetch(tileUrl(z, x, y), { headers: authHeader() });

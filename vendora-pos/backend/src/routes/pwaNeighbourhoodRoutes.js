@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
 const neighbourhood = require('../services/neighbourhoodService');
+const insights = require('../services/insightsService');
 const insightsTiles = require('../services/insightsTiles');
 const config = require('../config');
 const AppError = require('../utils/AppError');
@@ -47,6 +48,28 @@ router.get('/area', ownerOrManager, async (req, res, next) => {
     res.json({ success: true, ...out });
   } catch (err) {
     if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, 'NEIGHBOURHOOD'));
+    next(err);
+  }
+});
+
+// GET /radius?postcode=&radiusM= → radius-aggregated census figures for the catchment circle, so the numbers on
+// the "Your area" card re-sum as the radius changes. This is the PAID Neighbourhood Insights aggregation; here it
+// is exposed on the free card ONLY for testing, behind INSIGHTS_TEST_UNLOCK (default off). In production this
+// returns 403 and the paid Insights screen (entitlement-gated) is the real home for radius figures. Never
+// fabricates: with no centroid data it returns configured:false. Owner/manager only.
+router.get('/radius', ownerOrManager, async (req, res, next) => {
+  try {
+    if (!config.neighbourhoodInsights.testUnlock) {
+      throw new AppError('Radius figures are the paid Neighbourhood Insights add-on.', 403, 'INSIGHTS_PAID');
+    }
+    const postcode = (req.query.postcode || '').toString();
+    const radiusM = Number(req.query.radiusM);
+    if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
+    const out = await insights.buildProfile({ postcode, radiusM });
+    if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
+    res.json({ success: true, testUnlock: true, ...out });
+  } catch (err) {
+    if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, err.code || 'RADIUS'));
     next(err);
   }
 });

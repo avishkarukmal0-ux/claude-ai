@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { getArea, fetchTileObjectURL } from '../../lib/neighbourhoodClient';
+import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbourhoodClient';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 import RadiusControl from './RadiusControl';
 import RadiusMap from './RadiusMap';
@@ -24,6 +24,33 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [result, setResult] = useState(null);
   const [unit, setUnit] = useState('mi');
   const [radiusM, setRadiusM] = useState(1000);
+  const [radProfile, setRadProfile] = useState(null);
+  const [radState, setRadState] = useState('idle'); // idle | loading | ok | unconfigured | locked | error
+
+  const point = result && result.area && result.area.point;
+  const radPostcode = (result && result.postcode) || postcode;
+
+  // Radius-aggregated figures that RE-SUM as the circle moves (the paid aggregation; available on this free card
+  // only when the server's INSIGHTS_TEST_UNLOCK is on — a 403 means it's locked and we hide the block). Debounced
+  // so dragging the slider doesn't hammer the server. Never fabricates: configured:false → an honest note.
+  useEffect(() => {
+    if (!point || !radPostcode || !radPostcode.trim()) { setRadState('idle'); return undefined; }
+    let live = true;
+    setRadState((s) => (s === 'ok' ? 'ok' : 'loading')); // keep the last figures visible while refetching
+    const id = setTimeout(async () => {
+      try {
+        const out = await getRadiusProfile({ postcode: radPostcode, radiusM });
+        if (!live) return;
+        if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); }
+        else { setRadProfile(null); setRadState('unconfigured'); }
+      } catch (e) {
+        if (!live) return;
+        setRadState(e && e.status === 403 ? 'locked' : 'error');
+      }
+    }, 450);
+    return () => { live = false; clearTimeout(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [radiusM, point && point.lat, point && point.lng, radPostcode]);
 
   if (!NEIGHBOURHOOD_ENABLED) return null;
 
@@ -82,7 +109,21 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
               <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} />
               <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} /></div>
-              <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is a visual guide around your shop; the figures below are for your immediate area (LSOA), not the circle. People-by-radius is in the paid Neighbourhood Insights.</p>
+              <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
+
+              {radState === 'loading' && <p className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Counting people in this radius…</p>}
+              {radState === 'ok' && radProfile && (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-gray-50 p-2.5"><span className="block text-[10px] text-gray-400">People in {fmtRadius(radiusM, unit)} (est.)</span><span className="block text-lg font-extrabold tabular-nums text-gray-900">{fmtNum(radProfile.population)}</span></div>
+                    <div className="rounded-xl bg-gray-50 p-2.5"><span className="block text-[10px] text-gray-400">Households (est.)</span><span className="block text-lg font-extrabold tabular-nums text-gray-900">{fmtNum(radProfile.households)}</span></div>
+                  </div>
+                  <p className="mt-1 text-[10px] leading-snug text-gray-400">Estimated — whole census areas whose centre is inside the circle ({fmtNum(radProfile.outputAreas)} areas). Re-sums as you move the radius. {radProfile.attribution || ''}</p>
+                </>
+              )}
+              {radState === 'unconfigured' && <p className="mt-2 text-[10px] leading-snug text-amber-700">Radius figures need the OA centroid data imported on the server (owner step) — then people/households re-sum as you move the circle.</p>}
+              {radState === 'locked' && <p className="mt-2 text-[10px] leading-snug text-gray-400">People-by-radius is the paid Neighbourhood Insights add-on. The figures below are for your immediate area (LSOA).</p>}
+              {radState === 'error' && <p className="mt-2 text-[10px] leading-snug text-gray-400">Couldn’t load the radius figures right now. The figures below are for your immediate area (LSOA).</p>}
             </section>
           )}
           {(result.figures || []).map((f) => {

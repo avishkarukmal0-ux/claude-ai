@@ -117,6 +117,10 @@ module.exports = {
       fetchTimeoutMs: parseInt(process.env.INSIGHTS_FETCH_TIMEOUT_MS, 10) || 15000,
       maxOutputAreas: parseInt(process.env.INSIGHTS_MAX_OA, 10) || 2000,
     },
+    // TESTING ONLY: when true, the radius-aggregated figures can be computed for an owner/manager WITHOUT a paid
+    // subscription (e.g. on the free "Your area" card), so the feature can be tested before billing is wired up.
+    // Default false → the radius figures stay behind the paid entitlement for real customers.
+    testUnlock: process.env.INSIGHTS_TEST_UNLOCK === 'true',
     // Configurable price (minor units, e.g. pence) + interval — unset until the operator decides commercial terms.
     priceMinor: process.env.INSIGHTS_PRICE_MINOR ? parseInt(process.env.INSIGHTS_PRICE_MINOR, 10) : null,
     priceCurrency: process.env.INSIGHTS_PRICE_CURRENCY || 'GBP',

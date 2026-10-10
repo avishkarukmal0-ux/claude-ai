@@ -694,3 +694,11 @@ UNSET** (so it reads from Mongo). Redeploy. Verify with `GET /api/pwa-insights/s
 `data.centroids.count > 0`. Then an **entitled** shop sees the radius figures re-sum as the radius changes on the
 Neighbourhood Insights screen. With no provider or no centroids, `/profile` honestly returns `configured:false`
 (never fabricated). First radius request after a cold start loads the centroids into memory once (then cached).
+
+**Testing the radius figures WITHOUT a subscription (2026-10-10):** set `INSIGHTS_TEST_UNLOCK=true` on Render. That
+exposes `GET /api/pwa-neighbourhood/radius?postcode=&radiusM=` (owner/manager) which runs the same
+`buildProfile` aggregation, so a **"People in this radius"** block appears on the free **"Your area"** card and
+re-sums as the slider moves. Default **off** → the route returns 403 and radius figures stay paid (the real home
+is the entitlement-gated Insights screen). It still needs the **centroids imported** — with none, the card shows
+"Radius figures need the OA centroid data imported" (never fake numbers). Turn `INSIGHTS_TEST_UNLOCK` back off
+before real customers use it.
