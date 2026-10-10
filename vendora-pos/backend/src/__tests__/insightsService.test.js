@@ -19,6 +19,7 @@ describe('insightsService.status / preview (honest, pre-purchase)', () => {
     expect(s.dataSource).toBe('ONS Census 2021');
     expect(s.dataConfigured).toBe(false);     // no provider by default
     expect(s.radii).toEqual([500, 1000, 3000]);
+    expect(s.radiusBounds).toEqual({ min: 250, max: 5000 }); // owner may pick any radius in this range
   });
 
   test('preview shows category structure + explicit limitations, flagged as not the owner’s area', () => {
@@ -32,11 +33,22 @@ describe('insightsService.status / preview (honest, pre-purchase)', () => {
 });
 
 describe('insightsService.buildProfile — honest with no data provider', () => {
-  test('rejects an unsupported radius', async () => {
+  test('rejects an out-of-range radius (too small or too large)', async () => {
     loc.__setTransport(async () => EW);
-    const out = await insights.buildProfile({ postcode: 'EC1A 1BB', radiusM: 750 });
-    expect(out.ok).toBe(false);
-    expect(out.reason).toMatch(/supported radius/i);
+    const tooSmall = await insights.buildProfile({ postcode: 'EC1A 1BB', radiusM: 50 });
+    expect(tooSmall.ok).toBe(false);
+    expect(tooSmall.reason).toMatch(/radius between/i);
+    const tooBig = await insights.buildProfile({ postcode: 'EC1A 1BB', radiusM: 50000 });
+    expect(tooBig.ok).toBe(false);
+  });
+
+  test('accepts ANY radius within the allowed range (not just a preset), rounded to a whole metre', async () => {
+    loc.__setTransport(async () => EW);
+    const out = await insights.buildProfile({ postcode: 'EC1A 1BB', radiusM: 1250.6 });
+    expect(out.ok).toBe(true);          // 1250 is in [250, 5000]
+    expect(out.supported).toBe(true);
+    expect(out.location.radiusM).toBe(1251); // rounded; no data provider → configured:false below
+    expect(out.configured).toBe(false);
   });
 
   test('a Scotland postcode is valid but NOT supported (separate census), never mixed with E&W', async () => {

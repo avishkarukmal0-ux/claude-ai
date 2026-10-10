@@ -11,6 +11,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const pwaAuth = require('../services/pwaAuthService');
 const insights = require('../services/insightsService');
+const insightsTiles = require('../services/insightsTiles');
 const entitlements = require('../services/insightsEntitlementService');
 const stripeBilling = require('../services/billing/stripeBilling');
 const config = require('../config');
@@ -101,6 +102,26 @@ router.get('/status', ownerOrManager, async (req, res, next) => {
 // GET /preview → labelled example of what the report contains (structure only, never the owner's real area).
 router.get('/preview', ownerOrManager, (req, res) => {
   res.json({ success: true, ...insights.preview(), purchasingAvailable: purchasingAvailable() });
+});
+
+// GET /tiles/:z/:x/:y.png → map tile for the radius view, proxied from the configured OSM host (owner/manager;
+// the browser never calls the tile host directly, so no CSP change). The Leaflet layer fetches these WITH the
+// PWA bearer header, so the route stays behind the auth gate. Coordinates are validated before any upstream call.
+router.get('/tiles/:z/:x/:y.png', ownerOrManager, async (req, res, next) => {
+  try {
+    const { z, x, y } = req.params;
+    if (!insightsTiles.isValidTile(z, x, y)) throw new AppError('Invalid tile coordinate.', 400, 'BAD_TILE');
+    const tile = await insightsTiles.fetchTile(Number(z), Number(x), Number(y));
+    if (tile.status !== 200 || !tile.body || !tile.body.length) {
+      throw new AppError('Tile unavailable.', 502, 'TILE_UPSTREAM');
+    }
+    res.set('Content-Type', tile.contentType || 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400'); // tiles are static; let the browser cache them a day
+    res.send(tile.body);
+  } catch (err) {
+    if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, err.code || 'TILE'));
+    next(err);
+  }
 });
 
 // POST /profile { postcode, radiusM } → the real area profile. Entitlement-ENFORCED on the server.

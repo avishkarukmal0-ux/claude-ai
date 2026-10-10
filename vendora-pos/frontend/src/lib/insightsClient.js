@@ -44,3 +44,14 @@ export async function previewProration() { return _t('/billing/preview', { metho
 
 /** Cancel ONLY the Neighbourhood Insights add-on; the core Vendora Shop subscription continues. */
 export async function cancelAddon() { return _t('/billing/cancel-addon', { method: 'POST' }); }
+
+// Map tiles for the radius view. The backend proxies them from OSM, so the browser only ever calls our own API
+// (no CSP change, tile host never contacted directly). We fetch each tile WITH the PWA bearer header and hand
+// Leaflet a blob URL, so the tile route stays behind the same owner/manager gate as the rest of /api/pwa-insights.
+export function tileUrl(z, x, y) { return `${BASE}/tiles/${z}/${x}/${y}.png`; }
+export async function fetchTileObjectURL(z, x, y) {
+  const s = currentSession();
+  const res = await fetch(tileUrl(z, x, y), { headers: { ...(s && s.token ? { Authorization: `Bearer ${s.token}` } : {}) } });
+  if (!res.ok) throw new Error(`tile ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+}

@@ -6,8 +6,17 @@ import {
 import { getStatus, getPreview, getProfile, startCheckout, cancelAddon } from '../../lib/insightsClient';
 import TrialsPanel from './TrialsPanel';
 import NeighbourhoodAreaCard from './NeighbourhoodAreaCard';
+import RadiusMap from './RadiusMap';
 
-const RADII = [{ m: 500, label: '500 m' }, { m: 1000, label: '1 km' }, { m: 3000, label: '3 km' }];
+// Radius units. Owners think in miles (UK retail) by default, with a km toggle. Presets are in the chosen unit;
+// a slider covers everything in between, clamped to the server's allowed min/max.
+const METRES_PER_MILE = 1609.344;
+const UNITS = {
+  mi: { label: 'miles', abbr: 'mi', factor: METRES_PER_MILE, dp: 2, step: 0.05, presets: [0.25, 0.5, 1, 2, 3] },
+  km: { label: 'km', abbr: 'km', factor: 1000, dp: 1, step: 0.1, presets: [0.5, 1, 2, 3, 5] },
+};
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const fmtRadius = (m, unit) => `${(m / UNITS[unit].factor).toFixed(UNITS[unit].dp)} ${UNITS[unit].abbr}`;
 const CAT_LABEL = { ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
 
 // Neighbourhood Insights (paid add-on). Aggregate ONS Census 2021 area profile around the shop, grounded in
@@ -17,9 +26,12 @@ export default function NeighbourhoodInsightsView({ onBack }) {
   const [status, setStatus] = useState(null);
   const [preview, setPreview] = useState(null);
   const [postcode, setPostcode] = useState('');
+  const [unit, setUnit] = useState('mi');
   const [radiusM, setRadiusM] = useState(1000);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  const bounds = (status && status.radiusBounds) || { min: 250, max: 5000 };
 
   useEffect(() => {
     let live = true;
@@ -32,19 +44,29 @@ export default function NeighbourhoodInsightsView({ onBack }) {
     return () => { live = false; };
   }, []);
 
-  async function build() {
-    if (!postcode.trim()) { toast.error('Enter your shop postcode'); return; }
-    setBusy(true); setResult(null);
+  async function build({ silent = false } = {}) {
+    if (!postcode.trim()) { if (!silent) toast.error('Enter your shop postcode'); return; }
+    setBusy(true);
+    if (!silent) setResult(null); // silent (radius-change) rebuilds keep the current map/figures until the new ones land
     try {
       const out = await getProfile({ postcode: postcode.trim(), radiusM });
       setResult(out);
     } catch (e) {
       if (e.status === 402) toast.error(e.message || 'Subscription required');
-      else toast.error(e.message || 'Couldn’t build the profile');
+      else if (!silent) toast.error(e.message || 'Couldn’t build the profile');
     } finally { setBusy(false); }
   }
 
   const entitled = status && status.entitled;
+
+  // Once a profile has been built, moving the radius re-fetches (debounced) so the map circle AND the figures
+  // update together. Before the first build it just sets the selected radius.
+  useEffect(() => {
+    if (!entitled || !result || !result.location || !postcode.trim()) return undefined;
+    const id = setTimeout(() => { build({ silent: true }); }, 450);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [radiusM]);
 
   return (
     <div>
@@ -76,16 +98,42 @@ export default function NeighbourhoodInsightsView({ onBack }) {
               <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Your shop postcode</label>
                 <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="e.g. E1 6AN" aria-label="Shop postcode" className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm uppercase focus:border-primary focus:outline-none" />
-                <label className="mb-1 block text-xs font-semibold text-gray-700">Radius</label>
-                <div className="mb-3 flex gap-2">
-                  {RADII.map((r) => (
-                    <button key={r.m} type="button" onClick={() => setRadiusM(r.m)} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold active:scale-95 ${radiusM === r.m ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}>{r.label}</button>
-                  ))}
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-gray-700">Radius — {fmtRadius(radiusM, unit)}</label>
+                  <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-[11px] font-semibold">
+                    {Object.keys(UNITS).map((u) => (
+                      <button key={u} type="button" onClick={() => setUnit(u)} className={`px-2.5 py-1 ${unit === u ? 'bg-primary text-white' : 'bg-white text-gray-600'}`}>{UNITS[u].abbr}</button>
+                    ))}
+                  </div>
                 </div>
-                <button type="button" disabled={busy} onClick={build} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50">
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />} Build area profile
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {UNITS[unit].presets.map((p) => {
+                    const m = Math.round(clamp(p * UNITS[unit].factor, bounds.min, bounds.max));
+                    const active = Math.abs(m - radiusM) < 1;
+                    return (
+                      <button key={p} type="button" onClick={() => setRadiusM(m)} className={`rounded-xl border px-3 py-1.5 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}>{p} {UNITS[unit].abbr}</button>
+                    );
+                  })}
+                </div>
+                <input
+                  type="range" min={bounds.min} max={bounds.max} step={Math.round(UNITS[unit].step * UNITS[unit].factor)}
+                  value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))}
+                  aria-label={`Radius in ${UNITS[unit].label}`} className="mb-1 w-full accent-primary"
+                />
+                <div className="mb-3 flex justify-between text-[10px] text-gray-400"><span>{fmtRadius(bounds.min, unit)}</span><span>{fmtRadius(bounds.max, unit)}</span></div>
+                <button type="button" disabled={busy} onClick={() => build()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50">
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />} {result ? 'Update area profile' : 'Build area profile'}
                 </button>
               </div>
+
+              {/* Catchment map — shows the circle around the shop as soon as the postcode resolves (even before
+                  census figures are configured, since the location comes back either way). Online-only. */}
+              {result && result.location && result.location.point && (
+                <div className="mb-4">
+                  <RadiusMap point={result.location.point} radiusM={radiusM} />
+                  <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The circle is {fmtRadius(radiusM, unit)} around your shop; figures below cover whole census areas whose centre falls inside it.</p>
+                </div>
+              )}
 
               {result && <ProfileResult result={result} />}
 

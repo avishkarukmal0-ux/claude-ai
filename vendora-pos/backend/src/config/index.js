@@ -81,8 +81,21 @@ module.exports = {
     dataProvider: process.env.INSIGHTS_DATA_PROVIDER || null,
     billingProvider: process.env.INSIGHTS_BILLING_PROVIDER || null,
     locationProvider: process.env.INSIGHTS_LOCATION_PROVIDER || 'postcodes_io',
-    // Supported radii (metres) and the verified coverage — England & Wales only (ONS Census 2021).
+    // Suggested radius presets (metres) PLUS an allowed min/max so the owner can pick any radius in between
+    // (the map's km/mile control). The centroid-in-radius engine's maxOutputAreas cap still bounds the work in
+    // dense areas. Keep presets within [minRadiusM, maxRadiusM].
     radii: [500, 1000, 3000],
+    minRadiusM: parseInt(process.env.INSIGHTS_MIN_RADIUS_M, 10) || 250,
+    maxRadiusM: parseInt(process.env.INSIGHTS_MAX_RADIUS_M, 10) || 5000, // ~3.1 miles; larger risks the OA cap
+    // Map tiles for the radius view. Proxied through OUR backend (/api/pwa-insights/tiles) so the browser never
+    // calls the tile host directly — no CSP change, and the OSM User-Agent/caching policy is honoured server-side.
+    tiles: {
+      urlTemplate: process.env.INSIGHTS_TILES_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      userAgent: process.env.INSIGHTS_TILES_UA || process.env.ONS_USER_AGENT || 'vendora-pos/1.0 (map tiles; neighbourhood insights)',
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: parseInt(process.env.INSIGHTS_TILES_MAXZOOM, 10) || 19,
+      timeoutMs: parseInt(process.env.INSIGHTS_TILES_TIMEOUT_MS, 10) || 8000,
+    },
     coverage: 'England and Wales',
     dataSource: 'ONS Census 2021',
     referenceYear: 2021,

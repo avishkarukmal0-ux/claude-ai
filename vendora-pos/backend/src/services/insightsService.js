@@ -44,8 +44,10 @@ function dataProvider() {
   catch { return null; }
 }
 
-/** Supported radii (metres). */
+/** Suggested radius presets (metres). */
 function radii() { return config.neighbourhoodInsights.radii; }
+/** Allowed radius range (metres) — the owner may pick ANY radius in [min, max], not just a preset. */
+function radiusBounds() { return { min: config.neighbourhoodInsights.minRadiusM, max: config.neighbourhoodInsights.maxRadiusM }; }
 
 /** Public status — safe to show before purchase; carries coverage + what's configured (no entitlement needed). */
 function status() {
@@ -58,6 +60,7 @@ function status() {
     referenceYear: config.neighbourhoodInsights.referenceYear,
     licence: config.neighbourhoodInsights.licence,
     radii: radii(),
+    radiusBounds: radiusBounds(),
   };
 }
 
@@ -87,8 +90,11 @@ function preview() {
  * @returns {{ ok, supported?, configured?, location?, profile?, preview?, reason? , ...meta }}
  */
 async function buildProfile({ postcode, radiusM }) {
-  const r = Number(radiusM);
-  if (!radii().includes(r)) return { ok: false, reason: `Choose a supported radius: ${radii().join(', ')} metres.` };
+  const r = Math.round(Number(radiusM));
+  const { min, max } = radiusBounds();
+  if (!Number.isFinite(r) || r < min || r > max) {
+    return { ok: false, reason: `Choose a radius between ${min} and ${max} metres.` };
+  }
 
   const location = await loc.resolvePostcode(postcode);
   if (!location.ok) return { ok: false, reason: location.reason };
@@ -112,4 +118,4 @@ async function buildProfile({ postcode, radiusM }) {
   return { ok: true, supported: true, configured: true, location: locOut, profile };
 }
 
-module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, preview, buildProfile, radii, CATEGORIES };
+module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, preview, buildProfile, radii, radiusBounds, CATEGORIES };

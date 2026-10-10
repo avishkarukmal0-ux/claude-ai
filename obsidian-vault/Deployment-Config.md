@@ -636,3 +636,33 @@ shows **all** bands with **no cap/toggle**, copies the array before sorting (nev
 back to the given order if any label can't be parsed. All other breakdowns (qualifications, economic activity)
 are unchanged: value-sorted, 8-row cap + "Show all N". Frontend-only; backend/parser/cache untouched. FE 376/376
 (incl. 5 new `NeighbourhoodAreaCard` tests) + build green.
+
+### Neighbourhood Insights — catchment MAP + adjustable radius (2026-10-10, PAID view)
+Added an OpenStreetMap street map with a radius circle around the shop to the entitlement-gated Insights view
+(`NeighbourhoodInsightsView`), with a km↔mile toggle, presets, and a slider for any radius in
+`[INSIGHTS_MIN_RADIUS_M, INSIGHTS_MAX_RADIUS_M]`. The map + in-radius figures update together. Reuses the existing
+centroid-in-radius engine; the free "Your area" card is unchanged. **Online-only** (no tile caching).
+
+**Map tiles are proxied through the backend** — `GET /api/pwa-insights/tiles/:z/:x/:y.png` (owner/manager) fetches
+from the OSM host server-side with a proper User-Agent + a 1-day cache header. The browser only ever calls our own
+API, so **no CSP change is needed** in `frontend/vercel.json` or the backend helmet config. The Leaflet layer
+fetches each tile WITH the PWA bearer header and renders a blob URL (covered by the existing `img-src blob:`;
+the fetch host is the already-allowed Render API in `connect-src`).
+
+**New env (all optional; sensible defaults):**
+```
+INSIGHTS_MIN_RADIUS_M=250            # smallest selectable radius (m)
+INSIGHTS_MAX_RADIUS_M=5000           # largest (~3.1 mi); bounded also by INSIGHTS_MAX_OA (2000) in dense areas
+INSIGHTS_TILES_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+INSIGHTS_TILES_UA=<User-Agent for tile fetches>   # falls back to ONS_USER_AGENT
+INSIGHTS_TILES_MAXZOOM=19
+INSIGHTS_TILES_TIMEOUT_MS=8000
+```
+If you point `INSIGHTS_TILES_URL` at a provider that needs an API key or forbids proxying, swap the host and set a
+UA its policy allows (OSM's tile usage policy requires a valid UA + light use — fine for occasional per-shop views).
+
+**Data dependency:** the circle draws from the resolved postcode's lat/lng, so it shows even before census data is
+set up. The **figures inside** the circle still require the OA-centroid file (`INSIGHTS_CENTROIDS_PATH`) +
+`INSIGHTS_DATA_PROVIDER=nomis` — unset → the map shows but figures honestly say "not configured" (never faked).
+Verified offline: BE `insightsService`+`insightsTiles` 22/22, app loads; FE 376/376 + build. Live tiles + live
+`/profile` figures are owner-verified (needs entitlement + centroids + deployed backend).
