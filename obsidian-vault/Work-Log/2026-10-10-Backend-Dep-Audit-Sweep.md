@@ -28,9 +28,16 @@ Render build log flagged 18 prod-dep vulnerabilities (1 low, 8 moderate, 8 high,
   bumps. **Not fully verified yet:** those DB-backed suites + a live Render boot are owner-run.
 - Frontend untouched (backend-only lockfile change).
 
-## Remaining (breaking — NOT done; need review + tests, owner approval)
-- **`nodemailer` 6.9.8 → 10.x (HIGH)** — the SMTP sender (Brevo). Major jump across v7–v10 with API changes;
-  can't live-test email from the sandbox, so pending a tested branch + owner send check.
+## Step 2 done — nodemailer 6.9.8 → 10.1.0 (HIGH cleared)
+All three callers (`emailService`, `digitalReceiptService`, `alertService`) use only the **stable core API**
+(`createTransport({ host, port, auth })` + `sendMail({ from, to, subject, html/text })`) — no removed/legacy calls
+(`.verify`, `createTestAccount`, `getTestMessageUrl`), and Node 22 satisfies v10's engine, so the major bump is
+API-compatible for our usage. `package.json` nodemailer → `^10.1.0`. Verified: app loads; the three services
+require OK; `createTransport(...).sendMail` smoke passes; `pwaNotify.test.js` **11/11**. **Not fully verified
+yet:** a real SMTP send (no egress / `SENDGRID_API_KEY` in the sandbox) — owner confirms one live digest/receipt
+email after redeploy. Audit now: **4 moderate** remaining, 0 high/critical.
+
+## Remaining (breaking moderate — NOT done; need review + tests, owner approval)
 - **`csv-parse` 5 → 7 (moderate)** — used by the IMD import + sales import; API change.
 - **`uuid` 9 → 14 / `node-cron` 3 → 4 (moderate)** — API changes.
 - **`qs`** moderate advisory still shows via a held parent path even after the sweep.
