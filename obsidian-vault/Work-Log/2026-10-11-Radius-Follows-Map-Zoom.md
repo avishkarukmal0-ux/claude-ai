@@ -54,7 +54,16 @@ the shop and the figures re-sum for that area.
 ## Commit(s)
 - `feat(insights): manual mode — radius (and figures) follow the map zoom on the Your area card`
 
+## Update — same toggle added to the paid Insights view
+`NeighbourhoodInsightsView.jsx` now also passes `mode/setMode` + `followView/onViewRadius` through. Differences from the free
+card, because the paid flow builds on demand:
+- **Defaults to `'slider'`** (not `'map'`), because the map only renders *after* "Build area profile" — a "zoom the map"
+  hint with no map would be confusing. If you pick **Map zoom** before building, a small amber note says "Build the area
+  profile first — then zoom the map below."
+- `onViewRadius` clamps to the **status-provided** `radiusBounds` (not the hard-coded free-card bounds) and quantises to 50 m.
+- The existing debounced (450 ms) silent rebuild on `radiusM` change does the re-sum — so zooming rebuilds the profile just
+  like dragging the slider already did (no new fetch path; the server's per-radius day cache keeps repeats cheap).
+FE suite still **390/390** + build green.
+
 ## Follow-ups
-- [ ] Optional: offer the same **Map zoom** toggle on the paid Insights view (props are already in place — just pass
-      `mode/setMode` + `followView/onViewRadius` there too).
 - [ ] Carry-over: remove/flag-gate the grey `radius:` diagnostic line once the figures are confirmed working live.

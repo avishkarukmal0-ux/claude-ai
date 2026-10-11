@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, MapPin, Users, Home, Info, AlertTriangle, Lock, Loader2, BarChart3, Globe2,
@@ -8,7 +8,7 @@ import TrialsPanel from './TrialsPanel';
 import NeighbourhoodAreaCard from './NeighbourhoodAreaCard';
 import RadiusMap from './RadiusMap';
 import RadiusControl from './RadiusControl';
-import { fmtRadius } from '../../lib/radiusUnits';
+import { fmtRadius, clamp } from '../../lib/radiusUnits';
 
 const CAT_LABEL = { ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
 
@@ -21,10 +21,19 @@ export default function NeighbourhoodInsightsView({ onBack }) {
   const [postcode, setPostcode] = useState('');
   const [unit, setUnit] = useState('mi');
   const [radiusM, setRadiusM] = useState(1000);
+  const [radiusMode, setRadiusMode] = useState('slider'); // 'slider' | 'map' — map: radius follows the map zoom
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const bounds = (status && status.radiusBounds) || { min: 250, max: 5000 };
+
+  // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Quantise to 50 m so tiny
+  // zoom/pan jitter maps to the same radius (the debounced rebuild below + the server's per-radius cache then make
+  // it cheap), clamp to the allowed bounds, and skip no-ops so we only rebuild when the radius actually moves.
+  const onViewRadius = useCallback((m) => {
+    const q = clamp(Math.round(m / 50) * 50, bounds.min, bounds.max);
+    setRadiusM((prev) => (q !== prev ? q : prev));
+  }, [bounds.min, bounds.max]);
 
   useEffect(() => {
     let live = true;
@@ -92,7 +101,10 @@ export default function NeighbourhoodInsightsView({ onBack }) {
                 <label className="mb-1 block text-xs font-semibold text-gray-700">Your shop postcode</label>
                 <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="e.g. E1 6AN" aria-label="Shop postcode" className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm uppercase focus:border-primary focus:outline-none" />
                 <div className="mb-3">
-                  <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={bounds} />
+                  <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={bounds} mode={radiusMode} setMode={setRadiusMode} />
+                  {radiusMode === 'map' && !(result && result.location && result.location.point) && (
+                    <p className="mt-1 text-[11px] text-amber-700">Build the area profile first — then zoom the map below to set your radius.</p>
+                  )}
                 </div>
                 <button type="button" disabled={busy} onClick={() => build()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50">
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />} {result ? 'Update area profile' : 'Build area profile'}
@@ -103,7 +115,7 @@ export default function NeighbourhoodInsightsView({ onBack }) {
                   census figures are configured, since the location comes back either way). Online-only. */}
               {result && result.location && result.location.point && (
                 <div className="mb-4">
-                  <RadiusMap point={result.location.point} radiusM={radiusM} />
+                  <RadiusMap point={result.location.point} radiusM={radiusM} followView={radiusMode === 'map'} onViewRadius={onViewRadius} />
                   <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The circle is {fmtRadius(radiusM, unit)} around your shop; figures below cover whole census areas whose centre falls inside it.</p>
                 </div>
               )}
