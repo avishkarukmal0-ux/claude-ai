@@ -137,7 +137,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
 
       <div className="mb-3 flex gap-2">
         <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="Shop postcode e.g. RM10 8AA" aria-label="Shop postcode" className="flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm uppercase focus:border-primary focus:outline-none" />
-        <button type="button" disabled={busy} onClick={load} className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white active:scale-95 disabled:opacity-50">
+        <button type="button" disabled={busy} onClick={() => load()} className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white active:scale-95 disabled:opacity-50">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {busy ? 'Loading…' : 'Get'}
         </button>
       </div>

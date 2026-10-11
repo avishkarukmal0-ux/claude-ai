@@ -167,14 +167,17 @@ describe('pwa-insights — entitlement enforced on the server', () => {
   dbTest('the REAL Stripe webhook (raw body, signed) grants access; a forged body is rejected', async () => {
     const a = await newOwner('Ins Stripe');
     const { payload, header } = stripeSigned(subUpdatedActiveWithAddon(a.id));
+    // Send the EXACT signed JSON string (not Buffer.from(...)) — superagent re-serialises a Buffer under a JSON
+    // content type, changing the bytes the signature was computed over and making verification fail spuriously
+    // (audit: test-transport defect, not a signing outage). express.raw() captures the string bytes verbatim.
     const ok = await request(app).post('/api/pwa-insights/billing/stripe/webhook')
-      .set('stripe-signature', header).set('Content-Type', 'application/json').send(Buffer.from(payload));
+      .set('stripe-signature', header).set('Content-Type', 'application/json').send(payload);
     expect(ok.status).toBe(200);
     const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
     expect(prof.status).toBe(200); // entitled via the signed webhook
 
     const forged = await request(app).post('/api/pwa-insights/billing/stripe/webhook')
-      .set('stripe-signature', header).set('Content-Type', 'application/json').send(Buffer.from(payload.replace('sub_itest', 'sub_HACK')));
+      .set('stripe-signature', header).set('Content-Type', 'application/json').send(payload.replace('sub_itest', 'sub_HACK'));
     expect(forged.status).toBe(400); // signature no longer matches the body
   });
 });

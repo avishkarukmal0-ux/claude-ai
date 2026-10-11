@@ -72,7 +72,7 @@ describe('pwa-neighbourhood — real area figure, cached, with provenance', () =
     expect(pop.value).toBe(1500);
     expect(pop.source).toBe('Nomis');
     expect(pop.datasetId).toBe('NM_test_1');
-    expect(pop.referenceDate).toBe('Census 2021');
+    expect(pop.referenceDate).toBe('Census 2021 (21 Mar 2021)'); // documented provenance format from the figure catalog
     expect(pop.geographyCode).toBe('E01000036');
     expect(res.body.attribution).toMatch(/Open Government Licence/);
     expect(res.body.freshness).toBe('fresh');
