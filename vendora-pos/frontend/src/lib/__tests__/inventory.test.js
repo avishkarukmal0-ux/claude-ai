@@ -1,8 +1,9 @@
 import React, { StrictMode } from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useInventory, margin, costKnown, normalisePackSize, matchBarcode, reconcileAllocations, markSold, worstExpiry } from '../inventoryStore';
 import { salesUnits, inferredDepletionUnits } from '../movementStore';
+import * as storageNs from '../storage';
 import { readJSON, writeJSON, setActiveWorkspace } from '../storage';
 
 const movements = () => readJSON('movements_v1', []);
@@ -180,5 +181,34 @@ describe('inventory — worstExpiry batch-aware (audit W3)', () => {
   });
   it('returns null when nothing is dated', () => {
     expect(worstExpiry({ qty: 5 }, now)).toBeNull();
+  });
+});
+
+describe('audit D3 — a failed stock write must not report success or log a movement', () => {
+  it('applyCounts returns ok:false on a failed persist (count session retained, no adjustment logged)', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    act(() => { id = result.current.addProduct({ name: 'Milk', cost: 1, price: 2, qty: 10 }).id; });
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockReturnValue({ ok: false, error: 'quota' });
+    let res;
+    act(() => { res = result.current.applyCounts([{ id, counted: 4 }]); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(readJSON('inventory_v1', []).find((p) => p.id === id).qty).toBe(10); // unchanged — not saved
+    expect(movements().filter((m) => m.type === 'stock_adjustment').length).toBe(0); // no phantom movement
+  });
+
+  it('wasteBatch returns ok:false on a failed persist (no waste movement, stock not reported binned)', () => {
+    const { result } = renderHook(() => useInventory());
+    let id; let batchId;
+    act(() => { id = result.current.addProduct({ name: 'Bread', cost: 0.5, price: 1, qty: 6 }).id; });
+    act(() => { batchId = result.current.addBatch(id, { qty: 4, expiry: '2099-01-01', dateType: 'use-by' }).batchId; });
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockReturnValue({ ok: false, error: 'quota' });
+    let res;
+    act(() => { res = result.current.wasteBatch({ id, batchId, qty: 2, opGroupId: 'wbD3' }); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(readJSON('inventory_v1', []).find((p) => p.id === id).qty).toBe(6); // unchanged
+    expect(movements().filter((m) => m.type === 'waste').length).toBe(0); // no phantom waste movement
   });
 });

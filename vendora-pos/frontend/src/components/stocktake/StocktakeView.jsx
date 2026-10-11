@@ -71,7 +71,11 @@ export default function StocktakeView({ onBack }) {
       expectedAt: session.expected?.[id],
       reason: session.reasons?.[id],
     }));
-    applyCounts(items);
+    // Audit D3: only finalise the count (save the summary, close the review, clear the session) if the stock
+    // write actually committed. On a failed save, keep the session open so the counts aren't lost and the owner
+    // can retry — never report "applied" when they weren't.
+    const res = applyCounts(items);
+    if (res && res.ok === false) { toast.error(res.error || 'Couldn’t save the counts — your count is kept, please try again.'); return; }
     saveSummary(summary, { name: session.name, startedAt: session.startedAt });
     setReviewing(false);
     const net = summary.netValue;

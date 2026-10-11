@@ -11,7 +11,7 @@
 //    log the movement. Nothing depends on a deferred React updater running.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, getActiveWorkspace } from './storage';
-import { recordMovement, reverseByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
+import { recordMovement, recordMany, reverseByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
 import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
 import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
 import { reassignProductRefs } from './productMerge';
@@ -550,7 +550,11 @@ export function useInventory() {
     // Audit D9: reconcile shelf/dated allocations after the decrement (like sellUnits/recordWaste) so shelfQty
     // can't exceed the new total — otherwise shelf/back-room views assert impossible stock.
     const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: Math.max(0, (Number(x.qty) || 0) - applied), batches: newBatches, updatedAt: Date.now() }) : x));
-    persist(next);
+    // Audit D3: don't report success or log a waste movement unless the stock write actually committed. On a
+    // failed persist, return the error so the caller keeps the markdown/waste session open to retry (no phantom
+    // waste movement, no stock drop reported that didn't save).
+    const saved = persist(next);
+    if (!saved.ok) return { ok: false, error: saved.error || 'Couldn’t save on this device' };
     setProducts(next);
     recordMovement({
       productId: id, type: MOVEMENT_TYPES.WASTE, delta: -applied,
@@ -745,24 +749,32 @@ export function useInventory() {
       applied += units;
     }
 
-    // Audit D1: do NOT record the goods-received ledger or report success unless the stock write actually
-    // committed. If persist fails (quota with no IndexedDB, etc.), return the failure so the caller does not
-    // mark the delivery received — and since no operationId movement is written, the owner can retry cleanly.
-    // (overflow is still ok:true — IndexedDB holds it durably.)
+    // Do NOT report success unless the stock write committed. If persist fails (quota with no IndexedDB, etc.),
+    // return the failure so the caller doesn't mark the delivery received — and since no operationId movement is
+    // written, the owner can retry cleanly. (Overflow is still ok:true — IndexedDB holds it durably.)
     const saved = persist(next);
     if (!saved.ok) return { ok: false, applied: 0, error: saved.error || 'Couldn’t save received stock — please retry.' };
-    setProducts(next);
-    for (const r of toLog) {
-      recordMovement({
-        productId: r.id,
-        type: MOVEMENT_TYPES.GOODS_RECEIVED,
-        delta: r.units,
-        valuation: r.cost != null ? r.cost * r.units : undefined,
-        unit: 'unit',
-        reason: `Delivery ${delivery.reference || ''}`.trim(),
-        operationId: delivery.id,
-      });
+
+    // Audit D2: persist stock AND the durable operation identity TOGETHER. The operationId (the idempotency
+    // guard) lives on the goods-received movements, so write them ALL in one atomic persist (recordMany). If that
+    // fails AFTER the stock write, roll the stock back to `prev` so there's no half-applied state — a retry then
+    // finds hasOperation() false AND the original stock, so it applies exactly once (never double-counts, never
+    // loses the delivery). Previously the movements were written per-line without checking the result, so a
+    // failed operationId write left stock incremented but unguarded → a retry double-counted.
+    const logged = recordMany(toLog.map((r) => ({
+      productId: r.id,
+      type: MOVEMENT_TYPES.GOODS_RECEIVED,
+      delta: r.units,
+      valuation: r.cost != null ? r.cost * r.units : undefined,
+      unit: 'unit',
+      reason: `Delivery ${delivery.reference || ''}`.trim(),
+      operationId: delivery.id,
+    })));
+    if (!logged.ok) {
+      persist(prev); setProducts(prev); // revert the stock so the retry is clean
+      return { ok: false, applied: 0, error: 'Couldn’t save the delivery record — please retry.' };
     }
+    setProducts(next);
     // Queue price-change alerts (retail is never auto-changed — owner approves in the queue).
     for (const c of costChanges) recordCostChange(c);
     return { ok: true, applied };
@@ -795,7 +807,11 @@ export function useInventory() {
       const updated = { ...p, qty: newQty, countedAt: now, updatedAt: now };
       return appliedDelta < 0 ? reconcileAllocations(updated) : updated;
     });
-    persist(next);
+    // Audit D3: don't report a completed count unless the stock write committed. On a failed persist, return
+    // ok:false so the caller keeps the count session open to retry (never claims the counts were applied when
+    // they weren't, and never logs stock_adjustment movements for a change that didn't save).
+    const saved = persist(next);
+    if (!saved.ok) return { ok: false, error: saved.error || 'Couldn’t save the counts on this device', applied: 0, changes: [] };
     setProducts(next);
     for (const c of changes) {
       recordMovement({
@@ -803,7 +819,7 @@ export function useInventory() {
         reason: c.reason ? `stocktake: ${c.reason}` : 'stocktake',
       });
     }
-    return { applied: changes.length, changes };
+    return { ok: true, applied: changes.length, changes };
   }, []);
 
   /** Start tracking a shelf/back split for a product (units currently on the shop floor). */

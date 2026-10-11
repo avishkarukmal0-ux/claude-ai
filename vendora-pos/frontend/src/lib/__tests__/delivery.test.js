@@ -1,10 +1,11 @@
 import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import {
   toUnits, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, packSize, deliveryTotals, blankLine,
 } from '../deliveryStore';
 import { useInventory } from '../inventoryStore';
+import * as movementStore from '../movementStore';
 import { readJSON, setActiveWorkspace } from '../storage';
 
 const movements = () => readJSON('movements_v1', []);
@@ -57,6 +58,30 @@ describe('delivery — applying to stock', () => {
     expect(dup.ok).toBe(false);
     expect(dup.duplicate).toBe(true);
     expect(result.current.products.find((x) => x.barcode === '222').qty).toBe(10); // not 20
+  });
+
+  it('D2: a failed movement/op-identity write rolls the stock back, so a retry applies exactly once', () => {
+    const { result } = renderHook(() => useInventory());
+    const first = { id: 'op-D2a', lines: [blankLine({ barcode: '900', name: 'Water', qtyMode: 'units', deliveredQty: 10, unitCost: 0.3 })] };
+    act(() => { result.current.applyDelivery(first); });
+    expect(result.current.products.find((x) => x.barcode === '900').qty).toBe(10);
+
+    // Simulate the op-identity (movement) write failing AFTER the stock write.
+    const spy = vi.spyOn(movementStore, 'recordMany').mockReturnValue({ ok: false, written: 0 });
+    const second = { id: 'op-D2b', lines: [blankLine({ barcode: '900', name: 'Water', qtyMode: 'units', deliveredQty: 5, unitCost: 0.3 })] };
+    let failed;
+    act(() => { failed = result.current.applyDelivery(second); });
+    expect(failed.ok).toBe(false);
+    expect(result.current.products.find((x) => x.barcode === '900').qty).toBe(10); // rolled back — NOT 15
+    spy.mockRestore();
+
+    // Retry now succeeds and applies exactly once (no double count from the earlier half-attempt).
+    act(() => { result.current.applyDelivery(second); });
+    expect(result.current.products.find((x) => x.barcode === '900').qty).toBe(15);
+    let dup;
+    act(() => { dup = result.current.applyDelivery(second); });
+    expect(dup.duplicate).toBe(true);
+    expect(result.current.products.find((x) => x.barcode === '900').qty).toBe(15); // still 15, not 20
   });
 
   it('partial acceptance only adds accepted units', () => {
