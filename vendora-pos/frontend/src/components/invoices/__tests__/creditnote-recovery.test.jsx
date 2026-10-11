@@ -58,6 +58,29 @@ describe('CreditNoteRecoveryView — guided reconciliation (round-6 polish)', ()
     expect(hasRecovery('creditnote:cn1')).toBe(false);
   });
 
+  it('L-D1: repairing one row does NOT rewrite an already-correct credit’s receipt date', () => {
+    const OLD_TS = 1789473600000; // a genuine earlier-month receipt date
+    writeJSON('credit_notes_v1', [{
+      id: 'cnD1', supplierName: 'Bestway', reference: 'CR-9', amount: 10, date: Date.now(),
+      allocations: [{ claimId: 'clA', amount: 5 }, { claimId: 'clB', amount: 5 }],
+    }]);
+    writeJSON('claims_v1', [
+      { id: 'clA', supplierName: 'Bestway', status: 'approved', approvedAmount: 5, receivedAmount: null, credits: [], history: [] }, // mismatched → needs repair
+      { id: 'clB', supplierName: 'Bestway', status: 'approved', approvedAmount: 5, receivedAmount: 5, credits: [{ id: 'cr-old', creditNoteId: 'cnD1', amount: 5, at: OLD_TS }], history: [] }, // already correct
+    ]);
+    recordRecovery('creditnote:cnD1', { kind: 'creditnote' });
+
+    const { getByText } = render(<CreditNoteRecoveryView onBack={() => {}} />);
+    fireEvent.click(getByText(/Reconcile this credit note/));
+
+    const clA = readJSON('claims_v1', []).find((c) => c.id === 'clA');
+    const clB = readJSON('claims_v1', []).find((c) => c.id === 'clB');
+    expect((clA.credits || []).some((cr) => cr.creditNoteId === 'cnD1' && cr.amount === 5)).toBe(true); // mismatch repaired
+    const clBcredit = (clB.credits || []).find((cr) => cr.creditNoteId === 'cnD1');
+    expect(clBcredit.at).toBe(OLD_TS); // the correct credit's receipt date is UNCHANGED (not moved to "now")
+    expect(hasRecovery('creditnote:cnD1')).toBe(false); // both sides consistent → flag cleared
+  });
+
   it('keeps the note locked when a corrective write fails (never a silent clear)', () => {
     seedSplit();
     const { getByText } = render(<CreditNoteRecoveryView onBack={() => {}} />);

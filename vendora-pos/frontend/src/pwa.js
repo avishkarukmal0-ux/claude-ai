@@ -48,24 +48,33 @@ function promptRefresh(waitingWorker) {
   );
 }
 
+// Pure decision for a `controllerchange` event (audit L-F1) — exported for tests.
+//   consented  → THIS tab tapped Refresh: reload once, even if its controller first arrived this session.
+//   !controlled → first control (no prior worker): warm the cache, don't reload.
+//   controlled, no consent → another tab's update: leave this (possibly mid-form) page alone.
+export function decideControllerChange({ controlled, consented }) {
+  if (consented) return { reload: true, warm: false };
+  if (!controlled) return { reload: false, warm: true };
+  return { reload: false, warm: false };
+}
+
 export function registerServiceWorker() {
   if (!import.meta.env.PROD) return;
   if (!('serviceWorker' in navigator)) return;
 
-  // Whether an app was already controlling this page when it loaded. On the very first install the
-  // worker claims the page (controllerchange fires) but there is nothing to swap — so we must only
-  // reload on controllerchange when this is a genuine UPDATE, not first control.
-  const hadController = !!navigator.serviceWorker.controller;
+  // Whether an app is controlling this page. On the very first install the worker claims the page
+  // (controllerchange fires) but there is nothing to swap — so first control only warms the cache, it does
+  // not reload. This is MUTABLE: once the first worker takes control, a LATER controllerchange in the same tab
+  // is a genuine update (audit L-F1 — it used to stay false forever, so an update accepted in a first-visit
+  // tab warmed instead of reloading and the Refresh button did nothing until a manual reload).
+  let controlled = !!navigator.serviceWorker.controller;
 
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // FE7: on first install the worker now controls the page — warm its cache with this page's assets so an
-    // immediate offline reopen has them (registration-time warming ran before any controller existed).
-    if (!hadController) { warmAssets(navigator.serviceWorker.controller); return; }
-    // FE6: only reload if THIS tab accepted the update. A Refresh in another tab must not reload this one.
-    if (refreshing || !_userAskedRefresh) return;
-    refreshing = true;
-    window.location.reload();
+    const d = decideControllerChange({ controlled, consented: _userAskedRefresh });
+    controlled = true; // after any control, a later change is a genuine update (L-F1)
+    if (d.reload) { if (!refreshing) { refreshing = true; window.location.reload(); } return; }
+    if (d.warm) warmAssets(navigator.serviceWorker.controller); // FE7: first-install offline warm
   });
 
   // Audit FE9: registration must not depend ONLY on a future `load` event. boot() can await IndexedDB

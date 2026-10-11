@@ -116,9 +116,19 @@ export function useOrders() {
 
   const removeOrder = useCallback((id) => { persistAll(load().filter((o) => o.id !== id)); }, []);
 
-  /** Record receipts against an order (from a delivery). receipts: [{productId?,barcode?,qty}]. */
-  const receiveAgainst = useCallback((id, receipts) => {
-    const next = load().map((o) => {
+  /** Record receipts against an order (from a delivery). receipts: [{productId?,barcode?,qty}].
+   *  Audit L-D2 (launch): RETURNS a checked `{ ok }` so the delivery caller knows whether the order actually
+   *  updated (it used to persist blindly and the caller marked the delivery received even on a failed order
+   *  write, leaving the order at receivedQty 0 with no repair on retry). Also IDEMPOTENT by delivery id
+   *  (`opId`): the receipts are consumed and recorded once per delivery, so re-running on a retry neither
+   *  double-counts nor is lost. @returns {{ ok, duplicate?, error? }} */
+  const receiveAgainst = useCallback((id, receipts, opId = null) => {
+    const cur = load();
+    const target = cur.find((o) => o.id === id);
+    if (!target) return { ok: false, error: 'Order not found' };
+    // Already recorded this delivery against this order → safe no-op (lets a retry finish other steps).
+    if (opId && Array.isArray(target.appliedDeliveries) && target.appliedDeliveries.includes(opId)) return { ok: true, duplicate: true };
+    const next = cur.map((o) => {
       if (o.id !== id) return o;
       // Audit D5: a receipt's qty is CONSUMED across matching lines, not applied to every matching row — otherwise
       // two duplicate order rows (same product) would each absorb the SAME receipt and double-count it. Track the
@@ -144,10 +154,18 @@ export function useOrders() {
         return { ...l, receivedQty: qty };
       });
       const updated = { ...o, lines, updatedAt: Date.now() };
+      if (opId) updated.appliedDeliveries = [...(o.appliedDeliveries || []), opId];
       const st = statusFor(updated);
       return { ...updated, status: st, receivedAt: st === 'received' ? Date.now() : o.receivedAt };
     });
-    persistAll(next);
+    // Check the write committed before reporting success (L-D2): a failed order write must not read as done.
+    const res = persist(next);
+    if (res && res.ok) {
+      setOrders(next);
+      try { window.dispatchEvent(new CustomEvent('vendora:orders')); } catch { /* ignore */ }
+      return { ok: true };
+    }
+    return { ok: false, error: (res && res.error) || 'Couldn’t update the order' };
   }, []);
 
   /** Force-complete an order (mark everything received). */

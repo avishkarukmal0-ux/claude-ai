@@ -121,12 +121,22 @@ export default function DeliveryReceivingView() {
         // duplicate: stock is already in from a prior attempt — fall through to finish the document.
       } else {
         applied = res.applied;
-        // Record accepted units against a fulfilled order as part of the fresh apply (once).
-        if (draft.orderId) {
-          const receipts = (draft.lines || [])
-            .map((l) => ({ productId: l.productId, barcode: l.barcode, qty: acceptedUnits(l) }))
-            .filter((r) => r.qty > 0);
-          if (receipts.length) receiveAgainst(draft.orderId, receipts);
+      }
+    }
+
+    // Record accepted units against a fulfilled order. L-D2 (launch): run this on EVERY attempt (not only the
+    // fresh apply) — it's idempotent by delivery id, so a retry after a failed order write finishes the order
+    // fulfilment without double-counting. Check the result; a failed order write must not read as a completed
+    // receipt, so report pending and leave the delivery a draft for a clean retry.
+    if (draft.orderId) {
+      const receipts = (draft.lines || [])
+        .map((l) => ({ productId: l.productId, barcode: l.barcode, qty: acceptedUnits(l) }))
+        .filter((r) => r.qty > 0);
+      if (receipts.length) {
+        const r = receiveAgainst(draft.orderId, receipts, draft.id);
+        if (r && r.ok === false) {
+          toast.error('Stock is in — but updating the order didn’t save. Tap Receive again to finish (nothing is counted twice).', { duration: 10000 });
+          return;
         }
       }
     }

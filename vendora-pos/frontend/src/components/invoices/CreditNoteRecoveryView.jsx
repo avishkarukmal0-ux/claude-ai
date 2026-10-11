@@ -37,6 +37,10 @@ export default function CreditNoteRecoveryView({ onBack }) {
       const { rows } = creditNoteReconciliation(note, claims);
       let allOk = true;
       for (const row of rows) {
+        // L-D1 (launch audit): only CORRECT mismatched rows. Re-applying an already-consistent credit would
+        // rewrite its receipt date to now via applyCredit — moving money that was genuinely received in an
+        // earlier month into the current one in period reports. Leave correct credits exactly as they are.
+        if (row.consistent) continue;
         const claimExists = claims.some((c) => c.id === row.claimId);
         if (row.allocated > 0 && claimExists) {
           // Note is the source of truth → set the claim credit to match its allocation (idempotent).
