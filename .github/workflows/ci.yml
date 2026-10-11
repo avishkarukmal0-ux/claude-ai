@@ -66,11 +66,19 @@ jobs:
       - run: npm ci
       - name: App boots
         run: node -e "require('./src/app.js'); console.log('app loads OK')"
-      - name: Unit + pure tests (DB-gated suites self-skip without a URI)
-        run: npm test
-      - name: DB-backed integration — PWA auth + sync (throwaway Mongo)
+      - name: Unit + pure tests (DB-only suites excluded; run in the DB-backed step)
+        # The setup.js-based suites (auth, cashDrawer, lossPrevention, products, sales, refundVoid)
+        # need a real DB and would error here without one — they run in the DB-backed step below.
+        # The URI-gated pwa* integration suites stay in this list but self-skip without a URI.
+        run: >-
+          npx jest --forceExit --detectOpenHandles
+          --testPathIgnorePatterns='/node_modules/'
+          --testPathIgnorePatterns='(auth|cashDrawer|lossPrevention|products|sales)\.test\.js$'
+          --testPathIgnorePatterns='refundVoid\.integration\.test\.js$'
+      - name: DB-backed integration — till suites + PWA auth/sync (throwaway Mongo)
         env:
           VENDORA_TEST_URI: mongodb://localhost:27017/vendora_test
         run: |
+          npx jest --forceExit --runInBand --testPathPatterns='(auth|cashDrawer|lossPrevention|products|sales)\.test\.js$|refundVoid\.integration\.test\.js$'
           npm run test:pwa-auth
           npm run test:pwa-sync
