@@ -13,6 +13,7 @@ const config = require('../config');
 const loc = require('./insightsLocation');
 const geo = require('./insightsGeo');
 const centroids = require('./insightsData/centroids');
+const imd = require('./imdService');
 
 // The categories we present, each mapped to its ONS Census 2021 bulk table. Used both for the real fetch
 // (when a provider is configured) and for the no-data PREVIEW (labels only, never invented values).
@@ -20,6 +21,8 @@ const CATEGORIES = [
   { key: 'countryOfBirth', label: 'Country of birth', table: 'TS004' },
   { key: 'ethnicGroup', label: 'Ethnic group', table: 'TS021' },
   { key: 'language', label: 'Main language (aged 3+)', table: 'TS024' },
+  { key: 'economicActivity', label: 'Economic activity', table: 'TS066' },
+  { key: 'qualifications', label: 'Qualifications', table: 'TS067' },
   { key: 'age', label: 'Age band', table: 'TS007A' },
   { key: 'householdComposition', label: 'Household composition', table: 'TS003' },
 ];
@@ -137,8 +140,56 @@ async function buildProfile({ postcode, radiusM, headlineOnly = false }) {
   catch { return { ok: true, supported: true, configured: false, location: locOut, preview: preview(), reason: 'The neighbourhood data provider is unavailable right now.', ...BASE_META() }; }
 
   const profile = geo.combineAreaProfile(areas, { radiusM: r, meta: BASE_META() });
+
+  // Deprivation (IMD) across the radius — a population-weighted AVERAGE of the LSOAs the radius OAs fall in (IMD
+  // is a per-LSOA rank, not a count, so it's averaged, never summed). Needs the OA→LSOA mapping carried on the
+  // centroids; if that mapping isn't imported, this is null and the UI keeps the shop's own-area figure. Only on
+  // the full profile (the headline free-card path skips it, like the other breakdowns).
+  if (!headlineOnly) {
+    try { const dep = await radiusDeprivation(areas); if (dep) profile.deprivation = dep; } catch { /* best-effort */ }
+  }
+
   const diag = (provider.lastDiag && provider.lastDiag()) || undefined; // testing aid: OAs that actually got data
   return { ok: true, supported: true, configured: true, location: locOut, profile, ...(diag ? { diag } : {}) };
 }
 
-module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, dataStatus, preview, buildProfile, radii, radiusBounds, CATEGORIES };
+/**
+ * Population-weighted average IMD across the radius. Maps each selected OA → its LSOA (via the centroids'
+ * optional `lsoa`), sums population per LSOA, looks up each LSOA's IMD, and averages weighted by population.
+ * Returns null when the OA→LSOA mapping isn't imported or no IMD is found (→ UI keeps the own-area figure).
+ * `imdLookup` is injectable for tests. Exported for unit testing.
+ */
+async function radiusDeprivation(areas, imdLookup = imd.getFigure) {
+  const all = (centroids.all && centroids.all()) || [];
+  if (!all.length) return null;
+  const oaToLsoa = new Map();
+  for (const c of all) { if (c && c.oa && c.lsoa) oaToLsoa.set(String(c.oa), String(c.lsoa)); }
+  if (!oaToLsoa.size) return null; // OA→LSOA mapping not imported → skip (honest: keep the shop's own-area figure)
+
+  const popByLsoa = new Map();
+  for (const a of (areas || [])) {
+    const lsoa = oaToLsoa.get(String(a.oa));
+    if (!lsoa) continue;
+    popByLsoa.set(lsoa, (popByLsoa.get(lsoa) || 0) + (Number(a.population) || 0));
+  }
+  if (!popByLsoa.size) return null;
+
+  const entries = [];
+  for (const [lsoa, population] of popByLsoa) {
+    try { const fig = await imdLookup(lsoa); if (fig && fig.decile != null) entries.push({ population, decile: fig.decile, score: fig.score }); }
+    catch { /* skip this LSOA */ }
+  }
+  const avg = geo.weightedDeprivation(entries);
+  if (!avg) return null;
+  return {
+    estimated: true,
+    kind: 'imd',
+    label: 'Deprivation (IMD 2025) — radius average',
+    method: 'population-weighted average of IMD 2025 across the LSOAs whose areas fall in the radius',
+    source: 'English indices of deprivation 2025 (Ministry of Housing, Communities & Local Government)',
+    referenceDate: 'IMD 2025 (30 Oct 2025)',
+    ...avg, // decile, score, lsoaCount
+  };
+}
+
+module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, dataStatus, preview, buildProfile, radiusDeprivation, radii, radiusBounds, CATEGORIES };

@@ -1,7 +1,7 @@
 'use strict';
 
 // Pure tests for the Neighbourhood Insights geographic + aggregation method — no network, no DB.
-const { haversineMeters, selectAreasInRadius, sumCounts, toRows, combineAreaProfile, MIN_CELL } = require('../services/insightsGeo');
+const { haversineMeters, selectAreasInRadius, sumCounts, toRows, combineAreaProfile, weightedDeprivation, MIN_CELL } = require('../services/insightsGeo');
 
 describe('insightsGeo.haversineMeters', () => {
   test('≈ known distance (Trafalgar Sq → Buckingham Palace ~1.0km)', () => {
@@ -76,5 +76,26 @@ describe('insightsGeo.combineAreaProfile', () => {
 describe('insightsGeo.sumCounts', () => {
   test('merges numeric maps, ignores non-numbers', () => {
     expect(sumCounts([{ a: 1, b: 2 }, { a: 3, c: 'x' }])).toEqual({ a: 4, b: 2 });
+  });
+});
+
+describe('insightsGeo.weightedDeprivation (radius IMD = population-weighted average, not a sum)', () => {
+  test('weights deciles + scores by population', () => {
+    // 1000 people in decile 2, 3000 in decile 6 → weighted decile = (1000*2+3000*6)/4000 = 5
+    const out = weightedDeprivation([
+      { population: 1000, decile: 2, score: 40 },
+      { population: 3000, decile: 6, score: 20 },
+    ]);
+    expect(out.decile).toBe(5);                 // round((2000+18000)/4000) = round(5) = 5
+    expect(out.score).toBe(25);                 // (40000+60000)/4000 = 25
+    expect(out.lsoaCount).toBe(2);
+  });
+
+  test('ignores zero-population / non-finite entries; null when nothing to average', () => {
+    expect(weightedDeprivation([{ population: 0, decile: 3 }, { population: 10, decile: NaN }])).toBeNull();
+    expect(weightedDeprivation([])).toBeNull();
+    const out = weightedDeprivation([{ population: 5, decile: 4 }]);
+    expect(out.decile).toBe(4);
+    expect(out.score).toBeNull(); // no score given
   });
 });

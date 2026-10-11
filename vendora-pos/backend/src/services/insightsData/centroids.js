@@ -71,23 +71,30 @@ function osgbToWgs84(E, N) {
   return { lat: latW * 180 / Math.PI, lng: Math.atan2(y2, x2) * 180 / Math.PI };
 }
 
+// Optional LSOA (2021) code on the row — enables the radius deprivation (IMD) average when present.
+function lsoaOf(row) {
+  const v = row.LSOA21CD || row.lsoa21cd || row.lsoa21 || row.LSOA21 || row.lsoa || row.LSOA || null;
+  return v ? String(v).trim() || null : null;
+}
+
 function parseLatLng(row) {
   const oa = row.OA21CD || row.oa21cd || row.oa || row.OA || row.code || null;
   if (!oa) return null;
+  const lsoa = lsoaOf(row);
   // 1) Explicit lat/long columns win.
   const lat = Number(row.lat ?? row.latitude ?? row.LAT ?? row.Latitude);
   const lng = Number(row.long ?? row.lng ?? row.longitude ?? row.LONG ?? row.Longitude);
   if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-    return { oa: String(oa), lat, lng };
+    return { oa: String(oa), lat, lng, lsoa };
   }
   // 2) Otherwise x/y: small values are already lat/long (x=lng, y=lat); large values are BNG eastings/northings.
   const x = Number(row.x ?? row.X ?? row.easting ?? row.EASTING ?? row.east ?? row.BNG_E);
   const y = Number(row.y ?? row.Y ?? row.northing ?? row.NORTHING ?? row.north ?? row.BNG_N);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return { oa: String(oa), lat: y, lng: x };
+  if (Math.abs(x) <= 180 && Math.abs(y) <= 90) return { oa: String(oa), lat: y, lng: x, lsoa };
   const c = osgbToWgs84(x, y);
   if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
-  return { oa: String(oa), lat: c.lat, lng: c.lng };
+  return { oa: String(oa), lat: c.lat, lng: c.lng, lsoa };
 }
 
 function parseCsvLine(line, headers) {
@@ -122,10 +129,10 @@ async function loadFromFile(path) {
 async function loadFromMongo() {
   if (!dbReady()) return { loaded: false, count: 0, reason: 'centroids: database not connected' };
   try {
-    const rows = await model().find({}, { _id: 0, oa: 1, lat: 1, lng: 1 }).lean();
+    const rows = await model().find({}, { _id: 0, oa: 1, lat: 1, lng: 1, lsoa: 1 }).lean();
     const list = rows
       .filter((r) => r && r.oa && Number.isFinite(r.lat) && Number.isFinite(r.lng))
-      .map((r) => ({ oa: String(r.oa), lat: r.lat, lng: r.lng }));
+      .map((r) => ({ oa: String(r.oa), lat: r.lat, lng: r.lng, lsoa: r.lsoa || null }));
     _cache = { list, loadedAt: Date.now(), count: list.length, source: 'mongo', path: null };
     return { loaded: list.length > 0, count: list.length, source: 'mongo', reason: list.length ? undefined : 'no centroids imported into MongoDB (run scripts/import-centroids.js)' };
   } catch (e) {

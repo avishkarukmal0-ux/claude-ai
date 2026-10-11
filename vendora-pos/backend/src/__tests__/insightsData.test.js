@@ -8,6 +8,7 @@
 const nomis = require('../services/insightsData/nomis');
 const centroids = require('../services/insightsData/centroids');
 const geo = require('../services/insightsGeo');
+const insights = require('../services/insightsService');
 
 const POINT = { lat: 51.5000, lng: -0.1000 };
 // A = at the point; B ≈ 300 m north; C ≈ 2 km north.
@@ -26,6 +27,8 @@ function stubTransport() {
     NM_2041_1: { dim: 'c2021_eth_20', rows: { 'White': 70, 'Asian': 8 } }, // 'Asian' 8 < MIN_CELL → suppressed after aggregation if small
     NM_2045_1: { dim: 'c2021_lang_8', rows: { 'English': 75, 'Polish': 5 } },
     NM_2024_1: { dim: 'c2021_cob_12', rows: { 'United Kingdom': 65, 'Poland': 10, 'India': 5 } }, // country of birth
+    NM_2083_1: { dim: 'c2021_eastat_20', rows: { 'Employee': 55, 'Self-employed': 12, 'Unemployed': 6 } }, // economic activity
+    NM_2084_1: { dim: 'c2021_hiqual_8', rows: { 'Level 4 or above': 40, 'No qualifications': 20 } }, // qualifications
   };
   return async (url) => {
     const dataset = (url.match(/dataset\/([^.]+)\.data\.json/) || [])[1];
@@ -124,10 +127,12 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     seen.length = 0;
     const full = await nomis.fetchAreaProfiles(POINT, 500);            // must NOT read the headline cache
     const datasets = [...new Set(seen)].sort();
-    // all breakdown tables fetched: age + household + ethnic group + language + country of birth
-    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1', 'NM_2024_1', 'NM_2041_1', 'NM_2045_1']);
+    // all breakdown tables fetched: age + household + country of birth + ethnic group + language + econ activity + quals
+    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1', 'NM_2024_1', 'NM_2041_1', 'NM_2045_1', 'NM_2083_1', 'NM_2084_1']);
     expect(Object.keys(full[0].categories.ethnicGroup).length).toBeGreaterThan(0);  // full breakdowns present
     expect(Object.keys(full[0].categories.countryOfBirth).length).toBeGreaterThan(0); // incl. country of birth
+    expect(Object.keys(full[0].categories.economicActivity).length).toBeGreaterThan(0); // incl. economic activity
+    expect(Object.keys(full[0].categories.qualifications).length).toBeGreaterThan(0); // incl. qualifications
   });
 
   test('a full cache DOES satisfy a later headline request (no refetch)', async () => {
@@ -168,5 +173,39 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     const tiny = geo.combineAreaProfile([{ oa: 'X', population: 5, households: 2, categories: { ethnicGroup: { Other: 3 } } }], { radiusM: 500 });
     expect(tiny.categories.ethnicGroup[0].suppressed).toBe(true);
     expect(tiny.categories.ethnicGroup[0].display).toMatch(/fewer than/);
+  });
+});
+
+describe('insightsService.radiusDeprivation — IMD averaged over the radius via OA→LSOA', () => {
+  const AREAS = [
+    { oa: 'E00000A', population: 100 },
+    { oa: 'E00000B', population: 200 },
+    { oa: 'E00000C', population: 300 },
+  ];
+  // A→LSOA1, B→LSOA1, C→LSOA2
+  const WITH_LSOA = [
+    { oa: 'E00000A', lat: 51.5, lng: -0.1, lsoa: 'E01000001' },
+    { oa: 'E00000B', lat: 51.5, lng: -0.1, lsoa: 'E01000001' },
+    { oa: 'E00000C', lat: 51.5, lng: -0.1, lsoa: 'E01000002' },
+  ];
+  const imdLookup = async (lsoa) => ({ E01000001: { decile: 3, score: 40 }, E01000002: { decile: 7, score: 10 } }[lsoa] || null);
+
+  test('population-weighted average across the radius LSOAs', async () => {
+    centroids.__setForTest(WITH_LSOA);
+    const dep = await insights.radiusDeprivation(AREAS, imdLookup);
+    // LSOA1 pop = 300 (dec 3), LSOA2 pop = 300 (dec 7) → weighted decile (300*3+300*7)/600 = 5
+    expect(dep).toBeTruthy();
+    expect(dep.decile).toBe(5);
+    expect(dep.score).toBe(25);
+    expect(dep.lsoaCount).toBe(2);
+    expect(dep.estimated).toBe(true);
+    centroids.__setForTest(null);
+  });
+
+  test('returns null when centroids carry no LSOA mapping (not imported) → UI keeps own-area figure', async () => {
+    centroids.__setForTest([{ oa: 'E00000A', lat: 51.5, lng: -0.1 }]); // no lsoa
+    const dep = await insights.radiusDeprivation(AREAS, imdLookup);
+    expect(dep).toBeNull();
+    centroids.__setForTest(null);
   });
 });

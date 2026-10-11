@@ -54,7 +54,12 @@ async function main() {
   const handle = (row) => {
     const c = centroids.parseLatLng(row);
     if (!c) { skipped += 1; return; }
-    ops.push({ updateOne: { filter: { oa: c.oa }, update: { $set: { lat: c.lat, lng: c.lng } }, upsert: true } });
+    // Carry the LSOA21 code when the source file has one (ONS "OA (2021) to LSOA to MSOA to LAD" lookup, or a PWC
+    // export that includes LSOA21CD). It enables the radius DEPRIVATION (IMD) average; omit it and everything else
+    // still works, deprivation just stays the shop's own-area figure.
+    const set = { lat: c.lat, lng: c.lng };
+    if (c.lsoa) set.lsoa = c.lsoa;
+    ops.push({ updateOne: { filter: { oa: c.oa }, update: { $set: set }, upsert: true } });
   };
 
   if (isNdjson) {

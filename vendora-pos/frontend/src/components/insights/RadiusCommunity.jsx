@@ -11,6 +11,8 @@ const SECTIONS = [
   { key: 'countryOfBirth', label: 'Country of birth' },
   { key: 'ethnicGroup', label: 'Ethnic group' },
   { key: 'language', label: 'Main language' },
+  { key: 'economicActivity', label: 'Economic activity' },
+  { key: 'qualifications', label: 'Qualifications' },
 ];
 
 const TOP_ROWS = 6; // keep each list short — the headline communities are what inform stocking
@@ -46,9 +48,17 @@ export default function RadiusCommunity({ state, profile }) {
   }
   if (state !== 'ok' || !profile) return null;
   const cats = profile.categories || {};
+  const dep = profile.deprivation || null; // population-weighted IMD average across the radius (when available)
   return (
     <div className="mt-2 space-y-3">
       <p className="flex items-start gap-1 text-[10px] leading-snug text-gray-400"><Globe2 className="mt-0.5 h-3 w-3 shrink-0" /> Estimated make-up of the people in this radius (whole census areas inside the circle), to help you stock for your community. Small groups show as “fewer than N”.</p>
+      {dep && dep.decile != null && (
+        <div className="rounded-xl bg-gray-50 p-2.5">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Deprivation across this radius</span>
+          <span className="mt-0.5 block text-lg font-extrabold tabular-nums text-gray-900">Decile {dep.decile}<span className="text-xs font-semibold text-gray-400"> of 10</span></span>
+          <span className="block text-[10px] leading-snug text-gray-400">1 = most deprived 10% of England · population-weighted average over {dep.lsoaCount} area{dep.lsoaCount === 1 ? '' : 's'}{dep.score != null ? ` · avg score ${dep.score}` : ''} (estimate).</span>
+        </div>
+      )}
       {SECTIONS.map(({ key, label }) => {
         const rows = (cats[key] || []).filter((r) => (r.count || 0) > 0 || r.suppressed);
         return (

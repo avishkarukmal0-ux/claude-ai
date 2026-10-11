@@ -39,6 +39,11 @@ const DEFAULT_TABLES = {
   countryOfBirth: { code: 'TS004', dataset: 'NM_2024_1', dimension: 'c2021_cob_12', measures: '20100', select: '' },
   ethnicGroup: { code: 'TS021', dataset: 'NM_2041_1', dimension: 'c2021_eth_20', measures: '20100', select: '' },
   language: { code: 'TS024', dataset: 'NM_2045_1', dimension: 'c2021_lang_8', measures: '20100', select: '' },
+  // Economic activity (TS066) + Qualifications (TS067) — OA-level count tables, so they RE-SUM across the radius
+  // like the others. Dataset ids are the ones the (working) free neighbourhood feature uses live. The auto-detect
+  // parser reads whatever dimension Nomis returns, so the dimension hints need not be exact.
+  economicActivity: { code: 'TS066', dataset: 'NM_2083_1', dimension: 'c2021_eastat_20', measures: '20100', select: '' },
+  qualifications: { code: 'TS067', dataset: 'NM_2084_1', dimension: 'c2021_hiqual_8', measures: '20100', select: '' },
   age: { code: 'TS007A', dataset: 'NM_2020_1', dimension: 'c2021_age_6', measures: '20100', select: '' },
   householdComposition: { code: 'TS003', dataset: 'NM_2023_1', dimension: 'c2021_hhcomp_6', measures: '20100', select: '' },
 };
@@ -161,16 +166,18 @@ async function fetchAreaProfiles(point, radiusM, opts = {}) {
   // (if they fail the service honestly reports configured:false). The breakdowns (ethnic group, main language,
   // country of birth) are only for the full profile and are fetched SAFELY — one bad/unverified table yields {}
   // instead of breaking the headline or the other breakdowns. headlineOnly skips them entirely (free-card speed).
-  let eth = {}; let lang = {}; let cob = {};
+  let eth = {}; let lang = {}; let cob = {}; let econ = {}; let qual = {};
   const [age, hh] = await Promise.all([
     fetchTable(T.age, oaCodes),
     fetchTable(T.householdComposition, oaCodes),
   ]);
   if (!headlineOnly) {
-    [eth, lang, cob] = await Promise.all([
+    [eth, lang, cob, econ, qual] = await Promise.all([
       safeFetchTable(T.ethnicGroup, oaCodes),
       safeFetchTable(T.language, oaCodes),
       safeFetchTable(T.countryOfBirth, oaCodes),
+      safeFetchTable(T.economicActivity, oaCodes),
+      safeFetchTable(T.qualifications, oaCodes),
     ]);
   }
 
@@ -180,6 +187,8 @@ async function fetchAreaProfiles(point, radiusM, opts = {}) {
       countryOfBirth: cob[oa] || {},
       ethnicGroup: eth[oa] || {},
       language: lang[oa] || {},
+      economicActivity: econ[oa] || {},
+      qualifications: qual[oa] || {},
       age: age[oa] || {},
       householdComposition: hh[oa] || {},
     };

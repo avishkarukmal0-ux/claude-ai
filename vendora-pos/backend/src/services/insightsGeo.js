@@ -108,4 +108,28 @@ function combineAreaProfile(areaProfiles, { radiusM, meta = {} } = {}) {
   };
 }
 
-module.exports = { haversineMeters, selectAreasInRadius, sumCounts, toRows, combineAreaProfile, MIN_CELL };
+/**
+ * Deprivation (IMD) across a radius. IMD is a per-LSOA RANK/decile, NOT a count, so it can't be summed like the
+ * census breakdowns — we take a POPULATION-WEIGHTED AVERAGE of the LSOAs inside the radius. Always an estimate.
+ * @param entries [{ population, decile, score? }] one per LSOA in the radius
+ * @returns { decile, score|null, lsoaCount } or null when there's nothing to average
+ */
+function weightedDeprivation(entries) {
+  let wPop = 0; let wDecile = 0; let wScore = 0; let haveScore = false; let n = 0;
+  for (const e of (entries || [])) {
+    const p = Number(e && e.population) || 0;
+    const d = Number(e && e.decile);
+    if (p <= 0 || !Number.isFinite(d)) continue;
+    wPop += p; wDecile += p * d; n += 1;
+    const s = Number(e && e.score);
+    if (Number.isFinite(s)) { wScore += p * s; haveScore = true; }
+  }
+  if (wPop <= 0 || n === 0) return null;
+  return {
+    decile: Math.round(wDecile / wPop),
+    score: haveScore ? Math.round((wScore / wPop) * 1000) / 1000 : null,
+    lsoaCount: n,
+  };
+}
+
+module.exports = { haversineMeters, selectAreasInRadius, sumCounts, toRows, combineAreaProfile, weightedDeprivation, MIN_CELL };

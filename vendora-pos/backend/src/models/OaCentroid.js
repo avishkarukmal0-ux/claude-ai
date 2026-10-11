@@ -10,6 +10,8 @@ const schema = new mongoose.Schema(
     oa: { type: String, required: true, unique: true, index: true }, // OA21CD
     lat: { type: Number, required: true },
     lng: { type: Number, required: true },
+    lsoa: { type: String, default: null }, // LSOA21CD — optional; enables the radius deprivation (IMD) average
+
   },
   { versionKey: false },
 );
