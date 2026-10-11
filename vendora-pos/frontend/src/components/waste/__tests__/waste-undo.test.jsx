@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
 import WasteView from '../WasteView';
+import { recordRecovery } from '../../../lib/recoveryGuard';
 import * as storageNs from '../../../lib/storage';
 
 const { writeJSON, setActiveWorkspace, __resetMemForTest } = storageNs;
@@ -36,5 +37,24 @@ describe('WasteView — undo keeps the entry when the stock restore fails (R8)',
     // The entry is still there (round 2 would have removed it despite the failed restore).
     expect(getAllByLabelText('Undo — restores stock')).toHaveLength(1);
     expect(container.textContent).toContain('Milk 2L');
+  });
+
+  // Audit V1 (round 4): after an UNSAFE undo (stock restored, ledger + rollback both failed), the durable flag
+  // is set and the entry remains. A second Undo must NOT reverse again (it would double-restore 10→12).
+  it('V1: a second Undo is blocked once the item is flagged unsafe (no double restore)', () => {
+    writeJSON('inventory_v1', [{ id: 'p1', name: 'Milk 2L', qty: 10, cost: 1, price: 2 }]);
+    writeJSON('waste_v1', [{
+      id: 'w1', type: 'wasted', name: 'Milk 2L', value: 2, qty: 2,
+      productId: 'p1', batchId: 'op1', productBatchId: null, ts: Date.now(),
+    }]);
+    recordRecovery('product:p1', { kind: 'waste', name: 'Milk 2L' }); // the prior unsafe undo left this flag
+
+    const { getAllByLabelText } = render(<WasteView onBack={() => {}} />);
+    const before = storageNs.readJSON('inventory_v1', []).find((p) => p.id === 'p1').qty;
+    fireEvent.click(getAllByLabelText('Undo — restores stock')[0]);
+    const after = storageNs.readJSON('inventory_v1', []).find((p) => p.id === 'p1').qty;
+
+    expect(after).toBe(before);  // stock unchanged — the reverse was blocked (pre-fix it would restore again)
+    expect(getAllByLabelText('Undo — restores stock')).toHaveLength(1); // entry retained for reconciliation
   });
 });

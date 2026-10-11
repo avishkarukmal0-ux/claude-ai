@@ -139,6 +139,14 @@ export default function WasteView({ onBack }) {
   // Undo restores stock + history consistently (batch-aware).
   function undoEntry(e) {
     if (e.type === 'wasted' && e.productId && e.batchId) {
+      // Audit V1 (round 4): an earlier unsafe undo (stock restored, ledger + rollback both failed) leaves a
+      // durable recovery flag AND the entry in place. Without checking that flag here, a SECOND Undo reverses
+      // again and double-restores stock (8→10→12). Block it until the owner reloads + reconciles; a plain
+      // recoverable failure (no flag) stays retryable.
+      if (recovery.has(`product:${e.productId}`)) {
+        toast.error('This item needs checking after a failed undo — reload and verify its stock before undoing again.');
+        return;
+      }
       const res = e.productBatchId
         ? reverseBatchWaste({ id: e.productId, qty: e.qty, opGroupId: e.batchId, batch: e.batchInfo })
         : reverseWaste({ id: e.productId, qty: e.qty, batchId: e.batchId });
