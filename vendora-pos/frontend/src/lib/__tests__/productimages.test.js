@@ -250,6 +250,27 @@ describe('productImages — F2 round 2: no recreation in a purged workspace afte
     expect(getBackupState(saved.id).state).not.toBe(BACKUP_STATE.DONE); // DONE not recreated after the account change
   });
 
+  it('R6: confirmSuggested signing OUT during the image FETCH does not recreate the shop photo', async () => {
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token: 'tc', shop: { id: 'shopR6' } })); } catch { /* ignore */ }
+    setActiveWorkspace('shop:shopR6');
+    // The suggested-image fetch RESOLVES after the account has signed out — the window saveImage's own (later)
+    // session pin used to miss, writing the photo into the purged workspace.
+    global.fetch = vi.fn(async () => {
+      try { localStorage.removeItem(AUTH_KEY); } catch { /* ignore */ }
+      setActiveWorkspace(LOCAL_WORKSPACE);
+      return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' }) };
+    });
+    const ref = await confirmSuggested(
+      { image: 'https://images.openfoodfacts.org/x.jpg', imageLarge: 'https://images.openfoodfacts.org/xl.jpg', imageAttribution: 'OFF' },
+      { barcode: '5000000000001' },
+    );
+    expect(ref).toBe(null); // cancelled — the account changed during the fetch
+    setActiveWorkspace('shop:shopR6');
+    // No catalogue image bytes were recreated in the purged shop workspace.
+    const map = (() => { try { return JSON.parse(storageNs.read('pimg_backup_v1', 'null', 'shop:shopR6')) || {}; } catch { return {}; } })();
+    expect(Object.keys(map)).toHaveLength(0);
+  });
+
   it('fetchImageToCache: switching accounts during the download does not write bytes into the purged shop', async () => {
     try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token: 't2', shop: { id: 'shopC' } })); } catch { /* ignore */ }
     setActiveWorkspace('shop:shopC');

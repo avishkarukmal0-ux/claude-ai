@@ -322,8 +322,14 @@ export async function fetchSuggestedImage(url) {
 export async function confirmSuggested(suggested, { barcode = null } = {}) {
   if (!suggested || !suggested.image) return null;
   const ws = getActiveWorkspace(); const token = currentToken(); // pin identity at entry (FE1)
+  // Audit R6 (round 3): capture the SESSION at the OUTERMOST entry and re-check it after the fetch await. saveImage
+  // pins the session at ITS OWN entry — which is AFTER this fetch resolves — so a sign-out / account switch DURING
+  // the (slow) suggested-image fetch slipped past its check and recreated the old shop's photo in the purged
+  // workspace. Re-check here before any local write.
+  const pin = sessionPin();
   const dataUrl = await fetchSuggestedImage(suggested.imageLarge || suggested.image);
   if (!dataUrl) return null;
+  if (!sessionUnchanged(pin)) return null; // signed out / switched during the fetch — don't recreate in a purged ws
   const saved = await saveImage(dataUrl, { source: 'catalogue', ws });
   if (!saved.ok) return null;
   // Track the backup lifecycle (queues as FAILED for retry if backup isn't available yet).
