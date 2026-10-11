@@ -121,6 +121,9 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
     const id = resolved.id;
     const src = product?.image?.source || 'owner';
     const res = removeImage(id);
+    // Audit F4: if the photo couldn't be moved to trash it was NOT deleted — keep the ref + server copy and tell
+    // the owner, rather than clearing the reference to bytes that are still there.
+    if (res && res.ok === false) { toast.error(res.error || 'Couldn’t remove the photo — it’s been kept.'); return; }
     deleteBackup(id); // remove the authorised server copy too (best-effort, async)
     onRemove?.();
     setThumb(null);

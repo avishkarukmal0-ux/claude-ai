@@ -6,6 +6,9 @@ import {
   __setDownscale, __setImageTransport, __setBackupAvailability,
 } from '../productImages';
 import { setActiveWorkspace, LOCAL_WORKSPACE, __resetMemForTest } from '../storage';
+import * as storageNs from '../storage';
+
+const AUTH_KEY = 'vendora:auth';
 
 const DATA = 'data:image/jpeg;base64,/9j/AAA=';
 
@@ -164,5 +167,32 @@ describe('productImages — backup lifecycle (local → pending → backed-up / 
     expect(d.ok).toBe(true);
     expect(removed).toContain(saved.id);
     expect(getBackupState(saved.id).state).toBe(BACKUP_STATE.LOCAL);
+  });
+});
+
+describe('productImages — F2 (session pin) + F4 (commit-before-delete)', () => {
+  it('F2: signing OUT mid-save cancels (does not recreate the shop photo in the purged workspace)', async () => {
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token: 't', shop: { id: 'shopA' } })); } catch { /* ignore */ }
+    setActiveWorkspace('shop:shopA');
+    __setDownscale((src) => new Promise((res) => { setTimeout(() => res(typeof src === 'string' ? src : DATA), 10); }));
+    const p = saveImage(DATA, { source: 'owner' });
+    try { localStorage.removeItem(AUTH_KEY); } catch { /* ignore */ } // sign out while processing
+    setActiveWorkspace(LOCAL_WORKSPACE);
+    const r = await p;
+    expect(r.ok).toBe(false);
+    expect(r.cancelled).toBe(true);
+    expect(getThumbLocal(r.id || 'x', 'shop:shopA')).toBe(null); // nothing recreated in the purged shop workspace
+  });
+
+  it('F4: a failed trash write keeps the originals (removeImage reports not-ok, not recoverable)', async () => {
+    setActiveWorkspace('shop:f4');
+    const saved = await saveImage(DATA, { source: 'owner' });
+    expect(getThumbLocal(saved.id)).toBeTruthy();
+    const spy = vi.spyOn(storageNs, 'write').mockReturnValue({ ok: false, error: 'quota' });
+    const res = removeImage(saved.id);
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(res.recoverable).toBe(false);
+    expect(getThumbLocal(saved.id)).toBeTruthy(); // originals NOT deleted (commit-before-delete)
   });
 });

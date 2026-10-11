@@ -96,9 +96,19 @@ function putLocal(id, { full, thumb }, ws = getActiveWorkspace()) {
  * record — the caller sets `product.image` via the inventory store (an explicit action). @returns {{id, thumb}}
  */
 export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace() } = {}) {
+  // Audit F2: pin the SESSION identity at entry. If the account is switched or signed OUT during the async image
+  // processing — which purges the originating shop's workspace — do NOT write, or we'd recreate that shop's
+  // private photo in a workspace that was removed. A bare workspace change with the SAME session (guest/demo)
+  // still writes to the pinned `ws` (FE1 — no leak to another shop, no lost photo).
+  const s0 = currentSession ? currentSession() : null;
+  const token0 = (s0 && s0.token) || null;
+  const shop0 = (s0 && s0.shop && s0.shop.id) || null;
   const id = newImageId();
   const { full, thumb } = await processImage(src); // async — pin the workspace captured at entry (FE1)
   if (!full && !thumb) return { ok: false, error: 'Couldn’t process that image' };
+  const s = currentSession ? currentSession() : null;
+  const sameSession = (((s && s.token) || null) === token0) && (((s && s.shop && s.shop.id) || null) === shop0);
+  if (!sameSession) return { ok: false, cancelled: true, error: 'Account changed — the photo wasn’t saved.' };
   const wrote = putLocal(id, { full, thumb }, ws);
   // FE4: don't claim success (and don't let the caller save a product.image ref) if nothing persisted.
   if (wrote.full === false && (wrote.thumb === false || wrote.thumb === null)) {
@@ -111,15 +121,15 @@ export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace
 export function removeImage(id) {
   if (!id) return { ok: false };
   const full = getFullLocal(id); const thumb = getThumbLocal(id);
-  // FE4: only report the delete as recoverable if the trash copy actually persisted.
-  let trashedOk = false;
-  if (full || thumb) {
-    const w = write(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }));
-    trashedOk = w && w.ok !== false;
-  }
+  if (!full && !thumb) { clearBackupState(id); return { ok: true, recoverable: false }; } // nothing stored to delete
+  // Audit F4: COMMIT-BEFORE-DELETE. Only remove the originals once the trash copy has actually persisted — a failed
+  // trash write must not destroy the only copy. If trashing fails, keep the originals and report it (the caller
+  // then leaves the product ref + server backup intact).
+  const w = write(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }));
+  if (!(w && w.ok !== false)) return { ok: false, recoverable: false, error: 'Couldn’t move the photo to trash (storage full) — it was not deleted.' };
   removeKey(FULL(id)); removeKey(THUMB(id));
   clearBackupState(id); // the server copy is removed separately via deleteBackup() (authorised, async)
-  return { ok: true, recoverable: trashedOk };
+  return { ok: true, recoverable: true };
 }
 
 /** Undo a recoverable delete. @returns {{ok, thumb?}} */
@@ -128,8 +138,10 @@ export function restoreImage(id) {
   try { t = JSON.parse(read(TRASH(id), 'null')); } catch { t = null; }
   if (!t) return { ok: false };
   const wrote = putLocal(id, { full: t.full, thumb: t.thumb });
-  // FE4: keep the trash copy if the restore writes didn't commit, so the photo isn't lost.
-  if (wrote.full === false && (wrote.thumb === false || wrote.thumb === null)) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
+  // Audit F4: the FULL is the only full-quality copy. KEEP the trash unless the full actually restored — a partial
+  // restore (thumb ok, full failed) must not discard the trash and lose the full-quality image.
+  const fullRestored = t.full ? (wrote.full !== false) : true;
+  if (!fullRestored) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
   removeKey(TRASH(id));
   return { ok: true, thumb: t.thumb };
 }
