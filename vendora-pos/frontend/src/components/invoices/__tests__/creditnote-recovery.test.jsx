@@ -47,6 +47,8 @@ describe('CreditNoteRecoveryView — guided reconciliation (round-6 polish)', ()
     seedSplit();
     const { getByText } = render(<CreditNoteRecoveryView onBack={() => {}} />);
     expect(hasRecovery('creditnote:cn1')).toBe(true);
+    // The owner can see exactly what reconcile will do before tapping.
+    expect(getByText(/Reconcile will set this claim to £10\.00/)).toBeTruthy();
     fireEvent.click(getByText(/Reconcile this credit note/));
     // The claim now credits the allocated £10 (applied through the validated store op)…
     const claim = readJSON('claims_v1', []).find((c) => c.id === 'cl1');

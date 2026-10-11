@@ -108,18 +108,25 @@ export default function CreditNoteRecoveryView({ onBack }) {
                   <p className="rounded-lg bg-white px-2.5 py-2 text-[11px] text-gray-500">No allocations or claim credits remain — safe to reconcile.</p>
                 ) : recon.rows.map((row) => {
                   const claim = claims.find((c) => c.id === row.claimId);
+                  const outcome = row.consistent ? null
+                    : row.allocated > 0
+                      ? `Reconcile will set this claim to ${gbp(row.allocated)}`
+                      : `Reconcile will remove the ${gbp(row.credited)} credit from this claim`;
                   return (
-                    <div key={row.claimId} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2">
-                      <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-300" />
-                      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-gray-800">
-                        {claim ? (claim.supplierName || 'Claim') : 'Claim no longer exists'}{claim && claim.deliveryRef ? ` · ${claim.deliveryRef}` : ''}
-                      </span>
-                      <span className={`shrink-0 text-[11px] tabular-nums ${row.consistent ? 'text-gray-500' : 'font-semibold text-danger'}`}>
-                        {gbp(row.allocated)} · {gbp(row.credited)}
-                      </span>
-                      {row.consistent
-                        ? <Check className="h-3.5 w-3.5 shrink-0 text-success" />
-                        : <span className="shrink-0 text-[10px] font-bold text-danger">≠</span>}
+                    <div key={row.claimId} className="rounded-lg bg-white px-2.5 py-2">
+                      <div className="flex items-center gap-2">
+                        <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-300" />
+                        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-gray-800">
+                          {claim ? (claim.supplierName || 'Claim') : 'Claim no longer exists'}{claim && claim.deliveryRef ? ` · ${claim.deliveryRef}` : ''}
+                        </span>
+                        <span className={`shrink-0 text-[11px] tabular-nums ${row.consistent ? 'text-gray-500' : 'font-semibold text-danger'}`}>
+                          {gbp(row.allocated)} · {gbp(row.credited)}
+                        </span>
+                        {row.consistent
+                          ? <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-label="Matches" />
+                          : <span className="shrink-0 text-[10px] font-bold text-danger" aria-label="Does not match">(differs)</span>}
+                      </div>
+                      {outcome && <p className="mt-1 pl-5 text-[10px] font-medium text-primary">{outcome}</p>}
                     </div>
                   );
                 })}

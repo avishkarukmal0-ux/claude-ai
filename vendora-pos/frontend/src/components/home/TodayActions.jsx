@@ -84,7 +84,7 @@ export default function TodayActions({ onGo }) {
           const Icon = KIND_ICON[a.kind] || ShoppingCart;
           const s = SEVERITY[a.severity] || SEVERITY.info;
           return (
-            <li className={`flex items-stretch gap-1 rounded-2xl border border-gray-100 border-l-4 ${s.rail} bg-white shadow-sm`}>
+            <li key={a.id} className={`flex items-stretch gap-1 rounded-2xl border border-gray-100 border-l-4 ${s.rail} bg-white shadow-sm`}>
               <button
                 type="button"
                 onClick={() => onGo?.(a.go)}
