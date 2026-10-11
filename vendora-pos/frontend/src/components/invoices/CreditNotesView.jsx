@@ -19,6 +19,22 @@ export default function CreditNotesView({ onBack }) {
   const [adding, setAdding] = useState(false);
   const [allocating, setAllocating] = useState(null); // note id being allocated
 
+  // Audit R9 (round 3): deleting a note removed its claim-side credits with forEach and IGNORED the results, then
+  // deleted the note unconditionally — a failed claim write left the note gone while the claim still credited the
+  // money (or, the other way, split the two ledgers). Remove each claim credit FIRST and CHECK it; only delete the
+  // note once EVERY claim correction committed, so the two ledgers never split. removeCredit is idempotent, so a
+  // retry re-runs cleanly over any that already succeeded.
+  function deleteNote(cn) {
+    if (!window.confirm('Delete this credit note? (claim credits from it will be removed)')) return;
+    for (const a of (cn.allocations || [])) {
+      const rc = removeCredit(a.claimId, cn.id);
+      if (!rc.ok) { toast.error(rc.error || 'Couldn’t update a claim — the note was kept. Please try again.'); return; }
+    }
+    const r = removeNote(cn.id);
+    if (r && r.ok === false) { toast.error(r.error || 'Couldn’t delete the note — please try again.'); return; }
+    toast('Credit note deleted');
+  }
+
   return (
     <div>
       <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
@@ -57,7 +73,7 @@ export default function CreditNotesView({ onBack }) {
                     {left > 0.005 && <span className="mt-1 inline-block rounded-full bg-warning-light px-2 py-0.5 text-[10px] font-semibold text-warning-dark">{gbp(left)} unallocated</span>}
                     {left <= 0.005 && cn.amount > 0 && <span className="mt-1 inline-block rounded-full bg-success-light px-2 py-0.5 text-[10px] font-semibold text-success-dark">fully allocated</span>}
                   </div>
-                  <button type="button" onClick={() => { if (window.confirm('Delete this credit note? (claim credits from it will be removed)')) { (cn.allocations || []).forEach((a) => removeCredit(a.claimId, cn.id)); removeNote(cn.id); } }} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => deleteNote(cn)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <button type="button" onClick={() => setAllocating(allocating === cn.id ? null : cn.id)} className="mt-2 flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">
                   <Link2 className="h-3.5 w-3.5" /> {allocating === cn.id ? 'Close' : 'Match to claims'}
