@@ -27,6 +27,16 @@ Local-first writes span independent stores (products vs movements/ledger, claim 
 - When rolling back an UPDATE to an existing value, restore the **prior** value, not zero.
 - **Never use a GridFS `_id` (ObjectId) as a version pointer** — within one second across processes its ordering isn't upload order. Use an atomic monotonic rev (`services/backupRev.js`).
 
+## Recovery & durability survive a reload (audit round 3, see [[2026-10-11-Audit-Round3-Recovery-Paths]])
+The recurring round-3 lesson: *a passing helper test does not prove the whole user action commits, rolls back and survives a reopen/reload.* Test the callers, the second save, navigation and adverse interleavings.
+- **The overflow path is ASYNC.** `storage.write()` returns `{ok:true, overflow:true}` BEFORE the IndexedDB commit lands. Before deleting the only other copy of anything, confirm the durable commit with `writeDurable()` (flush + read-back) — never trust the synchronous `ok`. (R1)
+- **A needs-recovery block must be DURABLE, not React state.** Component state resets on reopen/reload, letting a naive retry re-apply. Persist it in `lib/recoveryGuard.js` (device-local, workspace-scoped, keyed to a stable id like `delivery:<id>` / `product:<id>` / `stocktake`); block the action across reload; clear only on explicit owner acknowledgement. (R3/R4/R8)
+- **Verify the second write in EVERY caller, not one.** When you add verify+rollback to a two-write op, grep for every sibling (recordWaste was the one missed in round 2). (R4)
+- **Concurrent read-modify-write ⇒ CAS + recompute**, not a conditional `$set` of a value built from a stale read. Guard the write on the exact ordering token read; on a 0-match, re-read and recompute against the committed state (`insightsEntitlementService.setEntitlementCAS`). (R5)
+- **Pin identity at the OUTERMOST async entry** and re-check after each await; a pin captured inside a nested callee runs after the caller's own await resolved, missing a mid-flight sign-out/switch. (R6)
+- **A productId remap must cover EVERY store that carries one** (top-level or nested) — a missed store strands silently on merge (`productMerge` TOP_LEVEL/NESTED). (R11)
+- **Idempotent multi-step completion:** finish a later step (document/order) from the committed operation identity without re-running the first; gate re-application on the operation guard (`hasOperation`). (R10)
+
 ## Backend patterns
 - **Thin routes, fat services.** Routes validate + auth + shape the response; calculations live in [[Services]].
 - Every route wrapped in `try/catch` → `next(err)`; central `errorHandler` formats.
