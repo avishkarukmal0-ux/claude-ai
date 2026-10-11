@@ -37,9 +37,11 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [whoOpen, setWhoOpen] = useState(false);     // "Who lives here" community breakdown — loaded on demand
   const [whoProfile, setWhoProfile] = useState(null);
   const [whoState, setWhoState] = useState('idle');  // idle | loading | ok | error
+  const [radFetching, setRadFetching] = useState(false); // F8: a new radius/postcode fetch is in flight over stale figures
 
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
+  const prevRadPostcode = useRef(radPostcode); // F8: detect a postcode change so stale figures aren't shown for it
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
   const whoCache = useRef(new Map()); // `${postcode}:${radiusM}` → full profile (community breakdowns) — revisit = instant
 
@@ -59,24 +61,34 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   // doesn't fire a request per step. Never fabricates: configured:false → an honest note.
   useEffect(() => {
     if (!point || !radPostcode || !radPostcode.trim()) { setRadState('idle'); return undefined; }
+    // F8 (round 2): if the POSTCODE changed, clear the old area's figures immediately — never show one area's
+    // numbers under another's name while the new fetch is in flight.
+    const postcodeChanged = prevRadPostcode.current !== radPostcode;
+    prevRadPostcode.current = radPostcode;
+    if (postcodeChanged) { setRadProfile(null); setRadState('loading'); }
     const key = `${radPostcode}:${Math.round(radiusM)}`;
     const hit = radCache.current.get(key);
     if (hit) { // instant — no round-trip
-      setRadProfile(hit.profile); setRadState(hit.state); setRadHttp(hit.http); setRadDiag(hit.diag);
+      setRadProfile(hit.profile); setRadState(hit.state); setRadHttp(hit.http); setRadDiag(hit.diag); setRadFetching(false);
       return undefined;
     }
     let live = true;
-    setRadState((s) => (s === 'ok' ? 'ok' : 'loading')); // keep the last figures visible while fetching a new radius
+    // Keep the last figures visible while fetching a NEW radius for the SAME postcode, but mark them as updating
+    // (F8) so the user knows they're for the previous view until the new ones land.
+    setRadState((s) => (s === 'ok' && !postcodeChanged ? 'ok' : 'loading'));
+    setRadFetching(true);
     const id = setTimeout(async () => {
       try {
         const out = await getRadiusProfile({ postcode: radPostcode, radiusM });
         if (!live) return;
+        setRadFetching(false);
         const diag = out && out.diag ? out.diag : null;
         setRadHttp(200); setRadDiag(diag);
         if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); radCache.current.set(key, { state: 'ok', profile: out.profile, http: 200, diag }); }
         else { setRadProfile(null); setRadState('unconfigured'); radCache.current.set(key, { state: 'unconfigured', profile: null, http: 200, diag }); }
       } catch (e) {
         if (!live) return;
+        setRadFetching(false);
         const code = (e && e.status) || 0;
         setRadHttp(code); setRadState(code === 403 ? 'locked' : 'error');
         // cache a 403 (stable config) but not transient errors, so a real outage retries next time.
@@ -121,8 +133,18 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   async function load(force = false) {
     if (!postcode.trim()) { toast.error('Enter your shop postcode'); return; }
     setBusy(true);
-    try { setResult(await getArea(postcode.trim(), { force })); if (force) toast.success('Refreshed'); }
-    finally { setBusy(false); }
+    try {
+      const res = await getArea(postcode.trim(), { force });
+      setResult(res);
+      // Audit F9 (round 2): only announce "Refreshed" when we actually got FRESH online data. Previously an
+      // explicit refresh toasted "Refreshed" even when the result was unavailable, offline or a stale fallback.
+      if (force) {
+        const fresh = res && res.available && !res.offline && res.freshness !== 'out_of_date';
+        if (fresh) toast.success('Refreshed');
+        else if (res && res.offline) toast.error('Still offline — showing the last saved copy');
+        else toast.error((res && res.reason) || 'Couldn’t refresh — area data is unavailable right now');
+      }
+    } finally { setBusy(false); }
   }
 
   return (
@@ -175,6 +197,11 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} followView={radiusMode === 'map'} onViewRadius={onViewRadius} /></div>
               <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
 
+              {radFetching && radProfile && (
+                <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-gray-400" aria-live="polite">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Updating for the new view — figures below are for the previous radius.
+                </div>
+              )}
               <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} />
 
               {/* On-demand "Who lives here" — country of birth, ethnic group, main language — so the owner can stock
