@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft, Globe2, ChevronDown } from 'lucide-react';
 import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbourhoodClient';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 import RadiusControl from './RadiusControl';
 import RadiusMap from './RadiusMap';
 import RadiusFigures from './RadiusFigures';
+import RadiusCommunity from './RadiusCommunity';
 import { fmtRadius, clamp } from '../../lib/radiusUnits';
 
 // The catchment circle on the free card is a VISUAL guide around the shop (its own location). The figures below
@@ -33,10 +34,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [radState, setRadState] = useState('idle'); // idle | loading | ok | unconfigured | locked | error
   const [radHttp, setRadHttp] = useState(null);      // last radius request HTTP status (for the on-card diagnostic)
   const [radDiag, setRadDiag] = useState(null);      // server diagnostic: how many OAs actually returned census data
+  const [whoOpen, setWhoOpen] = useState(false);     // "Who lives here" community breakdown — loaded on demand
+  const [whoProfile, setWhoProfile] = useState(null);
+  const [whoState, setWhoState] = useState('idle');  // idle | loading | ok | error
 
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
+  const whoCache = useRef(new Map()); // `${postcode}:${radiusM}` → full profile (community breakdowns) — revisit = instant
 
   // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Quantise to a coarse STEP
   // so zooming lands on a small ladder of radii (250 m, 500 m, …) — far fewer distinct values means most zoom stops
@@ -83,6 +88,29 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     return () => { live = false; clearTimeout(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode]);
+
+  // "Who lives here" community breakdown (country of birth, ethnic group, main language) — only fetched when the
+  // owner opens the section, and only when the headline radius figures are available (ok). It asks the server for
+  // the FULL profile (full=1), which costs the extra census tables — hence on demand, so the headline stays fast.
+  // Cached per {postcode, radius} for the session; re-fetches when the radius changes while the section is open.
+  useEffect(() => {
+    if (!whoOpen || radState !== 'ok' || !point || !radPostcode || !radPostcode.trim()) return undefined;
+    const key = `${radPostcode}:${Math.round(radiusM)}`;
+    const hit = whoCache.current.get(key);
+    if (hit) { setWhoProfile(hit); setWhoState('ok'); return undefined; }
+    let live = true;
+    setWhoState((s) => (s === 'ok' ? 'ok' : 'loading'));
+    const id = setTimeout(async () => {
+      try {
+        const out = await getRadiusProfile({ postcode: radPostcode, radiusM, full: true });
+        if (!live) return;
+        if (out && out.configured && out.profile) { setWhoProfile(out.profile); setWhoState('ok'); whoCache.current.set(key, out.profile); }
+        else { setWhoProfile(null); setWhoState('error'); }
+      } catch (e) { if (live) { setWhoProfile(null); setWhoState('error'); } }
+    }, 400);
+    return () => { live = false; clearTimeout(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [whoOpen, radState, radiusM, point && point.lat, point && point.lng, radPostcode]);
 
   if (!NEIGHBOURHOOD_ENABLED) return null;
 
@@ -144,6 +172,18 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
 
               <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} />
+
+              {/* On-demand "Who lives here" — country of birth, ethnic group, main language — so the owner can stock
+                  for the local community. Only offered once the headline figures are available (test-unlock on). */}
+              {radState === 'ok' && (
+                <div className="mt-2 border-t border-gray-100 pt-2">
+                  <button type="button" onClick={() => setWhoOpen((v) => !v)} aria-expanded={whoOpen} className="flex w-full items-center justify-between text-left text-[12px] font-semibold text-primary">
+                    <span className="flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /> Who lives here — stock for your community</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${whoOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {whoOpen && <RadiusCommunity state={whoState} profile={whoProfile} />}
+                </div>
+              )}
             </section>
           )}
           {(result.figures || []).map((f) => {

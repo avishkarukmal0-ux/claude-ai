@@ -25,6 +25,7 @@ function stubTransport() {
     NM_2023_1: { dim: 'c2021_hhcomp_6', rows: { 'One-person household': 10, 'Family household': 25 } },
     NM_2041_1: { dim: 'c2021_eth_20', rows: { 'White': 70, 'Asian': 8 } }, // 'Asian' 8 < MIN_CELL → suppressed after aggregation if small
     NM_2045_1: { dim: 'c2021_lang_8', rows: { 'English': 75, 'Polish': 5 } },
+    NM_2024_1: { dim: 'c2021_cob_12', rows: { 'United Kingdom': 65, 'Poland': 10, 'India': 5 } }, // country of birth
   };
   return async (url) => {
     const dataset = (url.match(/dataset\/([^.]+)\.data\.json/) || [])[1];
@@ -123,8 +124,10 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     seen.length = 0;
     const full = await nomis.fetchAreaProfiles(POINT, 500);            // must NOT read the headline cache
     const datasets = [...new Set(seen)].sort();
-    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1', 'NM_2041_1', 'NM_2045_1']); // all 4 fetched
+    // all breakdown tables fetched: age + household + ethnic group + language + country of birth
+    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1', 'NM_2024_1', 'NM_2041_1', 'NM_2045_1']);
     expect(Object.keys(full[0].categories.ethnicGroup).length).toBeGreaterThan(0);  // full breakdowns present
+    expect(Object.keys(full[0].categories.countryOfBirth).length).toBeGreaterThan(0); // incl. country of birth
   });
 
   test('a full cache DOES satisfy a later headline request (no refetch)', async () => {
@@ -136,6 +139,22 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     const head = await nomis.fetchAreaProfiles(POINT, 500, { headlineOnly: true });
     expect(seen).toHaveLength(0);                              // served from the full cache, no new fetch
     expect(head[0].population).toBe(80);
+  });
+
+  test('a broken country-of-birth table is fault-isolated (headline + other breakdowns still work)', async () => {
+    const base = stubTransport();
+    // Simulate an unverified/wrong country-of-birth dataset id: Nomis errors for NM_2024_1, others fine.
+    nomis.__setTransport(async (url) => {
+      if (/dataset\/NM_2024_1\./.test(url)) { const e = new Error('Nomis HTTP 404'); e.status = 404; throw e; }
+      return base(url);
+    });
+    const full = await nomis.fetchAreaProfiles(POINT, 500); // full profile, but country-of-birth fetch fails
+    const oa = full[0];
+    expect(oa.population).toBe(80);                                   // headline intact
+    expect(oa.households).toBe(35);
+    expect(Object.keys(oa.categories.ethnicGroup).length).toBeGreaterThan(0);   // other breakdowns intact
+    expect(Object.keys(oa.categories.language).length).toBeGreaterThan(0);
+    expect(Object.keys(oa.categories.countryOfBirth)).toHaveLength(0); // just empty, never wrong, never thrown
   });
 
   test('aggregate preserves small-cell suppression', async () => {

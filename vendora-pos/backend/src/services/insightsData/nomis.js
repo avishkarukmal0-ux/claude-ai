@@ -30,6 +30,13 @@ const DATA = () => config.neighbourhoodInsights.data;
 // `select` constrains the breakdown dimension (empty = request all its categories; we then sum by description
 // and drop any "Total" row). These are documented starting values — confirm with the verify script.
 const DEFAULT_TABLES = {
+  // Country of birth (TS004) — the "which countries are people from" breakdown. The dataset id below is a
+  // documented STARTING value and is UNVERIFIED: confirm it with scripts/verify-insights.js against Nomis (or
+  // override via INSIGHTS_NOMIS_TABLES_PATH) before trusting the numbers. If the id is wrong the fetch is
+  // fault-isolated (see fetchAreaProfiles) → this breakdown is simply empty, never wrong, and never breaks the
+  // population/household headline or the other breakdowns. The auto-detect parser reads whatever dimension Nomis
+  // actually returns, so the dimension hint here need not be exact.
+  countryOfBirth: { code: 'TS004', dataset: 'NM_2024_1', dimension: 'c2021_cob_12', measures: '20100', select: '' },
   ethnicGroup: { code: 'TS021', dataset: 'NM_2041_1', dimension: 'c2021_eth_20', measures: '20100', select: '' },
   language: { code: 'TS024', dataset: 'NM_2045_1', dimension: 'c2021_lang_8', measures: '20100', select: '' },
   age: { code: 'TS007A', dataset: 'NM_2020_1', dimension: 'c2021_age_6', measures: '20100', select: '' },
@@ -96,8 +103,17 @@ function parseObs(json, dimension) {
   return out;
 }
 
+/** Like fetchTable but never throws — a breakdown whose dataset id is wrong/unverified (or a transient Nomis
+ *  error) yields {} instead of failing the whole profile. Used for the non-headline breakdown tables so a bad
+ *  Country-of-birth id can't take down population/households or the other breakdowns. */
+async function safeFetchTable(def, oaCodes) {
+  try { return await fetchTable(def, oaCodes); }
+  catch { return {}; }
+}
+
 /** Fetch one table's counts for a set of OA codes (batched). → { oaCode: { label: count } }. */
 async function fetchTable(def, oaCodes) {
+  if (!def || !def.dataset) return {}; // no dataset configured (e.g. an unverified table left unset) → empty, not wrong
   const merged = {};
   // Reuse the server-side Nomis UID (same account as the free neighbourhood feature) when set — some datasets /
   // larger requests need it, and the working feature always sends it.
@@ -141,23 +157,27 @@ async function fetchAreaProfiles(point, radiusM, opts = {}) {
   const oaCodes = selected.slice(0, DATA().maxOutputAreas).map((s) => s.oa);
 
   const T = tables();
-  // Always need age (population) + household composition (households). Ethnic group + language only for the full
-  // profile — skip them in headlineOnly so the free card's first visit to a radius is ~2× faster.
-  let eth = {}; let lang = {};
+  // Always need age (population) + household composition (households) — these are the headline, fetched strictly
+  // (if they fail the service honestly reports configured:false). The breakdowns (ethnic group, main language,
+  // country of birth) are only for the full profile and are fetched SAFELY — one bad/unverified table yields {}
+  // instead of breaking the headline or the other breakdowns. headlineOnly skips them entirely (free-card speed).
+  let eth = {}; let lang = {}; let cob = {};
   const [age, hh] = await Promise.all([
     fetchTable(T.age, oaCodes),
     fetchTable(T.householdComposition, oaCodes),
   ]);
   if (!headlineOnly) {
-    [eth, lang] = await Promise.all([
-      fetchTable(T.ethnicGroup, oaCodes),
-      fetchTable(T.language, oaCodes),
+    [eth, lang, cob] = await Promise.all([
+      safeFetchTable(T.ethnicGroup, oaCodes),
+      safeFetchTable(T.language, oaCodes),
+      safeFetchTable(T.countryOfBirth, oaCodes),
     ]);
   }
 
   const sum = (m) => Object.values(m || {}).reduce((a, b) => a + (Number(b) || 0), 0);
   const profiles = oaCodes.map((oa) => {
     const categories = {
+      countryOfBirth: cob[oa] || {},
       ethnicGroup: eth[oa] || {},
       language: lang[oa] || {},
       age: age[oa] || {},

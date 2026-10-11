@@ -17,6 +17,7 @@ const centroids = require('./insightsData/centroids');
 // The categories we present, each mapped to its ONS Census 2021 bulk table. Used both for the real fetch
 // (when a provider is configured) and for the no-data PREVIEW (labels only, never invented values).
 const CATEGORIES = [
+  { key: 'countryOfBirth', label: 'Country of birth', table: 'TS004' },
   { key: 'ethnicGroup', label: 'Ethnic group', table: 'TS021' },
   { key: 'language', label: 'Main language (aged 3+)', table: 'TS024' },
   { key: 'age', label: 'Age band', table: 'TS007A' },

@@ -10,7 +10,7 @@ import RadiusMap from './RadiusMap';
 import RadiusControl from './RadiusControl';
 import { fmtRadius, clamp } from '../../lib/radiusUnits';
 
-const CAT_LABEL = { ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
+const CAT_LABEL = { countryOfBirth: 'Country of birth', ethnicGroup: 'Ethnic group', language: 'Main language', age: 'Age band', householdComposition: 'Household composition' };
 
 // Neighbourhood Insights (paid add-on). Aggregate ONS Census 2021 area profile around the shop, grounded in
 // honest provenance: every figure is labelled estimated, with source/year/coverage/method/limitations. The

@@ -65,8 +65,11 @@ router.get('/radius', ownerOrManager, async (req, res, next) => {
     const postcode = (req.query.postcode || '').toString();
     const radiusM = Number(req.query.radiusM);
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
-    // The free card shows only people + households, so fetch just those (2 Nomis tables, not 4) — faster first load.
-    const out = await insights.buildProfile({ postcode, radiusM, headlineOnly: true });
+    // Default: headline only (people + households) → 2 Nomis tables, fast. `full=1` ("Who lives here") returns the
+    // full profile with the community breakdowns (country of birth, ethnic group, main language) — fetched only
+    // when the owner opens that section, so the headline stays fast.
+    const full = req.query.full === '1' || req.query.full === 'true';
+    const out = await insights.buildProfile({ postcode, radiusM, headlineOnly: !full });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
     res.json({ success: true, testUnlock: true, ...out });
   } catch (err) {

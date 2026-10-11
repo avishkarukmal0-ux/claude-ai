@@ -28,8 +28,9 @@ export function __setFetch(fn) { _fetch = fn || ((url, opts) => fetch(url, opts)
 // Radius-aggregated figures for the catchment circle (the paid Insights aggregation). Available on the free card
 // only when the server's INSIGHTS_TEST_UNLOCK is on (otherwise 403). Returns the buildProfile shape
 // ({ ok, configured, profile, ... }); throws with .status so the caller can hide on 403 (locked/production).
-export async function getRadiusProfile({ postcode, radiusM }) {
-  const res = await _fetch(`${BASE}/radius?postcode=${encodeURIComponent(norm(postcode))}&radiusM=${Math.round(radiusM)}`, { headers: authHeader() });
+export async function getRadiusProfile({ postcode, radiusM, full = false }) {
+  const qs = `postcode=${encodeURIComponent(norm(postcode))}&radiusM=${Math.round(radiusM)}${full ? '&full=1' : ''}`;
+  const res = await _fetch(`${BASE}/radius?${qs}`, { headers: authHeader() });
   let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
   if (!res.ok) { const e = new Error((body && body.message) || `radius ${res.status}`); e.status = res.status; throw e; }
   return body || {};
