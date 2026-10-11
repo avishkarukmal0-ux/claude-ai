@@ -212,20 +212,30 @@ async function runForAccount(account, now = Date.now(), { force = false } = {}) 
   const prefs = account.notify || {};
   if (!force && !isDue(prefs, now)) return { sent: false, reason: 'not_due' };
 
+  const today = londonParts(now).day;
+
+  // Audit B4: CLAIM the day ATOMICALLY before sending, so two overlapping workers can't both send today's digest.
+  // Exactly one `updateOne` sets lastSentDay=today (the others match 0 docs and bow out). On a send FAILURE we
+  // RELEASE the claim so the digest still retries on the next sweep (audit S5 — a transient SMTP error must not
+  // suppress the day's reminders). `force` (manual preview/run) bypasses the claim.
+  if (!force) {
+    const claim = await Account.updateOne(
+      { _id: account._id, $or: [{ 'notify.lastSentDay': { $exists: false } }, { 'notify.lastSentDay': null }, { 'notify.lastSentDay': { $ne: today } }] },
+      { $set: { 'notify.lastSentDay': today } },
+    );
+    const won = (claim.modifiedCount || claim.nModified || 0) === 1;
+    if (!won) return { sent: false, reason: 'already_sent_today' };
+  }
+  const releaseClaim = async () => {
+    if (force) return;
+    try { await Account.updateOne({ _id: account._id }, { $set: { 'notify.lastSentDay': null } }); } catch { /* best-effort */ }
+  };
+
   const blobsByName = await blobsForAccount(account._id);
   const digest = buildDigest({ shopName: account.shopName, blobsByName, prefs, now });
 
-  // Audit S5: only mark the day handled when there is genuinely nothing to send. Do NOT mark it before the
-  // send — a transient SMTP failure would otherwise suppress the digest (expiry/claim reminders) for the rest
-  // of the day with no retry. For an empty digest there's nothing to retry, so mark it and stop.
-  const markDay = async () => {
-    if (force) return;
-    account.notify = account.notify || {};
-    account.notify.lastSentDay = londonParts(now).day;
-    await account.save();
-  };
-
-  if (digest.empty && !force) { await markDay(); return { sent: false, reason: 'nothing_to_send' }; }
+  // Nothing to send → the day is already claimed (equivalent to the old markDay), and there's nothing to retry.
+  if (digest.empty && !force) return { sent: false, reason: 'nothing_to_send' };
 
   const to = (prefs.recipient && prefs.recipient.trim()) || account.email;
   try {
@@ -235,10 +245,10 @@ async function runForAccount(account, now = Date.now(), { force = false } = {}) 
       text: digestToText(digest),
       html: digestToHtml(digest),
     });
-    await markDay(); // only after the provider accepted it, so a failed send can retry on the next sweep
     return { sent: true, reason: 'sent', to };
   } catch (err) {
     logger.error(`PWA digest send failed for ${account._id}: ${err.message}`);
+    await releaseClaim(); // reopen the day so the next sweep retries (don't suppress on a transient failure)
     return { sent: false, reason: 'send_failed', error: err.message };
   }
 }

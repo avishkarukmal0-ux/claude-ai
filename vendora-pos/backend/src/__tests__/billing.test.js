@@ -103,6 +103,13 @@ describe('stripeBilling.mapEvent — grants only from real subscription state', 
     expect(n).toBeNull();
   });
 
+  test('B3: a PAID checkout with the marker ABSENT does NOT grant (require insights_report)', () => {
+    const noMeta = stripeBilling.mapEvent({ id: 'e', type: 'checkout.session.completed', created: 1, data: { object: { mode: 'payment', payment_status: 'paid', client_reference_id: 'a' } } });
+    expect(noMeta).toBeNull();
+    const metaNoKind = stripeBilling.mapEvent({ id: 'e', type: 'checkout.session.completed', created: 1, data: { object: { mode: 'payment', payment_status: 'paid', metadata: { accountId: 'a' }, client_reference_id: 'a' } } });
+    expect(metaNoKind).toBeNull();
+  });
+
   test('S2: async_payment_succeeded (paid, our product) grants the one-off', () => {
     const n = stripeBilling.mapEvent({ id: 'e', type: 'checkout.session.async_payment_succeeded', created: 1, data: { object: { mode: 'payment', payment_status: 'paid', metadata: { kind: 'insights_report', accountId: 'a' }, client_reference_id: 'a' } } });
     expect(n.type).toBe('purchased');

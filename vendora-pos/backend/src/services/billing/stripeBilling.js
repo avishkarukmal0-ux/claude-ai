@@ -81,7 +81,10 @@ function mapEvent(event) {
       // (delayed payment methods), and an unrelated 'payment' checkout could carry the same accountId metadata —
       // neither must grant. Require payment_status 'paid' and our own kind marker ('insights_report').
       if (obj.payment_status !== 'paid') return null; // async/unpaid → wait for async_payment_succeeded
-      if (obj.metadata && obj.metadata.kind && obj.metadata.kind !== 'insights_report') return null; // not our product
+      // Audit B3: REQUIRE our own kind marker — an absent marker must NOT grant. A legacy/other paid 'payment'
+      // checkout that merely carries the shop reference would otherwise grant Insights. Our own checkout always
+      // sets metadata.kind = 'insights_report' (see createInsightsCheckout).
+      if (!obj.metadata || obj.metadata.kind !== 'insights_report') return null; // not our product
       const accountId = obj.client_reference_id || (obj.metadata && obj.metadata.accountId) || null;
       return {
         ...base, type: 'purchased', plan: 'one_off', accountId,
