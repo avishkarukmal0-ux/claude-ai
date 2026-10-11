@@ -29,10 +29,24 @@ const AuthTileLayer = L.TileLayer.extend({
 
 const ACCENT = '#2563eb';
 
-export default function RadiusMap({ point, radiusM, fetchTile }) {
+// The radius that exactly fits INSIDE the current map viewport, centred on the view: half of the smaller of the
+// viewport's height/width in metres. It depends on the zoom (and latitude), not on panning, so zooming in/out
+// grows/shrinks it while looking around does not. Used by the "radius follows the map" mode.
+function inscribedRadiusM(map) {
+  const b = map.getBounds();
+  const c = b.getCenter();
+  const halfH = c.distanceTo(L.latLng(b.getNorth(), c.lng));
+  const halfW = c.distanceTo(L.latLng(c.lat, b.getEast()));
+  return Math.min(halfH, halfW);
+}
+
+export default function RadiusMap({ point, radiusM, fetchTile, followView = false, onViewRadius = null }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const circleRef = useRef(null);
+  // Keep the latest callback in a ref so attaching/detaching the map listeners doesn't depend on its identity.
+  const onViewRef = useRef(onViewRadius);
+  useEffect(() => { onViewRef.current = onViewRadius; }, [onViewRadius]);
 
   // Create the map once we have a point (and tear it down on unmount / point change). A map error must NEVER
   // crash the surrounding card, so everything is wrapped in try/catch and the fit happens AFTER the container has
@@ -68,12 +82,35 @@ export default function RadiusMap({ point, radiusM, fetchTile }) {
     }
   }, [point && point.lat, point && point.lng]);
 
-  // Update the circle (and re-fit) when only the radius changes.
+  // Update the circle when the radius changes. In the normal (slider) mode we re-fit the map to the circle. In
+  // "follow the map" mode we must NOT re-fit — the user's own zoom is what sets the radius, so re-fitting would
+  // fight their gesture (and loop) — we only resize the circle in place.
   useEffect(() => {
     const map = mapRef.current; const circle = circleRef.current;
     if (!map || !circle) return;
-    try { circle.setRadius(radiusM); map.fitBounds(circle.getBounds(), { padding: [16, 16] }); } catch { /* ignore transient */ }
-  }, [radiusM]);
+    try {
+      circle.setRadius(radiusM);
+      if (!followView) map.fitBounds(circle.getBounds(), { padding: [16, 16] });
+    } catch { /* ignore transient */ }
+  }, [radiusM, followView]);
+
+  // "Radius follows the map view": as the user zooms in/out, report the radius that fits the viewport so the
+  // parent can re-sum the figures. No programmatic map movement happens here, so there's no feedback loop
+  // (parent → radiusM → the effect above only resizes the circle in place when followView is on).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !followView) return undefined;
+    const emit = () => {
+      try {
+        const m = inscribedRadiusM(map);
+        if (onViewRef.current && Number.isFinite(m) && m > 0) onViewRef.current(Math.round(m));
+      } catch { /* ignore transient */ }
+    };
+    map.on('zoomend', emit);
+    map.on('moveend', emit);
+    emit(); // sync once when follow mode turns on, so the radius matches what's already on screen
+    return () => { try { map.off('zoomend', emit); map.off('moveend', emit); } catch { /* ignore */ } };
+  }, [followView, point && point.lat, point && point.lng]);
 
   if (!point) return null;
   return <div ref={elRef} className="h-64 w-full overflow-hidden rounded-2xl border border-gray-100" aria-label="Map of the area around your shop with the selected radius" />;

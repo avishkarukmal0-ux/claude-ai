@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbourhoodClient';
@@ -6,7 +6,7 @@ import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 import RadiusControl from './RadiusControl';
 import RadiusMap from './RadiusMap';
 import RadiusFigures from './RadiusFigures';
-import { fmtRadius } from '../../lib/radiusUnits';
+import { fmtRadius, clamp } from '../../lib/radiusUnits';
 
 // The catchment circle on the free card is a VISUAL guide around the shop (its own location). The figures below
 // are for the shop's immediate area (LSOA) and do NOT change with the circle — radius-aggregated figures are the
@@ -25,6 +25,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [result, setResult] = useState(null);
   const [unit, setUnit] = useState('mi');
   const [radiusM, setRadiusM] = useState(1000);
+  const [radiusMode, setRadiusMode] = useState('map'); // 'slider' | 'map' — map: the radius follows the map zoom
   const [radProfile, setRadProfile] = useState(null);
   const [radState, setRadState] = useState('idle'); // idle | loading | ok | unconfigured | locked | error
   const [radHttp, setRadHttp] = useState(null);      // last radius request HTTP status (for the on-card diagnostic)
@@ -33,6 +34,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
+
+  // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Quantise to 50 m so tiny
+  // zoom/pan jitter maps to the same radius (reuses the session + server caches instead of firing a fetch per
+  // pixel), clamp to the allowed bounds, and skip no-op updates so the figures only re-sum when the radius moves.
+  const onViewRadius = useCallback((m) => {
+    const q = clamp(Math.round(m / 50) * 50, RADIUS_BOUNDS.min, RADIUS_BOUNDS.max);
+    setRadiusM((prev) => (q !== prev ? q : prev));
+  }, []);
 
   // Radius-aggregated figures that RE-SUM as the circle moves (the paid aggregation; available on this free card
   // only when the server's INSIGHTS_TEST_UNLOCK is on — a 403 means it's locked and we hide the block). The server
@@ -124,8 +133,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
           {result.area && result.area.point && !result.offline && (
             <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
-              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} />
-              <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} /></div>
+              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={radiusMode} setMode={setRadiusMode} />
+              <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} followView={radiusMode === 'map'} onViewRadius={onViewRadius} /></div>
               <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
 
               <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} />
