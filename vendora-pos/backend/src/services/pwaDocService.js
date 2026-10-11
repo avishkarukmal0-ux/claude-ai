@@ -43,10 +43,12 @@ function validate({ contentType, size }) {
 // and replace cleanly. Isolation never relies on the filename alone — metadata.accountId is always checked.
 function nameFor(accountId, fileId) { return `${accountId}:${fileId}`; }
 
-/** Find a stored file for THIS account (isolation enforced via metadata.accountId). null if none. */
+/** Find a stored file for THIS account (isolation enforced via metadata.accountId). null if none. Returns the
+ *  greatest-`_id` version — the authoritative one the B2 cleanup keeps — if a concurrent-write tie left a duplicate. */
 async function findOwned(accountId, fileId) {
   const files = await bucket().find({ filename: nameFor(accountId, fileId), 'metadata.accountId': accountId }).toArray();
-  return files && files.length ? files[files.length - 1] : null; // newest if duplicates slipped in
+  if (!files || !files.length) return null;
+  return files.reduce((a, b) => (String(b._id) > String(a._id) ? b : a));
 }
 
 /** Remove every stored copy of (account,fileId). Safe to call when none exist. */
@@ -57,12 +59,23 @@ async function removeAll(accountId, fileId) {
   return files.length;
 }
 
-/** Remove every stored copy of (account,fileId) EXCEPT keepId. Used after a successful replacement (S4). */
-async function removeAllExcept(accountId, fileId, keepId) {
+/**
+ * Remove copies of (account,fileId) that are strictly OLDER than keepId, never a newer competing upload (audit
+ * B2). The GridFS `_id` (ObjectId) is a deterministic version pointer — all concurrent writers agree on which is
+ * greatest — so cleanup only drops versions ordered BEFORE the one we just committed. Two simultaneous
+ * replacements therefore can't delete each other's committed file: the greatest `_id` always survives (the lesser
+ * writer keeps the greater; the greater writer tidies the lesser). A same-instant tie just leaves a harmless
+ * duplicate that the next upload cleans up — never zero surviving files.
+ */
+async function removeOlderThan(accountId, fileId, keepId) {
   const b = bucket();
   const files = await b.find({ filename: nameFor(accountId, fileId), 'metadata.accountId': accountId }).toArray();
+  const keep = String(keepId);
   let removed = 0;
-  for (const f of files) { if (String(f._id) !== String(keepId)) { try { await b.delete(f._id); removed += 1; } catch { /* gone */ } } }
+  for (const f of files) {
+    const id = String(f._id);
+    if (id !== keep && id < keep) { try { await b.delete(f._id); removed += 1; } catch { /* gone */ } }
+  }
   return removed;
 }
 
@@ -96,7 +109,7 @@ async function upload(accountId, fileId, { buffer, contentType, invoiceId = null
     if (newId) { try { await b.delete(newId); } catch { /* ignore */ } }
     throw new AppError(`Upload failed — your previous backup is unchanged. (${err.message})`, 502, 'UPLOAD_FAILED');
   }
-  await removeAllExcept(accountId, fileId, newId);
+  await removeOlderThan(accountId, fileId, newId);
   return { ok: true, fileId, size, contentType };
 }
 

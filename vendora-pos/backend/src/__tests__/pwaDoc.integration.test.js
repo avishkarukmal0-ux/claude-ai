@@ -108,3 +108,22 @@ describe('pwa-docs — backup round-trip + isolation', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('pwa-docs — B2: concurrent cloud replacements never delete both backups', () => {
+  dbTest('two simultaneous uploads of the same file both leave a surviving copy', async () => {
+    const docs = require('../services/pwaDocService');
+    const a = await newOwner('B2 Docs');
+    const fileId = `doc-test-b2-${Date.now()}`;
+    // Fire two replacements of the SAME (account,fileId) at once — the pre-fix cleanup deleted each other's
+    // committed file, leaving zero. Now the greatest-_id version must survive.
+    const [r1, r2] = await Promise.all([
+      docs.upload(a.id, fileId, { buffer: PNG, contentType: 'image/png' }),
+      docs.upload(a.id, fileId, { buffer: PNG, contentType: 'image/png' }),
+    ]);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    const dl = await docs.download(a.id, fileId);
+    expect(dl).not.toBeNull();                 // at least one backup survived (was 0 before the fix)
+    expect(dl.buffer.length).toBeGreaterThan(0);
+  });
+});
