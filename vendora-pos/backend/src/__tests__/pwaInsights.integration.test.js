@@ -164,6 +164,31 @@ describe('pwa-insights — entitlement enforced on the server', () => {
     expect(prof.status).toBe(402); // the newer 'ended' must win regardless of which landed first
   });
 
+  dbTest('R5: a SAME-second grant cannot reactivate an ending that committed first (CAS recompute)', async () => {
+    const svc = require('../services/insightsEntitlementService');
+    const a = await newOwner('Ins Tie');
+    const t = Date.now();
+    // Seed an older active grant so lastEventAt is set (< t) — neither same-second event is then stale-skipped.
+    await svc.ingestProviderEvent({ type: 'purchased', accountId: a.id, currentPeriodEnd: t + 30 * 86400000, eventId: `seed_${t}`, eventCreatedMs: t - 1000 });
+
+    const ended = { type: 'ended', accountId: a.id, eventId: `end_${t}`, eventCreatedMs: t };          // same second
+    const renewed = { type: 'renewed', accountId: a.id, currentPeriodEnd: t + 60 * 86400000, eventId: `ren_${t}`, eventCreatedMs: t };
+
+    // Force the adverse interleave deterministically (what a real concurrent delivery can produce): when the
+    // RENEWED grant does its FIRST read — still seeing the stale 'active' state — let the ENDING fully commit
+    // 'cancelled' before the grant reaches its guarded write. Pre-fix, the grant's `$lte` write (T <= T) clobbered
+    // the committed deny → access stayed active. With the CAS applier the grant's write conflicts on lastEventId,
+    // it re-reads 'cancelled' at an equal timestamp, and the B1 tie rule keeps it denied.
+    svc.__setAfterEntitlementRead(async () => { await svc.ingestProviderEvent(ended); });
+    await svc.ingestProviderEvent(renewed);
+    svc.__setAfterEntitlementRead(null);
+
+    const ent = await svc.getEntitlement(a.id);
+    expect(svc.isActive(ent)).toBe(false); // the newer-or-equal ending wins the same-second tie, fail-safe
+    const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(prof.status).toBe(402);
+  });
+
   dbTest('the REAL Stripe webhook (raw body, signed) grants access; a forged body is rejected', async () => {
     const a = await newOwner('Ins Stripe');
     const { payload, header } = stripeSigned(subUpdatedActiveWithAddon(a.id));

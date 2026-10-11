@@ -45,31 +45,51 @@ async function setEntitlement(accountId, patch) {
   return acct.entitlements.neighbourhoodInsights;
 }
 
-// Audit S3: apply a patch ONLY if this event is strictly newer than the last applied one, atomically. Two
-// concurrent webhooks (e.g. an older 'renewed' and a newer 'ended') both read the same old state under the
-// non-atomic path and the last writer wins regardless of order. Here the conditional findOneAndUpdate is the
-// single source of truth: the guard compares the STORED lastEventAt at write time, so the newest event wins
-// whichever lands first; a stale event matches 0 docs and is skipped. @returns the new entitlement or null.
 const NP = 'entitlements.neighbourhoodInsights'; // nested path
-async function setEntitlementIfNewer(accountId, patch, eventCreatedMs) {
-  const current = await getEntitlement(accountId);
-  const merged = { ...DEFAULT, ...current, ...patch };
-  // Audit B1: Stripe `created` is SECOND-resolution, so two real events (e.g. a renewal and a same-second ending)
-  // share the same eventCreatedMs. A strict `$lt` dropped the second one as "stale" — leaving the wrong
-  // entitlement (ending ignored, access stays active). Use `$lte` so same-timestamp events still apply (in
-  // delivery order, which Stripe sends in creation order), matching decideIngest (which treats equal as not
-  // stale). Genuinely older events (`stored > eventCreatedMs`) are still skipped; duplicates are caught by the
-  // separate eventId idempotency ledger, not by this timestamp guard.
-  const guard = {
-    _id: accountId,
-    $or: [
-      { [`${NP}.lastEventAt`]: { $exists: false } },
-      { [`${NP}.lastEventAt`]: null },
-      { [`${NP}.lastEventAt`]: { $lte: eventCreatedMs } },
-    ],
-  };
-  const doc = await Account.findOneAndUpdate(guard, { $set: { [NP]: merged } }, { new: true }).lean();
-  return doc ? doc.entitlements.neighbourhoodInsights : null; // null = a newer event already applied (skip)
+
+// Audit R5 (round 3): apply a billing event with a COMPARE-AND-SWAP that RECOMPUTES on conflict.
+//
+// The round-2 path read the entitlement, computed `merged` in Node, then wrote the whole nested object with a
+// `lastEventAt $lte` guard. Two real same-second events expose two bugs there: (1) the `merged` value is built
+// from a possibly-STALE read, so a grant that read the account BEFORE a same-second 'ended' committed writes an
+// 'active' object that never saw the ending; and (2) `$lte` lets that stale grant's write match (T <= T) and
+// clobber the committed deny — access stays active after cancellation. The B1 strict-newer tie rule in
+// entitlementPatchFor can't help, because the `current` it was given predates the deny.
+//
+// The fix: guard the write on the EXACT ordering token we read (lastEventId). If a concurrent writer changed it
+// between our read and our write, findOneAndUpdate matches 0 docs; we then re-read the now-committed state and
+// recompute the patch against it (so the grant now sees status 'cancelled' + an equal timestamp → the B1 rule
+// keeps it denied — fail-safe on a tie). Bounded retries; genuinely older events are still skipped.
+// @returns {{ ent?, skipped?, reason? }}.
+let _afterEntitlementRead = null; // test seam (R5): interpose between read and guarded write to force an interleave
+function __setAfterEntitlementRead(fn) { _afterEntitlementRead = fn || null; }
+async function setEntitlementCAS(accountId, event, now = Date.now()) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const current = await getEntitlement(accountId);
+    // Genuinely older than the stored state → skip (defence in depth; decideIngest also screens this).
+    if (event.eventCreatedMs != null && current.lastEventAt != null && event.eventCreatedMs < current.lastEventAt) {
+      return { skipped: true, reason: 'stale' };
+    }
+    const patch = entitlementPatchFor(event, current, now);
+    if (!patch) return { skipped: true, reason: 'no_patch' };
+    const merged = { ...DEFAULT, ...current, ...patch };
+    // One-shot test hook fires on the first read so a test can let a concurrent event commit before we write.
+    if (_afterEntitlementRead) { const h = _afterEntitlementRead; _afterEntitlementRead = null; await h(event, current); }
+    // CAS: the stored lastEventId must still be exactly what we read (or both unset). A concurrent commit that
+    // advanced it makes this match 0 docs → loop re-reads + recomputes against the committed state.
+    const guard = { _id: accountId };
+    if (current.lastEventId == null) {
+      guard.$or = [{ [`${NP}.lastEventId`]: { $exists: false } }, { [`${NP}.lastEventId`]: null }];
+    } else {
+      guard[`${NP}.lastEventId`] = current.lastEventId;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const doc = await Account.findOneAndUpdate(guard, { $set: { [NP]: merged } }, { new: true }).lean();
+    if (doc) return { ent: doc.entitlements.neighbourhoodInsights };
+    // 0 matched → a concurrent writer changed the ordering token; re-read and recompute.
+  }
+  // Extreme contention only: refuse rather than write a value computed against a superseded state.
+  return { skipped: true, reason: 'cas_contention' };
 }
 
 // --- billing lifecycle (provider-agnostic) ---------------------------------
@@ -188,15 +208,17 @@ async function ingestProviderEvent(event, now = Date.now()) {
     return { ok: true, skipped: true, reason: decision.reason };
   }
 
-  const patch = entitlementPatchFor(event, current, now);
-  if (!patch) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: 'no_patch' }; }
-  // When the event carries a created-time, apply it with the atomic ordering guard (S3). Otherwise (e.g. the
-  // generic manual webhook with no timestamp) fall back to the plain write.
+  // When the event carries a created-time, apply it with the compare-and-swap applier (R5): it recomputes the
+  // patch against the committed state on a concurrent conflict, so a same-second grant can't reactivate a deny.
+  // Otherwise (e.g. the generic manual webhook with no timestamp) fall back to the plain read-modify-write.
   let ent;
   if (event.eventCreatedMs != null) {
-    ent = await setEntitlementIfNewer(accountId, patch, event.eventCreatedMs);
-    if (!ent) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: 'stale' }; }
+    const r = await setEntitlementCAS(accountId, event, now);
+    if (r.skipped) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: r.reason }; }
+    ent = r.ent;
   } else {
+    const patch = entitlementPatchFor(event, current, now);
+    if (!patch) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: 'no_patch' }; }
     ent = await setEntitlement(accountId, patch);
   }
   await recordProcessed(event, accountId);
@@ -213,4 +235,5 @@ async function recordProcessed(event, accountId) {
 module.exports = {
   isActive, getEntitlement, hasAccess, setEntitlement, entitlementPatchFor, decideIngest,
   applyBillingEvent, ingestProviderEvent, findAccountIdByCustomer, EVENT_TYPES, DEFAULT,
+  __setAfterEntitlementRead,
 };
