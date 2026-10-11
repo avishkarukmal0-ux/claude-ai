@@ -102,6 +102,7 @@ export default function HomePage() {
   const toolDialogRef = useDialog(!!activeTool, () => setActiveTool(null));
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
   const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt);
+  const [exporting, setExporting] = useState(false); // double-tap guard: Export is async (share sheet / download)
   const restoreInputRef = useRef(null);
 
   function go(target) {
@@ -127,11 +128,15 @@ export default function HomePage() {
   }, []);
 
   async function onExport() {
-    const shared = await shareBackup();
-    if (shared) { setLastBackupAt(getLastBackupAt()); return; }
-    const ok = downloadBackup();
-    if (ok) setLastBackupAt(getLastBackupAt());
-    toast[ok ? 'success' : 'error'](ok ? 'Backup downloaded' : 'Couldn’t create the backup');
+    if (exporting) return; // guard against a second tap opening a second share sheet / download
+    setExporting(true);
+    try {
+      const shared = await shareBackup();
+      if (shared) { setLastBackupAt(getLastBackupAt()); return; }
+      const ok = downloadBackup();
+      if (ok) setLastBackupAt(getLastBackupAt());
+      toast[ok ? 'success' : 'error'](ok ? 'Backup downloaded' : 'Couldn’t create the backup');
+    } finally { setExporting(false); }
   }
   function onRestoreFile(e) {
     const file = e.target.files?.[0];
@@ -357,7 +362,7 @@ export default function HomePage() {
             </MoreGroup>
             <MoreGroup title="Data">
               <Row icon={FileSpreadsheet} label="Import till sales" sub="Turn estimates into confirmed sales (optional)" onClick={() => setScreen('sales-import')} />
-              <Row icon={Download} label="Export backup" sub={lastBackupAt ? `Last saved ${new Date(lastBackupAt).toLocaleDateString('en-GB')} · a file you can restore` : 'Save your data to a file you can restore — no backup yet'} onClick={onExport} />
+              <Row icon={Download} label="Export backup" disabled={exporting} sub={exporting ? 'Saving…' : (lastBackupAt ? `Last saved ${new Date(lastBackupAt).toLocaleDateString('en-GB')} · a file you can restore` : 'Save your data to a file you can restore — no backup yet')} onClick={onExport} />
               <Row icon={Upload} label="Restore from backup" sub="Load a backup file — replaces current data" onClick={() => restoreInputRef.current?.click()} />
               <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />
               {ACCOUNTS_ENABLED && isLoggedIn() && !isStaff && (
@@ -452,9 +457,9 @@ function MoreGroup({ title, children }) {
   );
 }
 
-function Row({ icon: Icon, label, sub, onClick, badge = 0 }) {
+function Row({ icon: Icon, label, sub, onClick, badge = 0, disabled = false }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99]">
+    <button type="button" onClick={onClick} disabled={disabled} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99] disabled:opacity-60">
       <Icon className="h-5 w-5 text-gray-400" />
       <span className="flex-1">
         <span className="block text-sm font-medium text-gray-900">{label}</span>
