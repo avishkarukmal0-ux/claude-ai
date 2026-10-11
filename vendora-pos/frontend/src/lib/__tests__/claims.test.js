@@ -90,6 +90,10 @@ describe('claims — wrong-price claims the overcharge (audit W8)', () => {
     // Claims the OVERCHARGE (billed − agreed) × qty, NOT the full value (billed × qty).
     expect(updated.amount).toBeCloseTo((2 - 1.8) * updated.qty, 2);
     expect(updated.amount).toBeLessThan(2 * updated.qty);
+    // D1: the draft claim's requested total now tracks the edited line (was frozen at £0 because the guard
+    // checked a nonexistent 'requested' status instead of 'draft').
+    expect(result.current.claims[0].status).toBe('draft');
+    expect(result.current.claims[0].requestedAmount).toBeCloseTo((2 - 1.8) * updated.qty, 2);
   });
 });
 

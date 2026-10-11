@@ -44,4 +44,25 @@ describe('weeklyReport', () => {
     expect(rep.priceChanges).toHaveLength(1);
     expect(rep.priceChanges[0]).toMatchObject({ name: 'Cola', from: 1, to: 1.3 });
   });
+
+  it('D6: counts a stocktake that stores only finishedAt (not at/committedAt)', () => {
+    const stocktakeHistory = [
+      { id: 's1', finishedAt: recent, lines: [{}, {}] },   // current history shape → must be counted
+      { id: 's0', finishedAt: old, lines: [{}] },           // out of period
+    ];
+    const rep = weeklyReport({ stocktakeHistory, periodDays: 7, now });
+    expect(rep.checking.stocktakes).toHaveLength(1);
+    expect(rep.checking.stocktakes[0].at).toBe(recent);
+  });
+
+  it('D7: fully-reversed waste contributes 0 units / £0', () => {
+    const movements = [
+      { id: 'w1', type: MOVEMENT_TYPES.WASTE, delta: -2, valuation: 4, at: recent },               // original waste
+      { id: 'r1', type: MOVEMENT_TYPES.WASTE, delta: 2, valuation: -4, at: recent, reversalOf: 'w1' }, // undo
+      { id: 'w2', type: MOVEMENT_TYPES.WASTE, delta: -3, valuation: 6, at: recent },               // a real, un-reversed waste
+    ];
+    const rep = weeklyReport({ movements, periodDays: 7, now });
+    expect(rep.expiry.wasteUnits).toBe(3);   // only w2 — w1 cancelled by r1
+    expect(rep.expiry.wasteCost).toBe(6);
+  });
 });

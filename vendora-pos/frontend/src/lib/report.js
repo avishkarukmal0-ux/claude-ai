@@ -8,7 +8,9 @@ import { MOVEMENT_TYPES } from './movementStore';
 
 const DAY = 86400000;
 const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
-const tsOf = (x) => Number(x.at || x.date || x.receivedAt || x.committedAt || x.createdAt || 0);
+// Read a record's timestamp tolerantly. Stocktake history stores `finishedAt` (and `startedAt`), so those MUST
+// be included or completed counts are silently dropped from the report (audit D6).
+const tsOf = (x) => Number(x.at || x.date || x.receivedAt || x.committedAt || x.finishedAt || x.createdAt || x.startedAt || 0);
 
 /**
  * @param {{ deliveries?, stocktakeHistory?, movements?, claims?, invoices?, products?, periodDays?, now? }} data
@@ -28,8 +30,15 @@ export function weeklyReport({
     .filter((s) => inPeriod(tsOf(s)))
     .map((s) => ({ at: tsOf(s), by: s.by || s.actor || null, lines: s.lines ? s.lines.length : (s.countedLines || null) }));
 
-  // Expiry actions + recorded waste.
-  const wasteMoves = (movements || []).filter((m) => m.type === MOVEMENT_TYPES.WASTE && inPeriod(Number(m.at) || 0));
+  // Expiry actions + recorded waste. Net out REVERSED waste (audit D7): drop the compensating reversal entries
+  // (they carry `reversalOf`) AND the originals they reverse, so a fully-undone waste contributes 0 units/£0.
+  const reversedOriginalIds = new Set((movements || []).filter((m) => m.reversalOf).map((m) => String(m.reversalOf)));
+  const wasteMoves = (movements || []).filter((m) => (
+    m.type === MOVEMENT_TYPES.WASTE
+    && !m.reversalOf                               // not a reversal entry
+    && !reversedOriginalIds.has(String(m.id))      // not an original that was later reversed
+    && inPeriod(Number(m.at) || 0)
+  ));
   const wasteUnits = wasteMoves.reduce((n, m) => n + Math.max(0, -(Number(m.delta) || 0)), 0);
   const wasteCost = r2(wasteMoves.reduce((n, m) => n + (Number(m.valuation) || 0), 0));
   const pastUseBy = (products || []).filter((p) => { const e = worstExpiry(p, new Date(now)); return e && e.mustPull && (Number(p.qty) || 0) > 0; }).length;

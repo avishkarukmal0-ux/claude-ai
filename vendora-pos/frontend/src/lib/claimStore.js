@@ -170,12 +170,12 @@ export function useClaims() {
         }
         return merged;
       });
-      // Audit D2: keep the requested total in step with the items. Previously requestedAmount was frozen at
-      // creation (0 for a wrong-price claim), so edited line amounts never reached the requested/approved total
-      // or the credit chase. Re-derive it from the items on every edit, unless the claim has already advanced
-      // past 'requested' (then the agreed amount is authoritative and must not be silently overwritten).
+      // Keep the requested total in step with the items while the claim is still an editable DRAFT. Previously
+      // this guarded on `c.status === 'requested'` — a status that does NOT exist (lifecycle is draft → submitted
+      // → …) — so a new wrong-price claim ('draft') never had its edited line amount reach the requested/approved
+      // total (it stayed £0) (audit D1). Once submitted/agreed the figure is authoritative and left untouched.
       const next = { ...c, items, updatedAt: Date.now() };
-      if (!c.status || c.status === 'requested') next.requestedAmount = sumMoney(items.map((i) => i.amount));
+      if (!c.status || c.status === 'draft') next.requestedAmount = sumMoney(items.map((i) => i.amount));
       return next;
     }));
   }, []);
