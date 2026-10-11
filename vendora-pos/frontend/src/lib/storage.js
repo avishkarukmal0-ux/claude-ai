@@ -380,6 +380,10 @@ export function copyWorkspace(from, to, { overwrite = false } = {}) {
  */
 export function purgeWorkspace(ws) {
   if (!ws) return { purged: 0 };
+  // Audit R2 (round 3): if a boot-time IndexedDB recovery is in flight, record this purge so the recovery's
+  // already-captured snapshot can't RESURRECT the purged shop's private data after it's gone (a logout / account
+  // switch during slow startup recovery on a shared device). initStorage()'s restore loop skips these.
+  if (_initActive) _purgedDuringInit.add(ws);
   const prefix = `${NS}:${ws}:`;
   // MEM (synchronous working copy)
   for (const mk of [...MEM.keys()]) if (mk.indexOf(prefix) === 0) MEM.delete(mk);
@@ -416,6 +420,15 @@ export function onWorkspaceChange(cb) {
 
 // --- durable init / recovery ----------------------------------------------
 let _initPromise = null;
+// Audit R2: a boot recovery snapshots IndexedDB, then restores keys missing from localStorage. A purge
+// (sign-out / account switch) that lands AFTER the snapshot is captured must not be undone by that restore.
+// While a recovery is active we record purged workspaces and skip restoring any of their keys.
+let _initActive = false;
+const _purgedDuringInit = new Set();
+function _purgedSinceSnapshot(key) {
+  for (const ws of _purgedDuringInit) { if (key.indexOf(`${NS}:${ws}:`) === 0) return true; }
+  return false;
+}
 
 /**
  * Boot-time durability sync (safe to call once at startup; idempotent). If IndexedDB is available:
@@ -431,9 +444,12 @@ export function initStorage() {
   if (_initPromise) return _initPromise;
   _initPromise = (async () => {
     if (!durableOn()) return { ran: false, seeded: 0, restored: 0 };
+    // Mark the recovery active BEFORE the snapshot read so a purge during the (possibly slow) read is recorded.
+    _initActive = true;
+    _purgedDuringInit.clear();
     let snapshot;
     try { snapshot = await _durable.getAll(); }
-    catch { return { ran: false, seeded: 0, restored: 0 }; }
+    catch { _initActive = false; return { ran: false, seeded: 0, restored: 0 }; }
     const idbKeys = new Set(snapshot.map((r) => r.key));
 
     // 0) Purge any credential/session keys that were mirrored to IndexedDB by earlier builds — they
@@ -455,6 +471,8 @@ export function initStorage() {
     let restored = 0;
     for (const { key, value } of snapshot) {
       if (typeof key !== 'string' || key.indexOf(`${NS}:`) !== 0 || NEVER_DURABLE.has(key)) continue;
+      // R2: never resurrect a workspace purged (sign-out / account switch) since this snapshot was taken.
+      if (_purgedSinceSnapshot(key)) continue;
       let ls = null;
       try { ls = localStorage.getItem(key); } catch { ls = null; }
       if (ls == null && !MEM.has(key)) {
@@ -463,6 +481,8 @@ export function initStorage() {
         restored += 1;
       }
     }
+    _initActive = false;
+    _purgedDuringInit.clear();
     if (restored) {
       _active = null; // active-workspace key may have been restored — re-read it lazily
       dispatch(WORKSPACE_EVENT, { restored });
@@ -473,7 +493,7 @@ export function initStorage() {
 }
 
 /** Test hook: allow initStorage to run again. */
-export function __resetInitForTest() { _initPromise = null; }
+export function __resetInitForTest() { _initPromise = null; _initActive = false; _purgedDuringInit.clear(); }
 
 // --- cross-tab coherence (audit F5) ----------------------------------------
 // The native `storage` event fires in OTHER tabs when localStorage changes. Every store hook already

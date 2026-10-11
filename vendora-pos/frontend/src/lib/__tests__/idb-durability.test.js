@@ -167,6 +167,29 @@ describe('durability — recovery on boot', () => {
     await storage.initStorage();
     expect(storage.readJSON('inventory_v1', null)).toEqual([{ id: 'fresh' }]); // localStorage wins
   });
+
+  it('R2: a purge (logout) during startup recovery does not resurrect the purged shop', async () => {
+    storage.__resetMemForTest(); storage.__resetInitForTest();
+    const purgedKey = storage.keyFor('inventory_v1', 'shop:R2victim');
+    // IndexedDB still holds shop:R2victim's private data (its durable purge hasn't landed yet); its getAll is
+    // GATED so we can purge the shop while the snapshot read is in flight — the deterministic race.
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    storage.__setDurableBackend({
+      available: () => true,
+      getAll: async () => { await gate; return [{ key: purgedKey, value: JSON.stringify([{ id: 'privateA' }]) }]; },
+      set: async () => true, del: async () => true, delByPrefix: async () => 1, get: async () => undefined,
+    });
+    // localStorage has NO copy for the purged shop → the restore loop WOULD re-create it from the snapshot.
+    const initP = storage.initStorage();
+    storage.purgeWorkspace('shop:R2victim'); // logout / account switch mid-recovery
+    release();
+    const res = await initP;
+    storage.__setDurableBackend(null);
+    expect(res.ran).toBe(true);
+    expect(localStorage.getItem(purgedKey)).toBeNull();                        // not resurrected in localStorage
+    expect(storage.readJSON('inventory_v1', null, 'shop:R2victim')).toBeNull(); // nor in the in-memory cache
+  });
 });
 
 describe('durability — auth/session keys are never mirrored to IndexedDB (audit F1)', () => {
