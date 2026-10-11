@@ -96,6 +96,14 @@ function durableOn() {
 // pending op here and flush (await) them when the page is hidden/unloaded — see flushDurable() and
 // the pagehide/visibilitychange listeners at the bottom of this file.
 const _inflight = new Set();
+
+// Per-key write generation (audit F3, round 2). An overflow write commits to IndexedDB asynchronously and
+// then drops the now-stale localStorage copy. A SLOWER older overflow commit must NOT delete a NEWER
+// acknowledged value that a later write has since put back in localStorage. Every write bumps the key's
+// generation; an overflow commit only drops the localStorage copy if it is STILL the latest generation.
+const _gen = new Map();
+function bumpGen(fullKey) { const g = (_gen.get(fullKey) || 0) + 1; _gen.set(fullKey, g); return g; }
+
 function trackDurable(promise, { critical = false, name = null } = {}) {
   const p = Promise.resolve(promise)
     .catch((err) => {
@@ -195,6 +203,7 @@ export function readJSON(name, fallback = null, ws = getActiveWorkspace()) {
  */
 export function write(name, value, ws = getActiveWorkspace()) {
   const fullKey = keyFor(name, ws);
+  const gen = bumpGen(fullKey); // F3 r2: tag this write so a slower older overflow commit can't clobber it
   let lsOk = true;
   let lsErr = null;
   try { localStorage.setItem(fullKey, value); }
@@ -216,7 +225,12 @@ export function write(name, value, ws = getActiveWorkspace()) {
     let raw;
     try { raw = _durable.set(fullKey, value); } catch (e) { raw = Promise.reject(e); }
     const op = Promise.resolve(raw).then(
-      () => { try { localStorage.removeItem(fullKey); } catch { /* ignore */ } }, // committed → drop stale copy
+      () => {
+        // Committed → drop the stale localStorage copy, BUT only if no NEWER write has superseded this one
+        // (F3 r2). If a later write bumped the generation, that value now owns the key in localStorage and
+        // must be kept — removing it here would restore the older value on the next reboot.
+        if (_gen.get(fullKey) === gen) { try { localStorage.removeItem(fullKey); } catch { /* ignore */ } }
+      },
       (err) => { dispatch(STORAGE_ERROR_EVENT, { name, error: describeError(err) }); throw err; }, // keep stale copy
     );
     trackDurable(op, { name });

@@ -68,6 +68,60 @@ describe('durability — write-through to IndexedDB', () => {
     const ws = storage.getActiveWorkspace();
     expect(fake._map.has(storage.keyFor('inventory_v1', ws))).toBe(false);
   });
+
+  it('F3 r2: a SLOW older overflow commit must not delete a NEWER acknowledged value', async () => {
+    const ws = storage.getActiveWorkspace();
+    const key = storage.keyFor('inventory_v1', ws);
+    const V1 = JSON.stringify([{ id: 'V1' }]);
+    const V2 = JSON.stringify([{ id: 'V2' }]);
+
+    // Deferred durable backend: set() parks a resolver so we control WHEN each commit lands.
+    const map = new Map();
+    const pending = [];
+    storage.__setDurableBackend({
+      available: () => true,
+      getAll: async () => [...map.entries()].map(([k, v]) => ({ key: k, value: v })),
+      set: (k, v) => new Promise((resolve, reject) => {
+        pending.push({ v, commit: () => { map.set(k, v); resolve(true); }, fail: () => reject(new Error('idb fail')) });
+      }),
+      del: async (k) => { map.delete(k); return true; },
+    });
+
+    // 1) Overflow write of V1 — localStorage rejects THIS key (quota) → op1 is deferred.
+    const orig = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function block(k, v) {
+      if (k === key) throw new Error('QuotaExceededError');
+      return orig.call(this, k, v);
+    });
+    expect(storage.writeJSON('inventory_v1', [{ id: 'V1' }]).overflow).toBe(true);
+    spy.mockRestore();
+
+    // 2) A NEWER normal write of V2 now succeeds into localStorage (and starts its own deferred mirror op2).
+    expect(storage.writeJSON('inventory_v1', [{ id: 'V2' }]).ok).toBe(true);
+    expect(localStorage.getItem(key)).toBe(V2); // newer value acknowledged in localStorage
+
+    // 3) The SLOW older overflow commit (op1 = set V1) finally lands — it must NOT drop the newer V2.
+    pending.find((p) => p.v === V1).commit();
+    await tick();
+    expect(localStorage.getItem(key)).toBe(V2); // pre-fix: op1 removed it → null → V1 restored at reboot
+
+    // 4) The newer value's durable mirror (op2 = set V2) then FAILS, so IDB only holds V1.
+    pending.find((p) => p.v === V2).fail();
+    await tick();
+
+    // 5) Reboot: fresh MEM + init. Swap to an auto-resolving backend over the SAME map (IDB still only holds
+    // V1) so init's own durable writes don't park. localStorage still has V2, so we recover V2 — not V1.
+    storage.__setDurableBackend({
+      available: () => true,
+      getAll: async () => [...map.entries()].map(([k, v]) => ({ key: k, value: v })),
+      set: async (k, v) => { map.set(k, v); return true; },
+      del: async (k) => { map.delete(k); return true; },
+    });
+    storage.__resetMemForTest(); storage.__resetInitForTest();
+    await storage.initStorage();
+    expect(storage.readJSON('inventory_v1', null)).toEqual([{ id: 'V2' }]);
+    expect(map.get(key)).toBe(V1); // IDB never got V2 (its mirror failed) — recovery came from localStorage
+  });
 });
 
 describe('durability — recovery on boot', () => {
