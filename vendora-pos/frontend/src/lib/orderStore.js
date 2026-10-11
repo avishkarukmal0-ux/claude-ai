@@ -120,13 +120,21 @@ export function useOrders() {
   const receiveAgainst = useCallback((id, receipts) => {
     const next = load().map((o) => {
       if (o.id !== id) return o;
+      // Audit D5: a receipt's qty is CONSUMED across matching lines, not applied to every matching row — otherwise
+      // two duplicate order rows (same product) would each absorb the SAME receipt and double-count it. Track the
+      // remaining qty per receipt and distribute it (positive = fill each line up to its ordered qty; negative =
+      // un-receive down to 0) across the matching lines in order.
+      const pool = (receipts || []).map((r) => ({ productId: r.productId, barcode: r.barcode, left: num(r.qty) }));
+      const matches = (x, l) => (x.productId && x.productId === l.productId) || (x.barcode && x.barcode === l.barcode);
       const lines = o.lines.map((l) => {
-        const r = receipts.find((x) => (x.productId && x.productId === l.productId) || (x.barcode && x.barcode === l.barcode));
+        const r = pool.find((x) => x.left !== 0 && matches(x, l));
         if (!r) return l;
-        // Apply a SIGNED correction (a negative qty "un-receives" a mistaken receipt), clamped to
-        // [0, ordered] so received can't go below zero or above what was ordered (audit W7).
-        const nextReceived = num(l.receivedQty) + num(r.qty);
-        return { ...l, receivedQty: Math.max(0, Math.min(num(l.qty), nextReceived)) };
+        const current = num(l.receivedQty);
+        const ordered = num(l.qty);
+        // positive receipt: fill remaining room up to ordered; negative: un-receive, not below 0. Clamp to [0,ordered].
+        const apply = r.left > 0 ? Math.min(r.left, Math.max(0, ordered - current)) : Math.max(r.left, -current);
+        r.left -= apply;
+        return { ...l, receivedQty: Math.max(0, Math.min(ordered, current + apply)) };
       });
       const updated = { ...o, lines, updatedAt: Date.now() };
       const st = statusFor(updated);

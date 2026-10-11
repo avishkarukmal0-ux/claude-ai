@@ -6,7 +6,7 @@
 // cancel. Device-local only: these keys are NOT workspace-scoped stores, so they never sync and never land
 // in a backup.
 import { useState, useEffect, useRef } from 'react';
-import { getActiveWorkspace } from './storage';
+import { getActiveWorkspace, WORKSPACE_EVENT } from './storage';
 
 // Audit FE2: scope draft keys UNDER the active workspace (`vendora:<ws>:formdraft:<key>`) so that (a) one shop
 // can't read a half-typed product/cost left by another on a shared device, and (b) purgeWorkspace() on
@@ -15,8 +15,8 @@ import { getActiveWorkspace } from './storage';
 const scopedKey = (key, ws = getActiveWorkspace()) => `vendora:${ws}:formdraft:${key}`;
 const legacyKey = (key) => `vendora:formdraft:${key}`;
 
-export function loadFormDraft(key) {
-  try { const r = localStorage.getItem(scopedKey(key)); return r ? JSON.parse(r) : null; }
+export function loadFormDraft(key, ws = getActiveWorkspace()) {
+  try { const r = localStorage.getItem(scopedKey(key, ws)); return r ? JSON.parse(r) : null; }
   catch { return null; }
 }
 export function saveFormDraft(key, value) {
@@ -34,15 +34,34 @@ export function clearFormDraft(key) {
  * [state, setState, clear]; call clear() after a successful save or an explicit cancel.
  */
 export function useFormDraft(key, initial) {
-  const [state, setState] = useState(() => {
-    const d = loadFormDraft(key);
+  const restore = (ws) => {
+    const d = loadFormDraft(key, ws);
     return d && typeof d === 'object' && !Array.isArray(d) ? { ...initial, ...d } : (d != null ? d : initial);
-  });
+  };
+  const [state, setState] = useState(() => restore());
   const firstRun = useRef(true);
+  const initialRef = useRef(initial); initialRef.current = initial;
+  const wsRef = useRef(getActiveWorkspace());
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; } // nothing changed yet — don't rewrite the draft
     saveFormDraft(key, state);
   }, [key, state]);
+  // Audit F5: a form stays MOUNTED across an account/workspace switch (HomePage doesn't unmount it). Its scoped
+  // draft key is correct, but the in-memory state still holds shop A's typing — which the autosave above would
+  // then write under shop B's key, and which the user could save into B. On a workspace change, reset the mounted
+  // state to the NEW workspace's draft (or initial). Shop A's draft was already saved under A's key before the switch.
+  useEffect(() => {
+    const onWs = () => {
+      const ws = getActiveWorkspace();
+      if (ws === wsRef.current) return;
+      wsRef.current = ws;
+      firstRun.current = true; // the reset itself must not rewrite the draft
+      const d = loadFormDraft(key, ws);
+      setState(d && typeof d === 'object' && !Array.isArray(d) ? { ...initialRef.current, ...d } : (d != null ? d : initialRef.current));
+    };
+    window.addEventListener(WORKSPACE_EVENT, onWs);
+    return () => window.removeEventListener(WORKSPACE_EVENT, onWs);
+  }, [key]);
   const clear = () => clearFormDraft(key);
   return [state, setState, clear];
 }

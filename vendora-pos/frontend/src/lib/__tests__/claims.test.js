@@ -1,10 +1,11 @@
 import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useClaims, claimTotals, nextStates, claimItemsFromDelivery } from '../claimStore';
 import { sumMoney } from '../money';
 import { blankLine } from '../deliveryStore';
 import { setActiveWorkspace } from '../storage';
+import * as storageNs from '../storage';
 
 let ws = 0;
 beforeEach(() => { setActiveWorkspace(`shop:cl${ws++}`); });
@@ -110,5 +111,19 @@ describe('claimStore.createClaim — source refs + decimal-safe total (A1/A3)', 
     expect(claim.requestedAmount).toBe(sumMoney([0.1, 0.2])); // 0.30, not 0.30000000000000004
     expect(claim.requestedAmount).toBe(0.3);
     expect(claim.items[0]).toMatchObject({ invoiceLineId: 'iln_a', deliveryLineId: 'dln_a' });
+  });
+});
+
+describe('claimStore.applyCredit — D4: a failed claim write is NOT reported as success', () => {
+  it('returns null when the persist fails, so the caller can roll back the note allocation', () => {
+    const { result } = renderHook(() => useClaims());
+    let claim;
+    act(() => { claim = result.current.createClaim({ supplierName: 'Booker', items: [{ reason: 'damaged', amount: 10, qty: 1 }] }); });
+    // Now make the claim store write fail, then try to record a credit.
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockReturnValue({ ok: false, error: 'quota' });
+    let applied;
+    act(() => { applied = result.current.applyCredit(claim.id, { creditNoteId: 'cn1', creditNoteRef: 'CN1', amount: 5 }); });
+    spy.mockRestore();
+    expect(applied).toBeNull(); // was a truthy claim object before the fix (rollback never fired)
   });
 });

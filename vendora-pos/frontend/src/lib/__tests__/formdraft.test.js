@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { loadFormDraft, saveFormDraft, clearFormDraft, useFormDraft } from '../formDraft';
+import { setActiveWorkspace, __resetMemForTest } from '../storage';
 
-beforeEach(() => { try { localStorage.clear(); } catch { /* ignore */ } });
+beforeEach(() => { try { localStorage.clear(); } catch { /* ignore */ } __resetMemForTest(); setActiveWorkspace('shop:A'); });
 
 describe('formDraft (Phase 3.9f) — preserve unsaved form input across navigation', () => {
   it('save / load / clear round-trips', () => {
@@ -25,5 +26,18 @@ describe('formDraft (Phase 3.9f) — preserve unsaved form input across navigati
     act(() => second.result.current[2]()); // clear()
     const third = renderHook(() => useFormDraft('f1', { name: '' }));
     expect(third.result.current[0]).toEqual({ name: '' });
+  });
+
+  it('F5: a mounted form RESETS on a workspace switch — shop A typing never carries into shop B', () => {
+    setActiveWorkspace('shop:A');
+    const { result } = renderHook(() => useFormDraft('fx', { name: '', cost: '' }));
+    act(() => result.current[1]((s) => ({ ...s, name: 'SECRET A', cost: '9.99' })));
+    expect(result.current[0]).toEqual({ name: 'SECRET A', cost: '9.99' });
+
+    // Switch shops while the form is still mounted (dispatches WORKSPACE_EVENT).
+    act(() => { setActiveWorkspace('shop:B'); });
+    expect(result.current[0]).toEqual({ name: '', cost: '' });        // reset to shop B (no A data)
+    expect(loadFormDraft('fx', 'shop:B')).toBeNull();                 // nothing of A leaked into B's draft
+    expect(loadFormDraft('fx', 'shop:A')).toEqual({ name: 'SECRET A', cost: '9.99' }); // A's draft stays under A
   });
 });

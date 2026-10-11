@@ -27,6 +27,46 @@ async function toBitmap(src) {
   return null;
 }
 
+// Fallback decode via HTMLImageElement + 2D canvas (audit F6): used when createImageBitmap/OffscreenCanvas aren't
+// available. Re-encoding through a canvas STRIPS EXIF/GPS/device metadata too, so a browser without the modern
+// APIs doesn't fall back to returning the ORIGINAL (metadata-bearing) bytes. Returns a sanitised data URL, or null
+// if it can't decode (e.g. jsdom — the caller then degrades to the original, which in tests carries no real EXIF).
+async function downscaleViaImg(src, { maxDim, quality, type }) {
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return null;
+  // Bail early if 2D canvas isn't usable (e.g. jsdom returns null) — both so we never re-encode without a canvas
+  // AND so we don't await an <img> that will never fire load/error in that environment.
+  let probeCtx = null;
+  try { probeCtx = document.createElement('canvas').getContext('2d'); } catch { probeCtx = null; }
+  if (!probeCtx) return null;
+  let url = null; let revoke = false;
+  try {
+    if (typeof src === 'string') url = src;
+    else if (src instanceof Blob && typeof URL !== 'undefined' && URL.createObjectURL) { url = URL.createObjectURL(src); revoke = true; }
+    else return null;
+    const img = await new Promise((resolve) => {
+      const i = new Image();
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; resolve(v); } };
+      i.onload = () => finish(i);
+      i.onerror = () => finish(null);
+      try { i.src = url; } catch { finish(null); }
+      setTimeout(() => finish(null), 3000); // never hang if the environment doesn't fire load/error
+    });
+    if (!img || !img.width || !img.height) return null;
+    const longest = Math.max(img.width, img.height) || 1;
+    const scale = Math.min(1, maxDim / longest);
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL(type, quality);
+  } catch { return null; }
+  finally { if (revoke && url) { try { URL.revokeObjectURL(url); } catch { /* ignore */ } } }
+}
+
 /**
  * Downscale an image (a File/Blob or a data-URL string) to at most `maxDim` on its longest side and return
  * a smaller data URL. Returns the original input (as a data URL) if it's already small enough or if the
@@ -40,7 +80,9 @@ export async function downscaleImage(src, { maxDim = 1600, quality = 0.7, type =
   };
   try {
     const bitmap = await toBitmap(src);
-    if (!bitmap) return await asDataUrl();
+    // No modern bitmap decode → try the <img>+canvas fallback (still strips metadata) before degrading to the
+    // original bytes, so a browser without createImageBitmap doesn't leak EXIF/GPS into backups (audit F6).
+    if (!bitmap) { const viaImg = await downscaleViaImg(src, { maxDim, quality, type }); return viaImg || (await asDataUrl()); }
     const { width, height } = bitmap;
     const longest = Math.max(width, height) || 1;
     const scale = Math.min(1, maxDim / longest);

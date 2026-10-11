@@ -108,3 +108,18 @@ describe('orderStore — signed un-receive (audit W7)', () => {
     expect(result.current.orders.find((o) => o.id === id).lines[0].receivedQty).toBe(0);
   });
 });
+
+describe('orderStore — D5: duplicate order rows do not double-count one receipt', () => {
+  it('two rows of the same product + a single receipt is consumed once (not applied to both)', () => {
+    const { result } = renderHook(() => useOrders());
+    let id;
+    act(() => { id = result.current.createOrder({ supplierName: 'Booker', lines: [line({ qty: 5 }), line({ qty: 5 })] }).id; });
+    act(() => { result.current.receiveAgainst(id, [{ productId: 'p1', qty: 5 }]); });
+    const o = result.current.orders.find((x) => x.id === id);
+    const t = orderTotals(o);
+    expect(t.ordered).toBe(10);
+    expect(t.received).toBe(5);     // was 10 before the fix (the receipt hit BOTH duplicate rows)
+    expect(t.remaining).toBe(5);    // was 0 before the fix
+    expect(statusFor(o)).toBe('partially_received');
+  });
+});

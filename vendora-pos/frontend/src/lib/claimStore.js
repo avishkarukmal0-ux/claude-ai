@@ -80,7 +80,7 @@ export function useClaims() {
     };
   }, []);
 
-  const persistAll = (next) => { persist(next); setClaims(next); };
+  const persistAll = (next) => { const res = persist(next); setClaims(next); return res; }; // return the write result (audit D4)
 
   const createFromDelivery = useCallback((delivery) => {
     const items = claimItemsFromDelivery(delivery);
@@ -129,7 +129,7 @@ export function useClaims() {
     const amt = r2(amount);
     if (!creditNoteId || !(amt > 0)) return null;
     let updated = null;
-    persistAll(load().map((c) => {
+    const res = persistAll(load().map((c) => {
       if (c.id !== claimId) return c;
       const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId); // replace, don't duplicate
       credits.push({ id: newId('cr'), creditNoteId, creditNoteRef, amount: amt, at: Date.now() });
@@ -141,7 +141,9 @@ export function useClaims() {
       };
       return updated;
     }));
-    return updated;
+    // Audit D4: if the claim write didn't commit, return null so the caller rolls the credit-note allocation back
+    // (the two ledgers must not diverge — note shows credited while the claim never recorded it).
+    return (res && res.ok) ? updated : null;
   }, []);
 
   /** Remove a credit note's allocation from a claim (correction). Recomputes received from remaining credits. */
