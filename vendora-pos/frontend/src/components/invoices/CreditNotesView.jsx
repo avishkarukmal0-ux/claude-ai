@@ -5,6 +5,7 @@ import { useCreditNotes, suggestClaims, remainingToAllocate, allocatedTotal, cla
 import { round2 as r2 } from '../../lib/money';
 import { useClaims } from '../../lib/claimStore';
 import { useSuppliers } from '../../lib/supplierStore';
+import { useRecoveryGuard } from '../../lib/recoveryGuard';
 
 // Supplier credit notes (Phase 2). Enter a credit note, see which claims it likely covers, and ALLOCATE
 // it (partial, or across several claims) with explicit confirmation — each allocation records money as
@@ -16,6 +17,7 @@ export default function CreditNotesView({ onBack }) {
   const { notes, saveNote, setAllocation, removeNote, findDuplicate } = useCreditNotes();
   const { claims, applyCredit, removeCredit } = useClaims();
   const { suppliers } = useSuppliers();
+  const recovery = useRecoveryGuard();
   const [adding, setAdding] = useState(false);
   const [allocating, setAllocating] = useState(null); // note id being allocated
 
@@ -26,12 +28,33 @@ export default function CreditNotesView({ onBack }) {
   // retry re-runs cleanly over any that already succeeded.
   function deleteNote(cn) {
     if (!window.confirm('Delete this credit note? (claim credits from it will be removed)')) return;
+    // V2 (round 4): a note left in pending-repair (an earlier note write failed after its claim credits were
+    // removed, and the compensation also failed) is blocked until the owner reloads and checks it.
+    if (recovery.has(`creditnote:${cn.id}`)) { toast.error('This note needs checking after a failed save — reload and verify its claims before changing it.'); return; }
+    const removed = [];
     for (const a of (cn.allocations || [])) {
       const rc = removeCredit(a.claimId, cn.id);
-      if (!rc.ok) { toast.error(rc.error || 'Couldn’t update a claim — the note was kept. Please try again.'); return; }
+      if (!rc.ok) {
+        // Nothing durable is split yet — restore any claim credits we already removed and bail.
+        for (const d of removed) applyCredit(d.claimId, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount: d.amount });
+        toast.error(rc.error || 'Couldn’t update a claim — the note was kept. Please try again.'); return;
+      }
+      removed.push(a);
     }
     const r = removeNote(cn.id);
-    if (r && r.ok === false) { toast.error(r.error || 'Couldn’t delete the note — please try again.'); return; }
+    if (r && r.ok === false) {
+      // V2: the NOTE write failed AFTER the claim credits were removed — the two ledgers are split (claim £0,
+      // note still allocated). COMPENSATE by re-applying the claim credits so both sides match the still-present
+      // note; the owner can then retry Delete. If compensation ALSO fails, flag a durable pending-repair + block.
+      let repaired = true;
+      for (const a of removed) { if (!applyCredit(a.claimId, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount: a.amount })) repaired = false; }
+      if (!repaired) {
+        recovery.record(`creditnote:${cn.id}`, { kind: 'creditnote' });
+        toast.error('Couldn’t delete the note and couldn’t fully restore its claims — reload and check this note before changing it.', { duration: 10000 });
+        return;
+      }
+      toast.error(r.error || 'Couldn’t delete the note — it was kept and its claims restored. Please try again.'); return;
+    }
     toast('Credit note deleted');
   }
 
@@ -91,10 +114,17 @@ export default function CreditNotesView({ onBack }) {
                         // Remove on BOTH ledgers (D6). D4 r2: clear the CLAIM side first; only clear the note side
                         // once that committed — so a failed claim write can't leave the note "unallocated" while the
                         // claim still credits the money (which could then be re-allocated and double-count).
+                        const priorZero = (cn.allocations || []).find((a) => a.claimId === claim.id);
+                        const priorZeroAmt = priorZero ? (Number(priorZero.amount) || 0) : 0;
                         const rc = removeCredit(claim.id, cn.id);
                         if (!rc.ok) { toast.error(rc.error || 'Couldn’t update the claim — try again'); return; }
                         const r = setAllocation(cn.id, claim.id, 0);
-                        if (!r.ok) { toast.error(r.error || 'Couldn’t update'); return; }
+                        if (!r.ok) {
+                          // V2 (round 4): note write failed after the claim credit was removed — re-apply the
+                          // claim credit so the two ledgers stay consistent instead of split.
+                          if (priorZeroAmt > 0) applyCredit(claim.id, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount: priorZeroAmt });
+                          toast.error(r.error || 'Couldn’t update — the claim credit was restored. Please try again.'); return;
+                        }
                         toast('Allocation removed');
                         return;
                       }
@@ -116,10 +146,16 @@ export default function CreditNotesView({ onBack }) {
                     }}
                     onUnapply={(claim) => {
                       // D4 r2: clear the CLAIM side first; only clear the note side once that committed.
+                      const priorU = (cn.allocations || []).find((a) => a.claimId === claim.id);
+                      const priorUAmt = priorU ? (Number(priorU.amount) || 0) : 0;
                       const rc = removeCredit(claim.id, cn.id);
                       if (!rc.ok) { toast.error(rc.error || 'Couldn’t update the claim — try again'); return; }
                       const r = setAllocation(cn.id, claim.id, 0);
-                      if (!r.ok) { toast.error(r.error || 'Couldn’t update'); return; }
+                      if (!r.ok) {
+                        // V2 (round 4): compensate the already-removed claim credit if the note write fails.
+                        if (priorUAmt > 0) applyCredit(claim.id, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount: priorUAmt });
+                        toast.error(r.error || 'Couldn’t update — the claim credit was restored. Please try again.'); return;
+                      }
                       toast('Allocation removed');
                     }}
                   />

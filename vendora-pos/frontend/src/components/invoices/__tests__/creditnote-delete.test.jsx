@@ -4,7 +4,7 @@ import { render, cleanup, fireEvent } from '@testing-library/react';
 import CreditNotesView from '../CreditNotesView';
 import * as storageNs from '../../../lib/storage';
 
-const { writeJSON, setActiveWorkspace, __resetMemForTest } = storageNs;
+const { writeJSON, readJSON, setActiveWorkspace, __resetMemForTest } = storageNs;
 
 beforeEach(() => {
   try { localStorage.clear(); } catch { /* ignore */ }
@@ -40,5 +40,33 @@ describe('CreditNotesView — delete aborts (keeps the note) when a claim-side w
     // The note survives (pre-fix it would have been deleted while the claim still credited £10).
     expect(getAllByLabelText('Delete')).toHaveLength(1);
     expect(container.textContent).toContain('Bookerzz');
+  });
+
+  // Audit V2 (round 4): if the NOTE write fails AFTER the claim credit was removed, the two ledgers split
+  // (claim £0, note still £10 allocated). The fix compensates by re-applying the claim credit.
+  it('a failed note write after claim removal is compensated (ledgers stay consistent)', () => {
+    writeJSON('credit_notes_v1', [{
+      id: 'cn2', supplierName: 'Splitco', reference: 'CR-2', amount: 10, date: Date.now(),
+      allocations: [{ claimId: 'cl2', amount: 10 }],
+    }]);
+    writeJSON('claims_v1', [{
+      id: 'cl2', supplierName: 'Splitco', status: 'approved', approvedAmount: 10, receivedAmount: 10,
+      credits: [{ creditNoteId: 'cn2', amount: 10 }], history: [],
+    }]);
+
+    const { getAllByLabelText } = render(<CreditNotesView onBack={() => {}} />);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    // The claim-side removal (claims_v1) succeeds; only the NOTE write (credit_notes_v1) fails.
+    const orig = storageNs.writeJSON;
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'credit_notes_v1' ? { ok: false, error: 'quota' } : orig(name, value, ws)));
+    fireEvent.click(getAllByLabelText('Delete')[0]);
+    spy.mockRestore();
+
+    // Note kept (its write failed) AND the claim credit was restored — not left split at claim £0.
+    const note = readJSON('credit_notes_v1', []).find((n) => n.id === 'cn2');
+    const claim = readJSON('claims_v1', []).find((c) => c.id === 'cl2');
+    expect(note).toBeTruthy();
+    expect((claim.credits || []).some((cr) => cr.creditNoteId === 'cn2' && cr.amount === 10)).toBe(true);
+    expect(claim.receivedAmount).toBe(10); // consistent with the note's £10 allocation
   });
 });
