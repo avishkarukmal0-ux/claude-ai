@@ -57,10 +57,10 @@ describe('productImages — save / recoverable delete', () => {
 
   it('remove is recoverable; restore brings it back', async () => {
     const saved = await saveImage(DATA, { source: 'owner' });
-    const del = removeImage(saved.id);
+    const del = await removeImage(saved.id);
     expect(del.recoverable).toBe(true);
     expect(getThumbLocal(saved.id)).toBe(null);
-    const res = restoreImage(saved.id);
+    const res = await restoreImage(saved.id);
     expect(res.ok).toBe(true);
     expect(getThumbLocal(saved.id)).toBeTruthy();
   });
@@ -188,25 +188,44 @@ describe('productImages — F2 (session pin) + F4 (commit-before-delete)', () =>
     setActiveWorkspace('shop:f4');
     const saved = await saveImage(DATA, { source: 'owner' });
     expect(getThumbLocal(saved.id)).toBeTruthy();
-    const spy = vi.spyOn(storageNs, 'write').mockReturnValue({ ok: false, error: 'quota' });
-    const res = removeImage(saved.id);
+    const spy = vi.spyOn(storageNs, 'writeDurable').mockResolvedValue({ ok: false, error: 'quota' });
+    const res = await removeImage(saved.id);
     spy.mockRestore();
     expect(res.ok).toBe(false);
     expect(res.recoverable).toBe(false);
     expect(getThumbLocal(saved.id)).toBeTruthy(); // originals NOT deleted (commit-before-delete)
   });
 
-  it('F4 r2: a THUMBNAIL-ONLY restore whose thumb write fails reports not-ok and KEEPS the trash', () => {
+  it('R1: a trashed photo whose DURABLE commit fails is NOT deleted (confirms the commit, not just sync ok)', async () => {
+    setActiveWorkspace('shop:r1');
+    const saved = await saveImage(DATA, { source: 'owner' });
+    expect(getThumbLocal(saved.id)).toBeTruthy();
+    // Force the OVERFLOW path: localStorage rejects (quota) while IndexedDB is "available" but its commit FAILS.
+    // Round 2 trusted write()'s synchronous `{ok:true, overflow:true}` here and would have deleted the originals
+    // before the (failing) IndexedDB commit; the fix awaits writeDurable, which reads the trash back and reports
+    // failure — so the only copy survives.
+    const failDurable = { available: () => true, set: async () => { throw new Error('idb commit failed'); }, get: async () => undefined, del: async () => true, getAll: async () => [] };
+    storageNs.__setDurableBackend(failDurable);
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('quota', 'QuotaExceededError'); });
+    const res = await removeImage(saved.id);
+    setSpy.mockRestore();
+    storageNs.__setDurableBackend(null);
+    expect(res.ok).toBe(false);
+    expect(res.recoverable).toBe(false);
+    expect(getThumbLocal(saved.id)).toBeTruthy(); // the only copy survives
+  });
+
+  it('F4 r2: a THUMBNAIL-ONLY restore whose thumb write fails reports not-ok and KEEPS the trash', async () => {
     setActiveWorkspace('shop:f4b');
     const id = 'pi_thumbonly';
     // Seed a thumbnail-only trash entry (no full) — e.g. a legacy image, or a full that never stored.
     storageNs.write(`pimg_trash_${id}`, JSON.stringify({ full: null, thumb: DATA, at: Date.now() }));
-    const spy = vi.spyOn(storageNs, 'write').mockReturnValue({ ok: false, error: 'quota' });
-    const res = restoreImage(id);
+    const spy = vi.spyOn(storageNs, 'writeDurable').mockResolvedValue({ ok: false, error: 'quota' });
+    const res = await restoreImage(id);
     spy.mockRestore();
     expect(res.ok).toBe(false); // round 1 only checked the full (true for a thumb-only) → wrongly reported ok
     // The trash is still present, so a retry can recover it.
-    const retry = restoreImage(id);
+    const retry = await restoreImage(id);
     expect(retry.ok).toBe(true);
     expect(getThumbLocal(id)).toBeTruthy();
   });

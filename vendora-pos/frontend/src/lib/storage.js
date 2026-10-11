@@ -244,6 +244,27 @@ export function write(name, value, ws = getActiveWorkspace()) {
   return { ok: false, error };
 }
 
+/**
+ * Write and CONFIRM the value reached durable storage before resolving (audit R1). `write()` returns `ok`
+ * synchronously in the OVERFLOW case (localStorage full, value queued to IndexedDB) — but that IndexedDB
+ * commit is still pending, so a caller that deletes the only other copy on a synchronous `ok` can lose data
+ * if the commit then fails. This awaits the durable barrier and reads the value back to prove it committed.
+ * @returns {Promise<{ ok, overflow?, durable?, error? }>}
+ */
+export async function writeDurable(name, value, ws = getActiveWorkspace()) {
+  const res = write(name, value, ws);
+  if (!res.ok) return res;              // localStorage full AND no durable home → not stored
+  if (!res.overflow) return res;        // localStorage holds it synchronously → already durable
+  // Overflow: the value lives only in MEM + a pending IndexedDB commit. Flush, then read it back to confirm.
+  await flushDurable();
+  if (!durableOn()) return { ok: false, overflow: true, error: 'Couldn’t confirm the write reached durable storage.' };
+  try {
+    const got = await _durable.get(keyFor(name, ws));
+    if (got === value) return { ok: true, overflow: true, durable: true };
+  } catch { /* fall through to failure */ }
+  return { ok: false, overflow: true, error: 'Couldn’t confirm the write reached durable storage.' };
+}
+
 export function writeJSON(name, value, ws = getActiveWorkspace()) {
   let s;
   try { s = JSON.stringify(value); }

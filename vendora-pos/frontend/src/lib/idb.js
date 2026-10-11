@@ -64,6 +64,19 @@ export async function getAll() {
   });
 }
 
+/** One value by full key (undefined if absent). Used to CONFIRM a durable commit landed (audit R1). */
+export async function get(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    let tx;
+    try { tx = db.transaction(STORE, 'readonly'); }
+    catch (e) { reject(e); return; }
+    const req = tx.objectStore(STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 /** Store a raw string under a full key. Resolves true on commit. */
 export async function set(key, value) {
   const db = await openDB();

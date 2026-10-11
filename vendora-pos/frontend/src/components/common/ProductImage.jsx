@@ -117,10 +117,10 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
     } finally { setBusy(false); }
   }
 
-  function doRemove() {
+  async function doRemove() {
     const id = resolved.id;
     const src = product?.image?.source || 'owner';
-    const res = removeImage(id);
+    const res = await removeImage(id);
     // Audit F4: if the photo couldn't be moved to trash it was NOT deleted — keep the ref + server copy and tell
     // the owner, rather than clearing the reference to bytes that are still there.
     if (res && res.ok === false) { toast.error(res.error || 'Couldn’t remove the photo — it’s been kept.'); return; }
@@ -131,7 +131,7 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
     if (res.recoverable) {
       toast((t) => (
         <span className="flex items-center gap-2 text-sm">Photo removed
-          <button type="button" onClick={() => { const r = restoreImage(id); if (r.ok) { onSave?.({ id, source: src, updatedAt: Date.now() }); setThumb(r.thumb); setBackup(BACKUP_STATE.PENDING); backupImage(id, { barcode, source: src }).then(() => refreshBackup(id)); } toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>
+          <button type="button" onClick={async () => { const r = await restoreImage(id); if (r.ok) { onSave?.({ id, source: src, updatedAt: Date.now() }); setThumb(r.thumb); setBackup(BACKUP_STATE.PENDING); backupImage(id, { barcode, source: src }).then(() => refreshBackup(id)); } else { toast.error(r.error || 'Couldn’t restore the photo.'); } toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>
         </span>
       ), { duration: 6000 });
     } else { toast('Photo removed'); }

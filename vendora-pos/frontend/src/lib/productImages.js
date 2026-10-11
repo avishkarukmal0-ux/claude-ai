@@ -10,7 +10,7 @@
 //
 // Honesty: a provider suggestion is never stored or shown as the shop's own until the owner confirms it, and
 // an owner photo is never overwritten automatically.
-import { read, write, removeKey, getActiveWorkspace } from './storage';
+import { read, write, writeDurable, removeKey, getActiveWorkspace } from './storage';
 import { downscaleImage } from './image';
 import { currentSession, isLoggedIn } from './account';
 
@@ -91,6 +91,14 @@ function putLocal(id, { full, thumb }, ws = getActiveWorkspace()) {
   return { full: fullOk, thumb: thumbOk };
 }
 
+// Audit R1: like putLocal but CONFIRMS each byte write reached durable storage (awaits the IndexedDB commit in
+// the overflow case) before reporting ok — used on the recovery paths (restore) where the trash is the only copy.
+async function putLocalDurable(id, { full, thumb }, ws = getActiveWorkspace()) {
+  const fullOk = full ? ((await writeDurable(FULL(id), full, ws)).ok !== false) : null;
+  const thumbOk = thumb ? ((await writeDurable(THUMB(id), thumb, ws)).ok !== false) : null;
+  return { full: fullOk, thumb: thumbOk };
+}
+
 /**
  * Save a new owner/catalogue image locally from a source (data URL / Blob). Does NOT touch the product
  * record — the caller sets `product.image` via the inventory store (an explicit action). @returns {{id, thumb}}
@@ -117,30 +125,34 @@ export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace
   return { ok: true, id, thumb, full, source };
 }
 
-/** Recoverable delete: move the bytes to a trash slot and (caller) clear the product ref. */
-export function removeImage(id) {
+/** Recoverable delete: move the bytes to a trash slot and (caller) clear the product ref. Async: it awaits a
+ *  DURABLE commit of the trash before deleting the originals. */
+export async function removeImage(id) {
   if (!id) return { ok: false };
   const full = getFullLocal(id); const thumb = getThumbLocal(id);
   if (!full && !thumb) { clearBackupState(id); return { ok: true, recoverable: false }; } // nothing stored to delete
-  // Audit F4: COMMIT-BEFORE-DELETE. Only remove the originals once the trash copy has actually persisted — a failed
-  // trash write must not destroy the only copy. If trashing fails, keep the originals and report it (the caller
-  // then leaves the product ref + server backup intact).
-  const w = write(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }));
+  // Audit R1 (round 3): COMMIT-BEFORE-DELETE must confirm a DURABLE commit. Round 2 checked write()'s SYNCHRONOUS
+  // result — but in the overflow case (localStorage full, value queued to IndexedDB) write() returns ok before
+  // the IndexedDB commit lands, so deleting the originals on that sync ok could destroy the only copy if the
+  // commit then failed. writeDurable awaits the barrier and reads the trash back; only a confirmed-durable trash
+  // lets us delete the originals. On failure, keep the originals + server backup and report it.
+  const w = await writeDurable(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }));
   if (!(w && w.ok !== false)) return { ok: false, recoverable: false, error: 'Couldn’t move the photo to trash (storage full) — it was not deleted.' };
   removeKey(FULL(id)); removeKey(THUMB(id));
   clearBackupState(id); // the server copy is removed separately via deleteBackup() (authorised, async)
   return { ok: true, recoverable: true };
 }
 
-/** Undo a recoverable delete. @returns {{ok, thumb?}} */
-export function restoreImage(id) {
+/** Undo a recoverable delete. Async: confirms the restored bytes are DURABLE before dropping the trash (the trash
+ *  is the only recovery copy, so the same overflow blind spot as removeImage applies here). @returns {{ok, thumb?}} */
+export async function restoreImage(id) {
   let t = null;
   try { t = JSON.parse(read(TRASH(id), 'null')); } catch { t = null; }
   if (!t) return { ok: false };
-  const wrote = putLocal(id, { full: t.full, thumb: t.thumb });
-  // Audit F4: KEEP the trash unless EVERY byte present in it actually restored — the trash is the only recovery
-  // copy. Round 2: the old guard only checked the full, so a THUMBNAIL-ONLY image (no full) whose thumb write
-  // failed still passed, deleted the trash and reported success → the only copy was lost. Now check both.
+  const wrote = await putLocalDurable(id, { full: t.full, thumb: t.thumb });
+  // Audit F4/R1: KEEP the trash unless EVERY byte present in it actually restored DURABLY — the trash is the only
+  // recovery copy. Check both full and thumb (a thumbnail-only image must not lose its one copy), and require a
+  // confirmed durable commit (not just a synchronous ok) before dropping the trash.
   const fullRestored = t.full ? (wrote.full !== false) : true;
   const thumbRestored = t.thumb ? (wrote.thumb !== false) : true;
   if (!fullRestored || !thumbRestored) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
