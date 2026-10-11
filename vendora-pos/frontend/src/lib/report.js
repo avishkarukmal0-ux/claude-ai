@@ -32,17 +32,21 @@ export function weeklyReport({
     // array — so prefer it; fall back to a lines array / countedLines for any older shape.
     .map((s) => ({ at: tsOf(s), by: s.by || s.actor || null, lines: s.itemsCounted != null ? s.itemsCounted : (s.lines ? s.lines.length : (s.countedLines || null)) }));
 
-  // Expiry actions + recorded waste. Net out REVERSED waste (audit D7): drop the compensating reversal entries
-  // (they carry `reversalOf`) AND the originals they reverse, so a fully-undone waste contributes 0 units/£0.
-  const reversedOriginalIds = new Set((movements || []).filter((m) => m.reversalOf).map((m) => String(m.reversalOf)));
-  const wasteMoves = (movements || []).filter((m) => (
-    m.type === MOVEMENT_TYPES.WASTE
-    && !m.reversalOf                               // not a reversal entry
-    && !reversedOriginalIds.has(String(m.id))      // not an original that was later reversed
-    && inPeriod(Number(m.at) || 0)
+  // Expiry actions + recorded waste. Audit D7 (round 2): attribute each entry to the period it ACTUALLY occurred
+  // in, then net within that period — a waste counts in the week it was binned, and a reversal CREDITS the week
+  // it was undone. This keeps past weeks IMMUTABLE (re-running an old week never changes it because a later
+  // reversal isn't in that window) and keeps cumulative waste honest (a cross-week reversal is credited back
+  // instead of being silently dropped, which previously over-counted). A same-week waste+undo still nets to 0.
+  const byId = new Map((movements || []).map((m) => [String(m.id), m]));
+  const isWaste = (m) => m && m.type === MOVEMENT_TYPES.WASTE;
+  const wasteEntries = (movements || []).filter((m) => inPeriod(Number(m.at) || 0) && (
+    (isWaste(m) && !m.reversalOf)                 // a waste event in this period
+    || (m.reversalOf && isWaste(byId.get(String(m.reversalOf)))) // OR a reversal OF a waste, credited to this period
   ));
-  const wasteUnits = wasteMoves.reduce((n, m) => n + Math.max(0, -(Number(m.delta) || 0)), 0);
-  const wasteCost = r2(wasteMoves.reduce((n, m) => n + (Number(m.valuation) || 0), 0));
+  // delta: waste events are negative (−units), reversal entries positive (+units restored) → summing −delta nets.
+  const wasteUnits = wasteEntries.reduce((n, m) => n - (Number(m.delta) || 0), 0);
+  // valuation: waste events positive (cost), reversal entries negative (−cost) → summing nets.
+  const wasteCost = r2(wasteEntries.reduce((n, m) => n + (Number(m.valuation) || 0), 0));
   const pastUseBy = (products || []).filter((p) => { const e = worstExpiry(p, new Date(now)); return e && e.mustPull && (Number(p.qty) || 0) > 0; }).length;
 
   // Claims: pending vs recovered (kept strictly separate).

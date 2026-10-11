@@ -74,4 +74,19 @@ describe('weeklyReport', () => {
     expect(rep.expiry.wasteUnits).toBe(3);   // only w2 — w1 cancelled by r1
     expect(rep.expiry.wasteCost).toBe(6);
   });
+
+  it('D7 r2: a reversal credits the week it happens; the past week stays immutable', () => {
+    const moves = [
+      { id: 'w1', type: MOVEMENT_TYPES.WASTE, delta: -5, valuation: 10, at: old },                                     // wasted ~30d ago
+      { id: 'r1', type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta: 5, valuation: -10, at: recent, reversalOf: 'w1' },      // undone 2d ago
+    ];
+    // This week (window ends `now`): the original is out of period, the reversal is IN period → credited here.
+    const thisWeek = weeklyReport({ movements: moves, periodDays: 7, now });
+    expect(thisWeek.expiry.wasteUnits).toBe(-5);
+    expect(thisWeek.expiry.wasteCost).toBe(-10);
+    // The ORIGINAL week is unchanged by the later reversal (no retroactive restatement).
+    const origWeek = weeklyReport({ movements: moves, periodDays: 7, now: old + DAY });
+    expect(origWeek.expiry.wasteUnits).toBe(5);
+    expect(origWeek.expiry.wasteCost).toBe(10);
+  });
 });
