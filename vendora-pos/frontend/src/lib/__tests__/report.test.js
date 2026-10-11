@@ -55,6 +55,15 @@ describe('weeklyReport', () => {
     expect(rep.checking.stocktakes[0].at).toBe(recent);
   });
 
+  it('D6 r2: shows the count from the real saved shape (itemsCounted, no lines array)', () => {
+    const stocktakeHistory = [
+      { id: 's2', finishedAt: recent, itemsCounted: 42 }, // actual saveSummary shape
+    ];
+    const rep = weeklyReport({ stocktakeHistory, periodDays: 7, now });
+    expect(rep.checking.stocktakes).toHaveLength(1);
+    expect(rep.checking.stocktakes[0].lines).toBe(42); // was null before (only `lines`/`countedLines` were read)
+  });
+
   it('D7: fully-reversed waste contributes 0 units / £0', () => {
     const movements = [
       { id: 'w1', type: MOVEMENT_TYPES.WASTE, delta: -2, valuation: 4, at: recent },               // original waste

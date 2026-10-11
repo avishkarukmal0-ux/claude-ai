@@ -28,7 +28,9 @@ export function weeklyReport({
     .map((d) => ({ supplierName: d.supplierName || 'Supplier', reference: d.reference || '', at: Number(d.receivedAt) || 0, by: d.receivedBy || d.actor || null, lines: (d.lines || []).length }));
   const stocktakes = (stocktakeHistory || [])
     .filter((s) => inPeriod(tsOf(s)))
-    .map((s) => ({ at: tsOf(s), by: s.by || s.actor || null, lines: s.lines ? s.lines.length : (s.countedLines || null) }));
+    // Audit D6 (round 2): a saved stocktake summary stores the count as `itemsCounted` (a number) — not a `lines`
+    // array — so prefer it; fall back to a lines array / countedLines for any older shape.
+    .map((s) => ({ at: tsOf(s), by: s.by || s.actor || null, lines: s.itemsCounted != null ? s.itemsCounted : (s.lines ? s.lines.length : (s.countedLines || null)) }));
 
   // Expiry actions + recorded waste. Net out REVERSED waste (audit D7): drop the compensating reversal entries
   // (they carry `reversalOf`) AND the originals they reverse, so a fully-undone waste contributes 0 units/£0.
