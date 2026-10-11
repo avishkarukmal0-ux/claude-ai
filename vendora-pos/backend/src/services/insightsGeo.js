@@ -34,7 +34,15 @@ function haversineMeters(a, b) {
  */
 function selectAreasInRadius(centroids, point, radiusM) {
   const out = [];
+  if (!point || point.lat == null || point.lng == null) return out;
+  // Cheap bounding-box prefilter: run the (costlier) haversine only on centroids near the point, not all ~190k.
+  // The box encloses the circle with a 5% margin, so results are identical — just much faster per request.
+  const latMargin = (radiusM / 111320) * 1.05;
+  const cosLat = Math.max(0.01, Math.cos(toRad(point.lat)));
+  const lngMargin = (radiusM / (111320 * cosLat)) * 1.05;
   for (const c of (centroids || [])) {
+    if (!c || c.lat == null || c.lng == null) continue;
+    if (Math.abs(c.lat - point.lat) > latMargin || Math.abs(c.lng - point.lng) > lngMargin) continue;
     const d = haversineMeters(point, c);
     if (d <= radiusM) out.push({ oa: c.oa, distance: Math.round(d) });
   }

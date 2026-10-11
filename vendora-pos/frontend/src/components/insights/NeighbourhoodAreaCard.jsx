@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbourhoodClient';
@@ -32,28 +32,39 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
 
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
+  const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
 
   // Radius-aggregated figures that RE-SUM as the circle moves (the paid aggregation; available on this free card
-  // only when the server's INSIGHTS_TEST_UNLOCK is on — a 403 means it's locked and we hide the block). Debounced
-  // so dragging the slider doesn't hammer the server. Never fabricates: configured:false → an honest note.
+  // only when the server's INSIGHTS_TEST_UNLOCK is on — a 403 means it's locked and we hide the block). The server
+  // call (postcode → OAs in radius → Nomis) is slow on a first visit to each radius, so we: (a) serve a cached
+  // outcome for a radius already fetched this session (instant), and (b) debounce new radii so dragging the slider
+  // doesn't fire a request per step. Never fabricates: configured:false → an honest note.
   useEffect(() => {
     if (!point || !radPostcode || !radPostcode.trim()) { setRadState('idle'); return undefined; }
+    const key = `${radPostcode}:${Math.round(radiusM)}`;
+    const hit = radCache.current.get(key);
+    if (hit) { // instant — no round-trip
+      setRadProfile(hit.profile); setRadState(hit.state); setRadHttp(hit.http); setRadDiag(hit.diag);
+      return undefined;
+    }
     let live = true;
-    setRadState((s) => (s === 'ok' ? 'ok' : 'loading')); // keep the last figures visible while refetching
+    setRadState((s) => (s === 'ok' ? 'ok' : 'loading')); // keep the last figures visible while fetching a new radius
     const id = setTimeout(async () => {
       try {
         const out = await getRadiusProfile({ postcode: radPostcode, radiusM });
         if (!live) return;
-        setRadHttp(200);
-        setRadDiag(out && out.diag ? out.diag : null);
-        if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); }
-        else { setRadProfile(null); setRadState('unconfigured'); }
+        const diag = out && out.diag ? out.diag : null;
+        setRadHttp(200); setRadDiag(diag);
+        if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); radCache.current.set(key, { state: 'ok', profile: out.profile, http: 200, diag }); }
+        else { setRadProfile(null); setRadState('unconfigured'); radCache.current.set(key, { state: 'unconfigured', profile: null, http: 200, diag }); }
       } catch (e) {
         if (!live) return;
-        setRadHttp((e && e.status) || 0);
-        setRadState(e && e.status === 403 ? 'locked' : 'error');
+        const code = (e && e.status) || 0;
+        setRadHttp(code); setRadState(code === 403 ? 'locked' : 'error');
+        // cache a 403 (stable config) but not transient errors, so a real outage retries next time.
+        if (code === 403) radCache.current.set(key, { state: 'locked', profile: null, http: 403, diag: null });
       }
-    }, 450);
+    }, 650);
     return () => { live = false; clearTimeout(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [radiusM, point && point.lat, point && point.lng, radPostcode]);
