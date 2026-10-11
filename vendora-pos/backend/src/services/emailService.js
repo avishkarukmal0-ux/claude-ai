@@ -6,8 +6,11 @@ const config = require('../config');
 // reading only SENDGRID_FROM_EMAIL — otherwise an install that set only NOTIFY_FROM_EMAIL reports "configured" but
 // sends with no From address. An explicit `from` arg still wins.
 function fromAddress(from) {
+  // Audit B5 (round 2): the config key is `config.notify` (not `config.notifications` — a typo that made this
+  // branch dead, so it only ever worked via the env fallbacks). config.notify.from already resolves
+  // NOTIFY_FROM_EMAIL || SENDGRID_FROM_EMAIL || the default, so prefer it; keep the env fallbacks as a belt.
   return from
-    || (config.notifications && config.notifications.from)
+    || (config.notify && config.notify.from)
     || process.env.NOTIFY_FROM_EMAIL
     || process.env.SENDGRID_FROM_EMAIL
     || 'noreply@vendora.co.uk';

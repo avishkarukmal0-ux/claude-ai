@@ -231,8 +231,19 @@ async function runForAccount(account, now = Date.now(), { force = false } = {}) 
     try { await Account.updateOne({ _id: account._id }, { $set: { 'notify.lastSentDay': null } }); } catch { /* best-effort */ }
   };
 
-  const blobsByName = await blobsForAccount(account._id);
-  const digest = buildDigest({ shopName: account.shopName, blobsByName, prefs, now });
+  // Audit B4 (round 2): the day is already claimed, so a failure LOADING or BUILDING the digest must also
+  // RELEASE the claim — otherwise a transient DB/read error after the claim leaves the day marked sent with
+  // zero messages and no retry on the next sweep. (Only the send failure was released before.)
+  let blobsByName;
+  let digest;
+  try {
+    blobsByName = await blobsForAccount(account._id);
+    digest = buildDigest({ shopName: account.shopName, blobsByName, prefs, now });
+  } catch (err) {
+    logger.error(`PWA digest build failed for ${account._id}: ${err.message}`);
+    await releaseClaim();
+    return { sent: false, reason: 'build_failed', error: err.message };
+  }
 
   // Nothing to send → the day is already claimed (equivalent to the old markDay), and there's nothing to retry.
   if (digest.empty && !force) return { sent: false, reason: 'nothing_to_send' };

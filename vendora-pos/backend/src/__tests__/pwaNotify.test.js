@@ -83,3 +83,49 @@ describe('pwaNotifyService — emailConfigured', () => {
     expect(emailConfigured()).toBe(false);
   });
 });
+
+// Audit B4 (round 2): a failure LOADING/BUILDING the digest after the atomic day-claim must RELEASE the claim,
+// else the day is marked sent with zero messages and the next sweep skips it.
+describe('pwaNotifyService — B4 round 2: release the day-claim on a build/load failure', () => {
+  const OLD = { provider: process.env.NOTIFY_EMAIL_PROVIDER, key: process.env.SENDGRID_API_KEY };
+  afterEach(() => {
+    process.env.NOTIFY_EMAIL_PROVIDER = OLD.provider; process.env.SENDGRID_API_KEY = OLD.key;
+    jest.resetModules(); jest.restoreAllMocks();
+  });
+
+  it('releases lastSentDay when the digest data load throws', async () => {
+    jest.resetModules();
+    process.env.NOTIFY_EMAIL_PROVIDER = 'sendgrid';
+    process.env.SENDGRID_API_KEY = 'test-key';
+    const svc = require('../services/pwaNotifyService');
+    const Account = require('../models/Account');
+    const SyncBlob = require('../models/SyncBlob');
+    const updateSpy = jest.spyOn(Account, 'updateOne').mockResolvedValue({ modifiedCount: 1 }); // claim wins + release
+    jest.spyOn(SyncBlob, 'find').mockReturnValue({ lean: () => Promise.reject(new Error('db down')) });
+
+    const account = { _id: 'acc-b4', shopName: 'Shop', email: 'o@x.com',
+      notify: { email: { enabled: true }, sendHour: 0, quietFrom: 0, quietTo: 0, lastSentDay: null } };
+    const res = await svc.runForAccount(account, Date.now());
+
+    expect(res.sent).toBe(false);
+    expect(res.reason).toBe('build_failed');
+    // Two updateOne calls: the claim, THEN the release (lastSentDay back to null).
+    const release = updateSpy.mock.calls.find((c) => c[1] && c[1].$set && c[1].$set['notify.lastSentDay'] === null);
+    expect(release).toBeTruthy();
+  });
+});
+
+// Audit B5 (round 2): the From address reads config.notify (the real key) — the old config.notifications was a
+// typo that made the branch dead, so it only ever worked through the env fallbacks.
+describe('emailService.fromAddress — B5 round 2: reads config.notify', () => {
+  it('config.notifications does not exist; config.notify.from does', () => {
+    const config = require('../config');
+    expect(config.notifications).toBeUndefined();
+    expect(config.notify && typeof config.notify.from).toBe('string');
+  });
+  it('an explicit from still wins; otherwise the configured default is used', () => {
+    const { fromAddress } = require('../services/emailService');
+    expect(fromAddress('x@shop.com')).toBe('x@shop.com');
+    expect(fromAddress()).toBe(require('../config').notify.from);
+  });
+});
