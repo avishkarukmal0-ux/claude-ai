@@ -6,7 +6,9 @@
 import { readJSON, writeJSON, WORKSPACE_EVENT } from './storage';
 
 // Where productId lives in each store: a top-level field on each row, or on each item/line of every record.
-const TOP_LEVEL = ['movements_v1', 'price_alerts_v1', 'markdowns_v1'];
+// Audit R11 (round 3): trials_v1 and tasks_v1 each carry a top-level productId and were omitted — so merging two
+// duplicate products stranded a trial's sales evidence (and a task's link) on the dropped product. Re-point both.
+const TOP_LEVEL = ['movements_v1', 'price_alerts_v1', 'markdowns_v1', 'trials_v1', 'tasks_v1'];
 const NESTED = [
   { name: 'claims_v1', arr: 'items' },
   { name: 'invoices_v1', arr: 'lines' },

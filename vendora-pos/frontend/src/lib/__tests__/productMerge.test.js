@@ -26,6 +26,18 @@ describe('reassignProductRefs — no stranded references after a product merge (
     expect(counts.markdowns_v1).toBe(1);
   });
 
+  it('R11: re-points trials and tasks so merge doesn’t strand a trial’s sales evidence', () => {
+    writeJSON('trials_v1', [{ id: 't1', productId: 'A', name: 'Oat milk', qty: 6 }, { id: 't2', productId: 'Z' }]);
+    writeJSON('tasks_v1', [{ id: 'k1', productId: 'A', productName: 'Oat milk' }, { id: 'k2', productId: null }]);
+
+    const counts = reassignProductRefs('A', 'B');
+
+    expect(readJSON('trials_v1').find((r) => r.id === 't1').productId).toBe('B'); // trial follows the kept product
+    expect(readJSON('tasks_v1').find((r) => r.id === 'k1').productId).toBe('B');
+    expect(counts.trials_v1).toBe(1);
+    expect(counts.tasks_v1).toBe(1);
+  });
+
   it('buy list merges the re-pointed row into an existing target row (one row per product)', () => {
     writeJSON('buylist_v1', [
       { id: 'bl1', productId: 'A', name: 'Cola', qty: 2, bought: false },
