@@ -8,7 +8,7 @@ import { fmtRadius } from '../../lib/radiusUnits';
 // (the /area + /radius routes are role-gated), so this line is never shown to staff.
 const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-GB');
 
-export default function RadiusFigures({ state, http, profile, radiusM, unit }) {
+export default function RadiusFigures({ state, http, diag, profile, radiusM, unit }) {
   return (
     <>
       {state === 'loading' && (
@@ -32,8 +32,12 @@ export default function RadiusFigures({ state, http, profile, radiusM, unit }) {
       {state === 'error' && (
         <p className="mt-2 text-[10px] leading-snug text-gray-400">Couldn’t load the radius figures right now. The figures below are for your immediate area (LSOA).</p>
       )}
-      {/* Small diagnostic (owner/manager card only). Tells us the request state without DevTools; remove/flag-gate later. */}
-      <p className="mt-1 text-[9px] leading-snug text-gray-300">radius: {state}{http != null ? ` (${http})` : ''}</p>
+      {/* Small diagnostic (owner/manager card only). Tells us the request state + whether Nomis actually returned
+          data for the OAs (oasWithPopulation/oaCount) without DevTools. Remove/flag-gate later. */}
+      <p className="mt-1 text-[9px] leading-snug text-gray-300">
+        radius: {state}{http != null ? ` (${http})` : ''}
+        {diag ? ` · ${diag.oasWithPopulation}/${diag.oaCount} OA w/ data · sample ${diag.sampleOa || '—'} age:${diag.sampleAgeCats} hh:${diag.sampleHhCats}` : ''}
+      </p>
     </>
   );
 }

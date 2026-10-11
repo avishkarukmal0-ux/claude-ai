@@ -61,17 +61,34 @@ function __setTransport(t) { _transport = t || fetchJson; }
 
 function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
 
-/** Parse a Nomis `.data.json` response into { oaCode: { label: count } } for one table's breakdown dimension. */
+// Fields that are never the breakdown dimension when auto-detecting.
+const NON_DIMENSION = new Set(['geography', 'obs_value', 'measures', 'time', 'date', 'freq']);
+
+/** Parse a Nomis `.data.json` response into { oaCode: { label: count } } for one table's breakdown dimension.
+ *  Prefers the configured dimension name, but FALLS BACK to auto-detecting the varying descriptive dimension —
+ *  so a mismatch between the hardcoded dimension id and Nomis's actual field name (the reason figures came back
+ *  as 0) no longer loses the data. Mirrors how the free neighbourhood breakdown parser works. */
 function parseObs(json, dimension) {
   const out = {};
   const obs = (json && json.obs) || [];
   for (const o of obs) {
-    const oa = o.geography && (o.geography.geogcode || o.geography.code);
-    const dim = o[dimension] || o[dimension && dimension.toUpperCase()];
+    const g = o.geography;
+    const oa = g && (g.geogcode || g.code || g.description);
+    if (!oa) continue;
+    // Prefer the named dimension if it's present on this row; else auto-detect the first non-geography field
+    // that carries a `description` (the breakdown category).
+    let dim = dimension ? (o[dimension] || o[String(dimension).toUpperCase()]) : null;
+    if (!dim || typeof dim.description !== 'string') {
+      dim = null;
+      for (const [k, v] of Object.entries(o)) {
+        if (NON_DIMENSION.has(k)) continue;
+        if (v && typeof v === 'object' && typeof v.description === 'string') { dim = v; break; }
+      }
+    }
     const label = dim && (dim.description || dim.name);
     const value = o.obs_value && (o.obs_value.value != null ? o.obs_value.value : o.obs_value);
     const n = Number(value);
-    if (!oa || !label || !Number.isFinite(n)) continue;
+    if (!label || !Number.isFinite(n)) continue;
     if (/^total\b/i.test(label) || /: all /i.test(label)) continue; // drop the "Total" row — we want the breakdown
     out[oa] = out[oa] || {};
     out[oa][label] = (out[oa][label] || 0) + n;
@@ -82,10 +99,13 @@ function parseObs(json, dimension) {
 /** Fetch one table's counts for a set of OA codes (batched). → { oaCode: { label: count } }. */
 async function fetchTable(def, oaCodes) {
   const merged = {};
+  // Reuse the server-side Nomis UID (same account as the free neighbourhood feature) when set — some datasets /
+  // larger requests need it, and the working feature always sends it.
+  const uid = config.neighbourhood && config.neighbourhood.nomisUid ? `&uid=${encodeURIComponent(config.neighbourhood.nomisUid)}` : '';
   for (const batch of chunk(oaCodes, 150)) {
     const geogParam = encodeURIComponent(batch.join(','));
     const sel = def.select ? `&${def.select}` : '';
-    const url = `${DATA().nomisBase}/dataset/${def.dataset}.data.json?geography=${geogParam}&measures=${def.measures}${sel}`;
+    const url = `${DATA().nomisBase}/dataset/${def.dataset}.data.json?geography=${geogParam}&measures=${def.measures}${sel}${uid}`;
     const json = await _transport(url);
     const parsed = parseObs(json, def.dimension);
     for (const [oa, counts] of Object.entries(parsed)) {
@@ -136,10 +156,24 @@ async function fetchAreaProfiles(point, radiusM) {
     };
   });
 
+  // Diagnostic (testing): how many OAs actually got census data, and the sample category counts — so when the
+  // headline figure is 0 we can tell a query/dataset/geography miss (0 OAs with data) from a parse/sum issue.
+  const s0 = oaCodes[0] || null;
+  _lastDiag = {
+    oaCount: oaCodes.length,
+    oasWithPopulation: profiles.filter((p) => p.population > 0).length,
+    sampleOa: s0,
+    sampleAgeCats: s0 ? Object.keys(age[s0] || {}).length : 0,
+    sampleHhCats: s0 ? Object.keys(hh[s0] || {}).length : 0,
+  };
+
   _cache.set(key, profiles, DATA().cacheTtlSeconds);
   return profiles;
 }
 
+let _lastDiag = null;
+function lastDiag() { return _lastDiag; }
+
 function clearCache() { _cache.flushAll(); }
 
-module.exports = { fetchAreaProfiles, parseObs, fetchTable, tables, DEFAULT_TABLES, clearCache, __setTransport };
+module.exports = { fetchAreaProfiles, parseObs, fetchTable, tables, DEFAULT_TABLES, clearCache, lastDiag, __setTransport };

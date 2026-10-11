@@ -134,7 +134,8 @@ async function buildProfile({ postcode, radiusM }) {
   catch { return { ok: true, supported: true, configured: false, location: locOut, preview: preview(), reason: 'The neighbourhood data provider is unavailable right now.', ...BASE_META() }; }
 
   const profile = geo.combineAreaProfile(areas, { radiusM: r, meta: BASE_META() });
-  return { ok: true, supported: true, configured: true, location: locOut, profile };
+  const diag = (provider.lastDiag && provider.lastDiag()) || undefined; // testing aid: OAs that actually got data
+  return { ok: true, supported: true, configured: true, location: locOut, profile, ...(diag ? { diag } : {}) };
 }
 
 module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, dataStatus, preview, buildProfile, radii, radiusBounds, CATEGORIES };

@@ -54,6 +54,18 @@ describe('nomis.parseObs', () => {
     expect(out.E1['Aged 16 to 64 years']).toBe(60);
     expect(out.E1['Total: All usual residents']).toBeUndefined();
   });
+
+  test('AUTO-DETECTS the breakdown dimension when the configured name does not match (the 0-figures bug)', () => {
+    // Nomis's real field name differs from the hardcoded hint → the old parser found nothing (→ 0). Now it
+    // falls back to the varying descriptive dimension and still reads the counts.
+    const json = { obs: [
+      { geography: { geogcode: 'E1' }, c2021_age_DIFFERENT: { description: 'Aged 16 to 64 years' }, obs_value: { value: 60 } },
+      { geography: { geogcode: 'E1' }, c2021_age_DIFFERENT: { description: 'Total: All usual residents' }, obs_value: { value: 100 } },
+    ] };
+    const out = nomis.parseObs(json, 'c2021_age_6'); // deliberately wrong hint
+    expect(out.E1['Aged 16 to 64 years']).toBe(60);
+    expect(out.E1['Total: All usual residents']).toBeUndefined();
+  });
 });
 
 describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {

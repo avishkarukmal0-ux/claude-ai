@@ -28,6 +28,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [radProfile, setRadProfile] = useState(null);
   const [radState, setRadState] = useState('idle'); // idle | loading | ok | unconfigured | locked | error
   const [radHttp, setRadHttp] = useState(null);      // last radius request HTTP status (for the on-card diagnostic)
+  const [radDiag, setRadDiag] = useState(null);      // server diagnostic: how many OAs actually returned census data
 
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
@@ -44,6 +45,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         const out = await getRadiusProfile({ postcode: radPostcode, radiusM });
         if (!live) return;
         setRadHttp(200);
+        setRadDiag(out && out.diag ? out.diag : null);
         if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); }
         else { setRadProfile(null); setRadState('unconfigured'); }
       } catch (e) {
@@ -115,7 +117,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} /></div>
               <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
 
-              <RadiusFigures state={radState} http={radHttp} profile={radProfile} radiusM={radiusM} unit={unit} />
+              <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} />
             </section>
           )}
           {(result.figures || []).map((f) => {

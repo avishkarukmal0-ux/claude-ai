@@ -38,6 +38,13 @@ describe('RadiusFigures — every state is visible + diagnostic', () => {
     expect(container.textContent).toMatch(/radius: error \(404\)/);
   });
 
+  it('diagnostic shows the OA-with-data counts when the server returns diag', () => {
+    const diag = { oaCount: 46, oasWithPopulation: 0, sampleOa: 'E00000001', sampleAgeCats: 0, sampleHhCats: 0 };
+    const { container } = render(<RadiusFigures state="ok" http={200} diag={diag} profile={{ population: 0, households: 0, outputAreas: 46 }} radiusM={1000} unit="mi" />);
+    expect(container.textContent).toMatch(/0\/46 OA w\/ data/);
+    expect(container.textContent).toMatch(/sample E00000001 age:0 hh:0/);
+  });
+
   it('no numbers are shown unless state is ok', () => {
     const { queryByText } = render(<RadiusFigures state="unconfigured" http={200} profile={profile} radiusM={1000} unit="mi" />);
     expect(queryByText('12,345')).toBeNull();
