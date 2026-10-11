@@ -56,7 +56,17 @@ gate is a no-op by design — turning the flag on is what enforces the login bar
 ## Commit(s)
 - `feat(auth): require shop login to open the PWA — isolation starts at login (+SW v8)`
 
+## Update — gated the welcome/picker too (after owner's screen recording)
+Owner sent a recording (`11.mp4`, on `claude-ai-indol.vercel.app`, signed out) showing the exact hole: from "Welcome to
+Vendora" they tap into the full app (`/home`) and freely switch shop *type* (Convenience → Off-licence → Butcher → Health-
+food), using the app with **no login ever asked**. (It's one open guest workspace with a switchable type label, but the real
+issue — the app is usable with no login barrier — is valid.) Confirmed this was the **pre-gate build**.
+- `App.jsx`: now **both** `/` (NichePicker) and `/home` are wrapped in `RequireShopLogin`, so a signed-out visitor hits
+  `/account` (log in / create) FIRST — they can't even tap through the picker. Only `/account` stays public.
+- No loop: a logged-in user with no shop type set still reaches `/` (HomePage redirects there when `!saved`; the guard lets a
+  logged-in user through) to pick a type, then `/home`.
+- SW bumped **v8→v9**. FE **393/393** + build green.
+
 ## Follow-ups
-- [ ] Optional: also redirect the picker `/` → `/account` when signed-out (accounts on), so login is literally the first
-      screen. Left public for now so new shops can still see the onboarding/type picker.
-- [ ] Owner decision: keep a signed-out **demo** path, or require login for the demo too.
+- [ ] Owner decision: keep a signed-out **demo** path, or require login for the demo too (demo now sits behind login).
+- [ ] Optional: one-time wipe of any leftover **guest workspace** data from the pre-gate era (local per-device only).

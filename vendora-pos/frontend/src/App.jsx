@@ -91,10 +91,11 @@ export default function App() {
         <Suspense fallback={<Spinner />}>
           <Routes>
             {/* ── Standalone PWA (the product) ── */}
-            {/* Isolation starts at login: the app (and all shop data) sits behind RequireShopLogin, so a
-                signed-out visitor can never open another shop's data — when accounts are enabled they're sent
-                to /account to log in or create their shop first. The picker + account screens stay public. */}
-            <Route path="/" element={<NichePickerPage />} />
+            {/* Isolation starts at login: both the welcome/picker AND the app sit behind RequireShopLogin, so a
+                signed-out visitor is sent to /account (log in / create) FIRST and can never tap through to the
+                app or another shop's data. Only /account stays public (it IS the login/create screen). When
+                accounts are disabled the guard is a no-op, so a deployment with no auth backend isn't locked out. */}
+            <Route path="/" element={<RequireShopLogin><NichePickerPage /></RequireShopLogin>} />
             <Route path="/home" element={<RequireShopLogin><HomePage /></RequireShopLogin>} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/login" element={<LoginPage />} />
