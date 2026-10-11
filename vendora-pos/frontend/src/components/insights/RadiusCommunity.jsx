@@ -41,6 +41,9 @@ export default function RadiusCommunity({ state, profile }) {
   if (state === 'error') {
     return <p className="mt-2 text-[10px] leading-snug text-gray-400">Couldn’t load the community breakdown right now — try again in a moment.</p>;
   }
+  if (state === 'unconfigured') {
+    return <p className="mt-2 text-[10px] leading-snug text-amber-700">Not switched on yet on the server (the census data provider or OA centroids) — once it’s set up, who-lives-here appears here.</p>;
+  }
   if (state !== 'ok' || !profile) return null;
   const cats = profile.categories || {};
   return (

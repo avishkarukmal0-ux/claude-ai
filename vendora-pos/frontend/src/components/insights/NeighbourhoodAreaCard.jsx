@@ -89,12 +89,12 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode]);
 
-  // "Who lives here" community breakdown (country of birth, ethnic group, main language) — only fetched when the
-  // owner opens the section, and only when the headline radius figures are available (ok). It asks the server for
-  // the FULL profile (full=1), which costs the extra census tables — hence on demand, so the headline stays fast.
-  // Cached per {postcode, radius} for the session; re-fetches when the radius changes while the section is open.
+  // "Who lives here" community breakdown (country of birth, ethnic group, main language) — fetched on demand when
+  // the owner opens the section (not while locked/idle). It asks the server for the FULL profile (full=1), which
+  // costs the extra census tables — hence on demand, so the headline stays fast. Cached per {postcode, radius} for
+  // the session; re-fetches when the radius changes while open. Honest states: unconfigured → a note, not an error.
   useEffect(() => {
-    if (!whoOpen || radState !== 'ok' || !point || !radPostcode || !radPostcode.trim()) return undefined;
+    if (!whoOpen || !point || !radPostcode || !radPostcode.trim() || radState === 'locked' || radState === 'idle') return undefined;
     const key = `${radPostcode}:${Math.round(radiusM)}`;
     const hit = whoCache.current.get(key);
     if (hit) { setWhoProfile(hit); setWhoState('ok'); return undefined; }
@@ -105,8 +105,12 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         const out = await getRadiusProfile({ postcode: radPostcode, radiusM, full: true });
         if (!live) return;
         if (out && out.configured && out.profile) { setWhoProfile(out.profile); setWhoState('ok'); whoCache.current.set(key, out.profile); }
-        else { setWhoProfile(null); setWhoState('error'); }
-      } catch (e) { if (live) { setWhoProfile(null); setWhoState('error'); } }
+        else { setWhoProfile(null); setWhoState('unconfigured'); }
+      } catch (e) {
+        if (!live) return;
+        const code = (e && e.status) || 0;
+        setWhoProfile(null); setWhoState(code === 403 ? 'locked' : 'error');
+      }
     }, 400);
     return () => { live = false; clearTimeout(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,8 +178,9 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} />
 
               {/* On-demand "Who lives here" — country of birth, ethnic group, main language — so the owner can stock
-                  for the local community. Only offered once the headline figures are available (test-unlock on). */}
-              {radState === 'ok' && (
+                  for the local community. Shown whenever the radius feature is available (hidden only when the data
+                  is locked to the paid add-on, or before a postcode is entered); opening it loads the breakdowns. */}
+              {radState !== 'locked' && radState !== 'idle' && (
                 <div className="mt-2 border-t border-gray-100 pt-2">
                   <button type="button" onClick={() => setWhoOpen((v) => !v)} aria-expanded={whoOpen} className="flex w-full items-center justify-between text-left text-[12px] font-semibold text-primary">
                     <span className="flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /> Who lives here — stock for your community</span>
