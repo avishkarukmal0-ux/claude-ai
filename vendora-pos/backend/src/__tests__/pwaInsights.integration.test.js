@@ -189,6 +189,37 @@ describe('pwa-insights — entitlement enforced on the server', () => {
     expect(prof.status).toBe(402);
   });
 
+  dbTest('V4: CAS-contention exhaustion is retryable — the event is NOT acknowledged, a later retry applies', async () => {
+    const svc = require('../services/insightsEntitlementService');
+    const ProcessedBillingEvent = require('../models/ProcessedBillingEvent');
+    const a = await newOwner('Ins V4');
+    const t = Date.now();
+    await svc.ingestProviderEvent({ type: 'purchased', accountId: a.id, currentPeriodEnd: t + 30 * 86400000, eventId: `seedv4_${t}`, eventCreatedMs: t - 1000 });
+    const ended = { type: 'ended', accountId: a.id, eventId: `endv4_${t}`, eventCreatedMs: t };
+
+    // Force PERPETUAL CAS contention: on every read, advance the stored lastEventId so our guarded write never
+    // matches; re-arm the one-shot seam each time. The loop exhausts its retries → 'cas_contention'.
+    const NPID = 'entitlements.neighbourhoodInsights.lastEventId';
+    const bump = async () => {
+      await Account.updateOne({ _id: a.id }, { $set: { [NPID]: `race_${Math.random().toString(36).slice(2)}` } });
+      svc.__setAfterEntitlementRead(bump);
+    };
+    svc.__setAfterEntitlementRead(bump);
+    const res = await svc.ingestProviderEvent(ended);
+    svc.__setAfterEntitlementRead(null);
+
+    expect(res.ok).toBe(false);
+    expect(res.retryable).toBe(true);
+    // Must NOT be acknowledged — else the retry is dropped as a duplicate and the cancellation is lost.
+    expect(await ProcessedBillingEvent.findOne({ eventId: ended.eventId })).toBeNull();
+
+    // A later uncontended retry applies the cancellation.
+    await svc.ingestProviderEvent(ended);
+    expect(svc.isActive(await svc.getEntitlement(a.id))).toBe(false);
+    const prof = await request(app).post('/api/pwa-insights/profile').set('Authorization', `Bearer ${a.token}`).send({ postcode: 'EC1A 1BB', radiusM: 1000 });
+    expect(prof.status).toBe(402);
+  });
+
   dbTest('the REAL Stripe webhook (raw body, signed) grants access; a forged body is rejected', async () => {
     const a = await newOwner('Ins Stripe');
     const { payload, header } = stripeSigned(subUpdatedActiveWithAddon(a.id));

@@ -36,6 +36,8 @@ router.post('/billing/webhook', async (req, res, next) => {
     const { type, accountId } = req.body || {};
     if (!accountId || !type) throw new AppError('Bad event', 400, 'BAD_EVENT');
     const out = await entitlements.ingestProviderEvent({ ...req.body, source: req.body.source || 'manual' });
+    // V4: a retryable (contention) outcome was NOT applied — return 503 so the provider re-delivers (never ack it).
+    if (out.retryable) throw new AppError('Temporarily could not apply — please retry', 503, 'EVENT_RETRY');
     if (!out.ok) throw new AppError('Could not apply event', 400, 'EVENT_NOT_APPLIED');
     res.json({ success: true, duplicate: !!out.duplicate, skipped: !!out.skipped, status: out.status || null });
   } catch (err) { next(err); }
@@ -54,7 +56,10 @@ router.post('/billing/stripe/webhook', async (req, res, next) => {
     const normalised = stripeBilling.mapEvent(event);
     if (!normalised) return res.json({ success: true, ignored: true }); // event we don't act on
     const out = await entitlements.ingestProviderEvent(normalised);
-    // Always 200 to Stripe on a handled/ignored event so it doesn't needlessly retry; unresolved is logged.
+    // V4: a retryable (contention) outcome was NOT applied — return 5xx so Stripe re-delivers (its at-least-once
+    // retry then applies it); never acknowledge an unapplied terminal event. Otherwise 200 so Stripe doesn't
+    // needlessly retry a handled/ignored event; unresolved is logged.
+    if (out.retryable) throw new AppError('Temporarily could not apply — please retry', 503, 'EVENT_RETRY');
     res.json({ success: true, duplicate: !!out.duplicate, skipped: !!out.skipped, unresolved: !!out.unresolved, status: out.status || null });
   } catch (err) { next(err); }
 });

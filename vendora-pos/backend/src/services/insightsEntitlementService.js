@@ -214,7 +214,15 @@ async function ingestProviderEvent(event, now = Date.now()) {
   let ent;
   if (event.eventCreatedMs != null) {
     const r = await setEntitlementCAS(accountId, event, now);
-    if (r.skipped) { await recordProcessed(event, accountId); return { ok: true, skipped: true, reason: r.reason }; }
+    if (r.skipped) {
+      // Audit V4 (round 4): contention exhaustion is NOT a terminal outcome — the event was never applied. Do
+      // NOT record it processed (that would make the provider's retry a duplicate and silently drop it, e.g.
+      // leaving access active after a cancellation). Return a retryable failure so the caller re-delivers; only
+      // genuinely stale / no-op events are acknowledged below.
+      if (r.reason === 'cas_contention') return { ok: false, retryable: true, reason: 'contention' };
+      await recordProcessed(event, accountId);
+      return { ok: true, skipped: true, reason: r.reason };
+    }
     ent = r.ent;
   } else {
     const patch = entitlementPatchFor(event, current, now);
