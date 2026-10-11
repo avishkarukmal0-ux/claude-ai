@@ -5,6 +5,7 @@ import {
   ChevronLeft, ImagePlus, AlertTriangle, FileText, Check, ShoppingCart,
 } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
+import { hasOperation } from '../../lib/movementStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useRecoveryGuard } from '../../lib/recoveryGuard';
 import { useOrders, statusFor, OPEN_STATUSES } from '../../lib/orderStore';
@@ -100,28 +101,44 @@ export default function DeliveryReceivingView() {
     const totals = deliveryTotals(draft);
     if (totals.acceptedUnits <= 0) { toast.error('Nothing to receive — add delivered quantities'); return; }
     if (needsRecovery) return; // R3: an unsafe partial save already happened — don't let a re-tap double-count
-    const res = applyDelivery(draft);
-    if (!res.ok) {
-      if (res.needsRecovery) {
-        // R3: stock was saved but the delivery record failed AND couldn't be undone. A retry would add the units
-        // again, so record a DURABLE block keyed to this delivery (survives reopen/reload) and tell the owner to
-        // reload + verify before any further action.
-        recovery.record(recoveryKey, { kind: 'delivery', reference: draft.reference || '' });
-        toast.error(res.error, { duration: 12000 });
-        return;
+
+    // R10 (round 3): stock may ALREADY be committed from a previous attempt whose DOCUMENT write failed — which
+    // left the delivery stuck as an un-finishable draft (a retry hit applyDelivery's duplicate guard and could
+    // never complete). applyDelivery is idempotent by operation id, so only apply when it hasn't been applied
+    // yet; when it has, skip straight to finishing the document (no stock re-applied). Record the order receipts
+    // only on the fresh apply, so a repair run never double-records them.
+    let applied = null;
+    if (!hasOperation(draft.id)) {
+      const res = applyDelivery(draft);
+      if (!res.ok) {
+        if (res.needsRecovery) {
+          // R3: stock saved but the delivery record failed AND couldn't be undone — durable block + reload.
+          recovery.record(recoveryKey, { kind: 'delivery', reference: draft.reference || '' });
+          toast.error(res.error, { duration: 12000 });
+          return;
+        }
+        if (!res.duplicate) { toast.error(res.error || 'Couldn’t receive'); return; }
+        // duplicate: stock is already in from a prior attempt — fall through to finish the document.
+      } else {
+        applied = res.applied;
+        // Record accepted units against a fulfilled order as part of the fresh apply (once).
+        if (draft.orderId) {
+          const receipts = (draft.lines || [])
+            .map((l) => ({ productId: l.productId, barcode: l.barcode, qty: acceptedUnits(l) }))
+            .filter((r) => r.qty > 0);
+          if (receipts.length) receiveAgainst(draft.orderId, receipts);
+        }
       }
-      toast.error(res.error || 'Couldn’t receive');
+    }
+
+    // Finish the document from the committed operation. If THIS write fails, the stock stays safely committed and
+    // the owner can tap Receive again to finish — the operation guard stops the stock being applied twice (R10).
+    const marked = markReceived(draft.id);
+    if (marked && marked.ok === false) {
+      toast.error('Stock is in — but finishing the delivery didn’t save. Tap Receive again to finish (stock won’t be added twice).', { duration: 10000 });
       return;
     }
-    markReceived(draft.id);
-    // If this delivery fulfils an order, record the accepted units against it.
-    if (draft.orderId) {
-      const receipts = (draft.lines || [])
-        .map((l) => ({ productId: l.productId, barcode: l.barcode, qty: acceptedUnits(l) }))
-        .filter((r) => r.qty > 0);
-      if (receipts.length) receiveAgainst(draft.orderId, receipts);
-    }
-    toast.success(`Received ${res.applied} units into stock`);
+    toast.success(applied != null ? `Received ${applied} units into stock` : 'Delivery finished');
     setDraft(null); setDraftId(null);
   }
 

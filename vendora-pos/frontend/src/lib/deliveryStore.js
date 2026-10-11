@@ -121,12 +121,18 @@ export function useDeliveries() {
     persist(next); setDeliveries(next);
   }, []);
 
+  // Audit R10 (round 3): report whether the status write committed. The caller (receiving view) applies stock
+  // first (idempotent by operation id) and then finishes the document here — if THIS write fails, the delivery
+  // must stay a draft AND the caller must learn it failed, so it can be finished on a retry WITHOUT re-applying
+  // stock (rather than the old silent failure that left a committed delivery stuck as an un-finishable draft).
   const markReceived = useCallback((id) => {
     const who = actorName();
     const next = load().map((d) => (d.id === id
       ? { ...d, status: 'received', receivedAt: Date.now(), receivedBy: d.receivedBy || who, updatedAt: Date.now() }
       : d));
-    persist(next); setDeliveries(next);
+    const res = persist(next);
+    if (res.ok) setDeliveries(next);
+    return res;
   }, []);
 
   /** Clone a past delivery's lines into a fresh draft for review before confirming. */
