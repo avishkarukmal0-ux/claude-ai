@@ -83,7 +83,15 @@ open welcome space only ever shows SAMPLE data":
   there, now or in future. SW bumped **v9→v10**.
 - Tests: `demo` suite +4 (signed-out→sample; signed-in→no demo; accounts-off→no-op; idempotent). FE **400/400** + build green.
 
+## Update 3 — purge stale guest data (completes "no real data in the welcome space")
+`account.purgeStaleGuestData()` (called on boot from `main.jsx`) clears any leftover on-device **guest** workspace data once
+a shop is signed in AND its own workspace already has data. Conservative so it never loses data: no-op when accounts are off
+(guest IS the only data), when signed out, or for a fresh account whose guest data hasn't been migrated yet. Plus a
+`NichePickerPage` test asserting the welcome screen renders no stock/takings even when the workspace holds some. Tests:
+guest-purge 5/5 + NichePicker welcome 1/1 + build green. (These files were authored alongside the sample-welcome change and
+committed in `998ae76` to keep the tree clean + the feature complete.)
+
 ## Follow-ups
-- [ ] Optional: one-time wipe of any leftover **guest workspace** data from the pre-gate era (local per-device only).
+- [x] ~~One-time wipe of leftover **guest workspace** data from the pre-gate era~~ — done (`purgeStaleGuestData`, `998ae76`).
 - [ ] Owner decision: should a signed-out visitor who taps "Change" be able to try different shop *types* on sample data
       (currently yes — the picker writes the type into the demo workspace).
