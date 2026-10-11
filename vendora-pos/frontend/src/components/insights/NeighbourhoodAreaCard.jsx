@@ -12,6 +12,9 @@ import { fmtRadius, clamp } from '../../lib/radiusUnits';
 // are for the shop's immediate area (LSOA) and do NOT change with the circle — radius-aggregated figures are the
 // separate paid Neighbourhood Insights add-on. Bounds mirror the server's insights defaults.
 const RADIUS_BOUNDS = { min: 250, max: 5000 };
+// In map-zoom mode the viewport radius is snapped to this step so zooming lands on a small set of radii (good
+// cache reuse → snappy). Coarser = fewer slow fetches; finer = smoother steps. 250 m is a good balance for an est.
+const RADIUS_STEP_M = 250;
 
 // Real, official area figure for the store's postcode (Census 2021 via our backend). Shows source, date and
 // the OGL attribution; works offline from the last stored copy (clearly labelled); never blocks any screen and
@@ -35,11 +38,12 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const radPostcode = (result && result.postcode) || postcode;
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
 
-  // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Quantise to 50 m so tiny
-  // zoom/pan jitter maps to the same radius (reuses the session + server caches instead of firing a fetch per
-  // pixel), clamp to the allowed bounds, and skip no-op updates so the figures only re-sum when the radius moves.
+  // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Quantise to a coarse STEP
+  // so zooming lands on a small ladder of radii (250 m, 500 m, …) — far fewer distinct values means most zoom stops
+  // are a cache hit (instant) instead of a fresh, slow census fetch, which is what made counting feel laggy. Clamp
+  // to the allowed bounds, and skip no-op updates so the figures only re-sum when the radius actually changes step.
   const onViewRadius = useCallback((m) => {
-    const q = clamp(Math.round(m / 50) * 50, RADIUS_BOUNDS.min, RADIUS_BOUNDS.max);
+    const q = clamp(Math.round(m / RADIUS_STEP_M) * RADIUS_STEP_M, RADIUS_BOUNDS.min, RADIUS_BOUNDS.max);
     setRadiusM((prev) => (q !== prev ? q : prev));
   }, []);
 
@@ -73,10 +77,12 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         // cache a 403 (stable config) but not transient errors, so a real outage retries next time.
         if (code === 403) radCache.current.set(key, { state: 'locked', profile: null, http: 403, diag: null });
       }
-    }, 650);
+      // Map-zoom settles on a discrete step (one zoomend), so it doesn't need the long slider-drag debounce —
+      // respond sooner. Slider mode keeps the longer debounce so dragging doesn't fire a request per step.
+    }, radiusMode === 'map' ? 300 : 650);
     return () => { live = false; clearTimeout(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusM, point && point.lat, point && point.lng, radPostcode]);
+  }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode]);
 
   if (!NEIGHBOURHOOD_ENABLED) return null;
 

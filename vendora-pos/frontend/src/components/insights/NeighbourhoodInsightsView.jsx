@@ -27,11 +27,12 @@ export default function NeighbourhoodInsightsView({ onBack }) {
 
   const bounds = (status && status.radiusBounds) || { min: 250, max: 5000 };
 
-  // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Quantise to 50 m so tiny
-  // zoom/pan jitter maps to the same radius (the debounced rebuild below + the server's per-radius cache then make
-  // it cheap), clamp to the allowed bounds, and skip no-ops so we only rebuild when the radius actually moves.
+  // Map-zoom ("manual") mode: the map reports the radius that fits the current viewport. Snap to a coarse 250 m
+  // step so zooming lands on a small ladder of radii — far fewer distinct values means most zoom stops reuse the
+  // server's per-radius cache (fast) instead of a fresh, slow profile rebuild. Clamp to the status-provided bounds,
+  // and skip no-ops so we only rebuild when the radius actually changes step.
   const onViewRadius = useCallback((m) => {
-    const q = clamp(Math.round(m / 50) * 50, bounds.min, bounds.max);
+    const q = clamp(Math.round(m / 250) * 250, bounds.min, bounds.max);
     setRadiusM((prev) => (q !== prev ? q : prev));
   }, [bounds.min, bounds.max]);
 

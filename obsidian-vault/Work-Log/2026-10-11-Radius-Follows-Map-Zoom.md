@@ -65,5 +65,21 @@ card, because the paid flow builds on demand:
   like dragging the slider already did (no new fetch path; the server's per-radius day cache keeps repeats cheap).
 FE suite still **390/390** + build green.
 
+## Update 2 — map-zoom felt laggy ("counting slower, takes a bit to respond")
+Root cause: in map-follow mode the 50 m quantiser produced ~95 distinct radii, so almost every zoom was a *new* radius
+→ a fresh (slow, first-time) census fetch. Two frontend-only fixes (no Render redeploy):
+- **Coarser snap: 50 m → 250 m step** (both the free card `RADIUS_STEP_M` and the paid view). Zoom now lands on a small
+  ladder (250 m, 500 m, … 5 km → ~20 radii), so most zoom stops are a **cache hit** (session cache / server day-cache) =
+  instant, and far fewer slow first-fetches overall. The circle + figures stay consistent (both use the snapped radius).
+- **Shorter debounce in map mode (650 → 300 ms)** on the free card — a zoom settles on one `zoomend`, so it doesn't need
+  the long slider-drag debounce; it starts counting sooner. Slider mode keeps 650 ms. (Paid view keeps its 450 ms silent
+  rebuild.) Old figures stay on screen while the new ones load (no blank "counting" flash), and a no-op step change fires
+  nothing.
+Still not a fix for the *first* visit to a brand-new radius (one Nomis fetch, + possible Render cold start) — the real
+lever there is the deferred **headline-only fast path** (fetch just population + households for the free card instead of
+all 4 tables). FE insights 17/17 + suite 390/390 + build green.
+
 ## Follow-ups
 - [ ] Carry-over: remove/flag-gate the grey `radius:` diagnostic line once the figures are confirmed working live.
+- [ ] Optional backend (needs redeploy): headline-only fast path for the free card (2 Nomis tables, not 4) ≈ halves the
+      first-visit fetch time; and/or a keep-warm ping so the first lookup skips Render's cold start.
