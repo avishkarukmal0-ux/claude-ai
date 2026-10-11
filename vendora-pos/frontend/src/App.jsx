@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import NichePickerPage from './pages/NichePickerPage';
 import HomePage from './pages/HomePage';
 import AccountPage from './pages/AccountPage';
+import RequireShopLogin from './components/account/RequireShopLogin';
 
 // ── Till / back-office (deferred product) — lazy so NONE of it is in the PWA's ──
 // initial dependency path. Each page is its own chunk; providers are code-split too.
@@ -90,8 +91,11 @@ export default function App() {
         <Suspense fallback={<Spinner />}>
           <Routes>
             {/* ── Standalone PWA (the product) ── */}
+            {/* Isolation starts at login: the app (and all shop data) sits behind RequireShopLogin, so a
+                signed-out visitor can never open another shop's data — when accounts are enabled they're sent
+                to /account to log in or create their shop first. The picker + account screens stay public. */}
             <Route path="/" element={<NichePickerPage />} />
-            <Route path="/home" element={<HomePage />} />
+            <Route path="/home" element={<RequireShopLogin><HomePage /></RequireShopLogin>} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/login" element={<LoginPage />} />
 
