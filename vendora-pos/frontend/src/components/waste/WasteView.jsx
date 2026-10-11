@@ -139,8 +139,17 @@ export default function WasteView({ onBack }) {
   // Undo restores stock + history consistently (batch-aware).
   function undoEntry(e) {
     if (e.type === 'wasted' && e.productId && e.batchId) {
-      if (e.productBatchId) reverseBatchWaste({ id: e.productId, qty: e.qty, opGroupId: e.batchId, batch: e.batchInfo });
-      else reverseWaste({ id: e.productId, qty: e.qty, batchId: e.batchId });
+      const res = e.productBatchId
+        ? reverseBatchWaste({ id: e.productId, qty: e.qty, opGroupId: e.batchId, batch: e.batchInfo })
+        : reverseWaste({ id: e.productId, qty: e.qty, batchId: e.batchId });
+      // Audit R8 (round 3): the undo discarded this result and ALWAYS removed the ledger entry — so a failed
+      // stock-restore made the entry vanish while stock stayed reduced. KEEP the entry so a retry is possible;
+      // on an unsafe (restore + rollback both failed) result, record a durable block.
+      if (res && res.ok === false) {
+        if (res.needsRecovery) recovery.record(`product:${e.productId}`, { kind: 'waste', name: e.name });
+        toast.error(res.error || 'Couldn’t undo that — your waste entry is kept, please retry.');
+        return;
+      }
     }
     removeEntry(e.id);
   }
