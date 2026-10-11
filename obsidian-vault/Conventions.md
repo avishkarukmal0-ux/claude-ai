@@ -36,6 +36,10 @@ The recurring round-3 lesson: *a passing helper test does not prove the whole us
 - **Pin identity at the OUTERMOST async entry** and re-check after each await; a pin captured inside a nested callee runs after the caller's own await resolved, missing a mid-flight sign-out/switch. (R6)
 - **A productId remap must cover EVERY store that carries one** (top-level or nested) — a missed store strands silently on merge (`productMerge` TOP_LEVEL/NESTED). (R11)
 - **Idempotent multi-step completion:** finish a later step (document/order) from the committed operation identity without re-running the first; gate re-application on the operation guard (`hasOperation`). (R10)
+- **Record a recovery flag AND check it at the start of the mutating action** — recording a `needsRecovery` block without a pre-check in the SAME caller still lets a retry double-apply (undo did this). Every path that can set a flag must also honour it. (round 4 V1)
+- **Compensate a failed second write, don't just report it** — when the second of two cross-store writes fails after the first committed, actively undo the first (e.g. re-apply the removed claim credit) to return to a consistent state; a durable pending-repair flag covers compensation-also-fails. (round 4 V2)
+- **When an operation turns async, re-pin EVERY ambient input it reads after an await** (active workspace, session) — the sync→async change is exactly where a previously-safe `getActiveWorkspace()` read becomes a cross-tenant write. (round 4 V3)
+- **Only acknowledge an idempotency-ledger event that was actually applied or is genuinely stale** — a transient "couldn't apply right now" (CAS contention) must stay retryable and NOT be recorded processed, or the provider's retry is dropped as a duplicate. (round 4 V4)
 
 ## Backend patterns
 - **Thin routes, fat services.** Routes validate + auth + shape the response; calculations live in [[Services]].
