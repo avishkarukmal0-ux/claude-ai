@@ -18,6 +18,15 @@ House style observed across the codebase — follow these when adding code.
 - **tailwind 4 is a CSS-first rewrite** — raises the browser floor (Safari 16.4+/Chrome 111+) and risks UI-wide visual regressions. Not worth it for in-store PWA devices unless there's a real benefit (it clears no advisory).
 - Upgrade one major at a time, re-run `npm run build` **and** the full suite, and commit each verified stage separately so rollback stays clean.
 
+## Two-write operations must verify + roll back (audit round 2, see [[2026-10-11-Audit-Round2-Residuals]])
+Local-first writes span independent stores (products vs movements/ledger, claim vs credit-note, localStorage vs IndexedDB) with no cross-store transaction. For any operation that writes TWICE:
+- **Check the result of the SECOND write**, not just the first. A committed stock change with a failed ledger/history write is "success with missing history" — don't report ok.
+- On the second write failing, **roll the first back** and return a plain retriable error.
+- If the **rollback ALSO fails**, return a distinct `{ unsafe: true, needsRecovery: true }` — never a generic "please retry" (a naive retry double-applies). The view blocks the retry and tells the owner to reload + verify.
+- `persistAll`/store setters only update React state **after** a committed write (`if (res.ok) setX(next)`) — never show an uncommitted value.
+- When rolling back an UPDATE to an existing value, restore the **prior** value, not zero.
+- **Never use a GridFS `_id` (ObjectId) as a version pointer** — within one second across processes its ordering isn't upload order. Use an atomic monotonic rev (`services/backupRev.js`).
+
 ## Backend patterns
 - **Thin routes, fat services.** Routes validate + auth + shape the response; calculations live in [[Services]].
 - Every route wrapped in `try/catch` → `next(err)`; central `errorHandler` formats.
