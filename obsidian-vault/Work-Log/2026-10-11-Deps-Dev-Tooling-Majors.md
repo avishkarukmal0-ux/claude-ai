@@ -66,8 +66,26 @@ cleanly.
 - `da3ea54` — BE jest 29→30 (reviewed major; modernization)
 - `2bd46a6` — FE vite 5→7, vitest 2→5, plugin-react 4→5, 18→1
 
+## Addendum — CI made green (the "leftovers")
+Inspecting the Actions runs showed **CI had been red on every run since it was
+added** — only the backend job, at the `npm test` step. Two root causes:
+1. **jest 30 renamed `--testPathPattern` → `--testPathPatterns`** (singular now
+   errors). The jest 29→30 bump silently broke `test:unit` / `test:pwa-auth` /
+   `test:pwa-sync`. Fixed all three scripts.
+2. The **setup.js-based suites** (auth, cashDrawer, lossPrevention, products,
+   sales, refundVoid.integration) need a real DB and **don't self-skip** — the
+   no-URI `npm test` ran them and they threw on `global.testStore`. Reworked the
+   backend job: the no-URI step now `--testPathIgnorePatterns`-excludes those DB
+   suites (the URI-gated `pwa*` suites stay and self-skip); a DB-backed step runs
+   them `--runInBand` against the mongo:7 service (+ pwa-auth/pwa-sync), giving
+   the till/refund API real CI coverage.
+- Verified locally: `test:unit` 61/61 under jest 30; the exact no-URI command =
+  **16 passed / 9 skipped / 0 failed in ~6s** (no mms timeouts). DB step needs
+  the CI service (not runnable in-sandbox) — watched on the run.
+- Commit `2217481`.
+
 ## Follow-ups
-- [ ] Owner: confirm CI green on the branch (DB suites run against CI mongo).
+- [x] Confirm CI green on the branch (DB suites run against CI mongo) — fixed in `2217481`, watching the run.
 - [ ] Owner: redeploy Render + Vercel to put the full audit backlog live (radius
       deprivation needs centroids re-imported WITH the LSOA column).
 - [ ] Accept `braces` + `sprintf-js` as standing dev-only residuals (no upstream
