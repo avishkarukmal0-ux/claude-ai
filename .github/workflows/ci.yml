@@ -66,20 +66,19 @@ jobs:
       - run: npm ci
       - name: App boots
         run: node -e "require('./src/app.js'); console.log('app loads OK')"
-      - name: Unit + pure tests (DB-only suites excluded; run in the DB-backed step)
-        # The setup.js-based suites (auth, cashDrawer, lossPrevention, products, sales, refundVoid)
-        # need a real DB and would error here without one — they run in the DB-backed step below.
-        # The URI-gated pwa* integration suites stay in this list but self-skip without a URI.
+      - name: Unit + pure tests (legacy till/POS suites excluded — out of scope)
+        # Vendora is the PWA product; the till/POS subsystem is dormant (TILL_ENABLED defaults off in
+        # production) and NOT pursued. Its integration suites (auth, cashDrawer, lossPrevention,
+        # products, sales, refundVoid) are therefore excluded from CI by design — not a pending fix.
+        # The URI-gated pwa* integration suites stay in this list and self-skip without a URI.
         run: >-
           npx jest --forceExit --detectOpenHandles
           --testPathIgnorePatterns='/node_modules/'
           --testPathIgnorePatterns='(auth|cashDrawer|lossPrevention|products|sales)\.test\.js$'
           --testPathIgnorePatterns='refundVoid\.integration\.test\.js$'
       - name: DB-backed integration — PWA auth + sync (throwaway Mongo)
-        # The legacy till suites (auth, cashDrawer, lossPrevention, products, sales, refundVoid) are
-        # EXCLUDED here and above: against a real DB they fail on stale API expectations (product create
-        # 422, sale 404, empty lists) — drift that predates this workflow and needs a mongo to fix. They
-        # are tracked as a follow-up. pwa-auth/pwa-sync are the current, CI-aware DB integration suites.
+        # pwa-auth/pwa-sync are the PWA product's DB integration suites. The legacy till/POS suites are
+        # intentionally NOT run here either — that subsystem is out of scope (PWA-only product).
         env:
           VENDORA_TEST_URI: mongodb://localhost:27017/vendora_test
         run: |

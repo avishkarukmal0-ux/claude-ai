@@ -84,26 +84,29 @@ added** — only the backend job, at the `npm test` step. Two root causes:
   the CI service (not runnable in-sandbox) — watched on the run.
 - Commits `2217481` (jest flag + routing), `993204e` (DB step scoped to pwa-auth/pwa-sync).
 
-### Second finding: the legacy till suites are STALE
+### Second finding: the legacy till/POS suites — OUT OF SCOPE (PWA-only)
 Routing the setup.js suites into the DB-backed step made them RUN against a real
-Mongo for the first time in CI — and they **fail on stale API expectations**:
-`products.test` create → 422 (validation drift) so lists/categories come back
-empty and barcode lookups 404; `sales.test` create → 404 (no product to sell);
-`cashDrawer.test` has a self-contradictory assertion ("reject zero amount"
-expecting 200). This drift **predates this work** (the suites never ran in CI —
-CI never passed step 7 before) and needs a live Mongo to fix. So `993204e`
-**excludes** them from CI (no-URI step and DB step) and keeps CI green on what
-currently passes: FE build + 412; BE 16 pure suites (+ self-skipping pwa*);
-DB-backed **pwa-auth + pwa-sync** against mongo:7. The stale suites are a
-separate test-maintenance follow-up (see backlog).
+Mongo for the first time in CI — and they failed on stale API expectations
+(`products.test` create → 422; `sales.test` → 404; `cashDrawer.test` a
+self-contradictory "reject zero" → 200 assertion). **Owner decision (2026-10-11):
+the till/POS subsystem is NOT part of the product — Vendora is PWA-only — so
+these suites are not fixed or re-added.** The till subsystem is already dormant
+(`TILL_ENABLED` defaults off in production). CI **excludes them by design** in
+both the no-URI and DB-backed steps (excluded in `993204e`, reframed as a scope
+decision in the follow-up commit); the queued follow-up task was dismissed.
+
+CI is green on what the PWA product actually ships: FE build + 412 vitest; BE 16
+pure suites (+ self-skipping pwa* integration); DB-backed **pwa-auth + pwa-sync**
+against mongo:7.
 
 ## Follow-ups
 - [x] Make CI green on the branch — frontend ✓; backend no-URI ✓; DB step scoped
       to the current pwa-auth/pwa-sync suites (`2217481`, `993204e`).
-- [ ] **Fix or retire the stale backend till suites** (auth, cashDrawer,
-      lossPrevention, products, sales, refundVoid.integration): update payloads/
-      expectations to the current routes + Joi validation, verify against a real
-      Mongo, then re-enable them in the CI DB-backed step. Needs a DB to iterate.
+- [x] Legacy till/POS suites — **won't fix** (out of scope, PWA-only product);
+      excluded from CI by design. Follow-up task dismissed.
+- [ ] (Optional, owner) If the dormant till/POS code+tests are truly dead, delete
+      them to remove the stale suites from the tree entirely. Not done without a
+      go-ahead (touches routes under `src/routes`, not just tests).
 - [ ] Owner: redeploy Render + Vercel to put the full audit backlog live (radius
       deprivation needs centroids re-imported WITH the LSOA column).
 - [ ] Accept `braces` + `sprintf-js` as standing dev-only residuals (no upstream
