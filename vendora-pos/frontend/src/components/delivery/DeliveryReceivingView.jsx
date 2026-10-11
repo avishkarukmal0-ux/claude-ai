@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
 import { useSuppliers } from '../../lib/supplierStore';
+import { useRecoveryGuard } from '../../lib/recoveryGuard';
 import { useOrders, statusFor, OPEN_STATUSES } from '../../lib/orderStore';
 import {
   useDeliveries, blankLine, DELIVERY_ISSUES,
@@ -40,6 +41,7 @@ export default function DeliveryReceivingView() {
   const { suppliers } = useSuppliers();
   const { orders, receiveAgainst } = useOrders();
   const { deliveries, createDraft, updateDraft, removeDelivery, markReceived, repeatFrom } = useDeliveries();
+  const recovery = useRecoveryGuard();
 
   const openOrders = orders.filter((o) => OPEN_STATUSES.includes(statusFor(o)));
 
@@ -47,8 +49,12 @@ export default function DeliveryReceivingView() {
   const [draft, setDraft] = useState(null); // working copy (persisted on every change)
   const [code, setCode] = useState('');
   const [scanning, setScanning] = useState(false);
-  const [needsRecovery, setNeedsRecovery] = useState(false); // D2: block a naive retry after an unsafe partial save
   const photoInputs = useRef({});
+
+  // R3 (round 3): the "unsafe partial save" block is now DURABLE — keyed to the delivery id and persisted — so it
+  // survives reopening the draft or reloading the app (component state reset, letting the old retry through).
+  const recoveryKey = draft ? `delivery:${draft.id}` : null;
+  const needsRecovery = !!(recoveryKey && recovery.has(recoveryKey));
 
   const recent = useMemo(
     () => deliveries.filter((d) => d.status === 'received').sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 8),
@@ -93,13 +99,14 @@ export default function DeliveryReceivingView() {
     if (!draft) return;
     const totals = deliveryTotals(draft);
     if (totals.acceptedUnits <= 0) { toast.error('Nothing to receive — add delivered quantities'); return; }
-    if (needsRecovery) return; // D2: an unsafe partial save already happened — don't let a re-tap double-count
+    if (needsRecovery) return; // R3: an unsafe partial save already happened — don't let a re-tap double-count
     const res = applyDelivery(draft);
     if (!res.ok) {
       if (res.needsRecovery) {
-        // D2: stock was saved but the delivery record failed AND couldn't be undone. A retry would add the
-        // units again, so lock this screen and tell the owner to reload + verify before any further action.
-        setNeedsRecovery(true);
+        // R3: stock was saved but the delivery record failed AND couldn't be undone. A retry would add the units
+        // again, so record a DURABLE block keyed to this delivery (survives reopen/reload) and tell the owner to
+        // reload + verify before any further action.
+        recovery.record(recoveryKey, { kind: 'delivery', reference: draft.reference || '' });
         toast.error(res.error, { duration: 12000 });
         return;
       }
@@ -336,6 +343,9 @@ export default function DeliveryReceivingView() {
               <div className="rounded-xl bg-danger/10 px-3 py-2.5 text-center text-xs font-semibold text-danger" role="alert">
                 <AlertTriangle className="mr-1 inline h-4 w-4" />
                 Stock was saved but the delivery record didn’t. Don’t receive again — reload the app and check stock levels first.
+                <button type="button" onClick={() => recovery.clear(recoveryKey)} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-[11px] font-bold text-danger active:scale-95">
+                  I’ve reloaded and checked stock — clear this
+                </button>
               </div>
             ) : (
               <>
