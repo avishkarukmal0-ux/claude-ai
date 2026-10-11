@@ -114,8 +114,8 @@ describe('pwa-docs — B2: concurrent cloud replacements never delete both backu
     const docs = require('../services/pwaDocService');
     const a = await newOwner('B2 Docs');
     const fileId = `doc-test-b2-${Date.now()}`;
-    // Fire two replacements of the SAME (account,fileId) at once — the pre-fix cleanup deleted each other's
-    // committed file, leaving zero. Now the greatest-_id version must survive.
+    // Fire two replacements of the SAME (account,fileId) at once — the original cleanup deleted each other's
+    // committed file, leaving zero. The canonical-rev cleanup leaves exactly the highest-rev copy.
     const [r1, r2] = await Promise.all([
       docs.upload(a.id, fileId, { buffer: PNG, contentType: 'image/png' }),
       docs.upload(a.id, fileId, { buffer: PNG, contentType: 'image/png' }),
@@ -125,5 +125,27 @@ describe('pwa-docs — B2: concurrent cloud replacements never delete both backu
     const dl = await docs.download(a.id, fileId);
     expect(dl).not.toBeNull();                 // at least one backup survived (was 0 before the fix)
     expect(dl.buffer.length).toBeGreaterThan(0);
+  });
+
+  dbTest('round-2: the NEWER rev wins even when its ObjectId sorts LOWER (cross-process same-second)', async () => {
+    // Reproduces the audit probe: two files for one slot where the newer upload (rev 2) has a SMALLER _id than
+    // the older (rev 1) — the greatest-_id rule downloaded the OLD bytes; canonical rev must return the NEW.
+    const docs = require('../services/pwaDocService');
+    const a = await newOwner('B2 Docs rev');
+    const fileId = `doc-test-b2rev-${Date.now()}`;
+    const name = `${a.id}:${fileId}`;
+    const bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'pwa_invoice_files' });
+    const OLD = Buffer.from('old-bytes'); const NEW = Buffer.from('new-bytes-canonical');
+    const bigId = new mongoose.Types.ObjectId('ffffffffffffffffffffffff');  // sorts HIGH
+    const smallId = new mongoose.Types.ObjectId('000000000000000000000001'); // sorts LOW
+    const put = (id, buf, rev) => new Promise((res, rej) => {
+      const s = bucket.openUploadStreamWithId(id, name, { contentType: 'image/png', metadata: { accountId: a.id, fileId, contentType: 'image/png', rev } });
+      s.on('error', rej); s.on('finish', () => res()); s.end(buf);
+    });
+    await put(bigId, OLD, 1);   // older upload, HIGH _id
+    await put(smallId, NEW, 2); // newer upload, LOW _id
+    const dl = await docs.download(a.id, fileId);
+    expect(dl).not.toBeNull();
+    expect(dl.buffer.toString()).toBe('new-bytes-canonical'); // rev 2 wins, not the greater _id
   });
 });

@@ -11,8 +11,10 @@
 const mongoose = require('mongoose');
 const AppError = require('../utils/AppError');
 const config = require('../config');
+const { nextRev, pickLatest, revOf } = require('./backupRev');
 
 const BUCKET = 'pwa_product_images';
+const REV_NS = 'img'; // namespace the rev counter per bucket so doc/image slots never share a counter
 
 function isEnabled() { return !!config.productImages.enabled; }
 function assertEnabled() {
@@ -39,8 +41,7 @@ function nameFor(accountId, fileId) { return `${accountId}:${fileId}`; }
 
 async function findOwned(accountId, fileId) {
   const files = await bucket().find({ filename: nameFor(accountId, fileId), 'metadata.accountId': accountId }).toArray();
-  if (!files || !files.length) return null;
-  return files.reduce((a, b) => (String(b._id) > String(a._id) ? b : a)); // greatest-_id = authoritative version (B2)
+  return pickLatest(files); // highest-rev = canonical version all writers agree on (audit B2)
 }
 
 async function removeAll(accountId, fileId) {
@@ -51,17 +52,16 @@ async function removeAll(accountId, fileId) {
 }
 
 /**
- * Remove copies of (account,fileId) that are strictly OLDER than keepId, never a newer competing upload (audit
- * B2). The GridFS `_id` is a deterministic version pointer, so two simultaneous replacements can't delete each
- * other's committed file — the greatest `_id` always survives; a same-instant tie leaves a harmless duplicate the
- * next upload cleans up, never zero surviving files.
+ * Remove copies of (account,fileId) whose rev is strictly LOWER than keepRev — never the just-committed file
+ * (rev === keepRev) nor a competing newer (higher) rev. Each upload claims a strictly-increasing rev from an
+ * atomic counter (audit B2), so all writers agree on the order: two simultaneous replacements can't delete each
+ * other's winner, the highest rev always survives, and legacy rev-0 copies are superseded by the first real upload.
  */
-async function removeOlderThan(accountId, fileId, keepId) {
+async function removeLowerRev(accountId, fileId, keepRev) {
   const b = bucket();
   const files = await b.find({ filename: nameFor(accountId, fileId), 'metadata.accountId': accountId }).toArray();
-  const keep = String(keepId);
   let removed = 0;
-  for (const f of files) { const id = String(f._id); if (id !== keep && id < keep) { try { await b.delete(f._id); removed += 1; } catch { /* gone */ } } }
+  for (const f of files) { if (revOf(f) < keepRev) { try { await b.delete(f._id); removed += 1; } catch { /* gone */ } } }
   return removed;
 }
 
@@ -75,12 +75,13 @@ async function upload(accountId, fileId, { buffer, contentType, barcode = null, 
   // Audit S4: upload the NEW copy first, then remove the old ones — so a failed upload can't destroy the only
   // backup. On error, clean up the partial write and keep the previous copy intact.
   const b = bucket();
+  const rev = await nextRev(`${REV_NS}:${accountId}:${fileId}`); // audit B2: atomic canonical ordering
   let newId = null;
   try {
     newId = await new Promise((resolve, reject) => {
       const stream = b.openUploadStream(nameFor(accountId, fileId), {
         contentType,
-        metadata: { accountId, fileId, barcode, source, contentType, uploadedAt: new Date() },
+        metadata: { accountId, fileId, barcode, source, contentType, rev, uploadedAt: new Date() },
       });
       stream.on('error', reject);
       stream.on('finish', () => resolve(stream.id));
@@ -90,7 +91,7 @@ async function upload(accountId, fileId, { buffer, contentType, barcode = null, 
     if (newId) { try { await b.delete(newId); } catch { /* ignore */ } }
     throw new AppError(`Upload failed — your previous copy is unchanged. (${err.message})`, 502, 'UPLOAD_FAILED');
   }
-  await removeOlderThan(accountId, fileId, newId); // drop only strictly-older copies (never a competing newer one)
+  await removeLowerRev(accountId, fileId, rev); // drop only strictly-lower revs (never a competing higher one)
   return { ok: true, fileId, size, contentType };
 }
 
@@ -118,12 +119,17 @@ async function remove(accountId, fileId) {
 async function list(accountId) {
   assertEnabled();
   const files = await bucket().find({ 'metadata.accountId': accountId }).toArray();
-  const byId = new Map();
+  const winners = new Map(); // fileId -> canonical (highest-rev) GridFS file
   for (const f of files) {
     const id = f.metadata && f.metadata.fileId;
-    if (id) byId.set(id, { fileId: id, size: f.length, barcode: (f.metadata && f.metadata.barcode) || null, source: (f.metadata && f.metadata.source) || null, uploadedAt: (f.metadata && f.metadata.uploadedAt) || f.uploadDate });
+    if (!id) continue;
+    const cur = winners.get(id);
+    if (!cur || revOf(f) > revOf(cur) || (revOf(f) === revOf(cur) && String(f._id) > String(cur._id))) winners.set(id, f);
   }
-  return { files: [...byId.values()] };
+  const out = [...winners.values()].map((f) => ({
+    fileId: f.metadata.fileId, size: f.length, barcode: (f.metadata && f.metadata.barcode) || null, source: (f.metadata && f.metadata.source) || null, uploadedAt: (f.metadata && f.metadata.uploadedAt) || f.uploadDate,
+  }));
+  return { files: out };
 }
 
 module.exports = { isEnabled, upload, download, remove, list, validate, BUCKET };
