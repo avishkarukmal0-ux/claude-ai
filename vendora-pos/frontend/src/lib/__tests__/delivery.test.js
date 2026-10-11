@@ -7,6 +7,7 @@ import {
 import { useInventory } from '../inventoryStore';
 import * as movementStore from '../movementStore';
 import { readJSON, setActiveWorkspace } from '../storage';
+import * as storageNs from '../storage';
 
 const movements = () => readJSON('movements_v1', []);
 let ws = 0;
@@ -82,6 +83,31 @@ describe('delivery — applying to stock', () => {
     act(() => { dup = result.current.applyDelivery(second); });
     expect(dup.duplicate).toBe(true);
     expect(result.current.products.find((x) => x.barcode === '900').qty).toBe(15); // still 15, not 20
+  });
+
+  it('D2 round 2: when the rollback ALSO fails, returns needsRecovery (so the UI blocks a double-counting retry)', () => {
+    const { result } = renderHook(() => useInventory());
+    const first = { id: 'op-D2c-a', lines: [blankLine({ barcode: '901', name: 'Juice', qtyMode: 'units', deliveredQty: 10, unitCost: 0.3 })] };
+    act(() => { result.current.applyDelivery(first); });
+    expect(result.current.products.find((x) => x.barcode === '901').qty).toBe(10);
+
+    // The op-identity (movement) write fails AND the rollback persist also fails (quota with no IndexedDB).
+    const recSpy = vi.spyOn(movementStore, 'recordMany').mockReturnValue({ ok: false, written: 0 });
+    let n = 0;
+    const wSpy = vi.spyOn(storageNs, 'writeJSON').mockImplementation(() => {
+      n += 1;
+      return n === 1 ? { ok: true } : { ok: false, error: 'quota' }; // stock write ok; rollback write fails
+    });
+    const second = { id: 'op-D2c-b', lines: [blankLine({ barcode: '901', name: 'Juice', qtyMode: 'units', deliveredQty: 5, unitCost: 0.3 })] };
+    let res;
+    act(() => { res = result.current.applyDelivery(second); });
+    recSpy.mockRestore(); wSpy.mockRestore();
+
+    expect(res.ok).toBe(false);
+    expect(res.needsRecovery).toBe(true); // distinct signal — NOT a plain "please retry"
+    expect(res.unsafe).toBe(true);
+    // State reflects the true (un-rolled-back) stock so the UI can warn + block a naive retry.
+    expect(result.current.products.find((x) => x.barcode === '901').qty).toBe(15);
   });
 
   it('partial acceptance only adds accepted units', () => {

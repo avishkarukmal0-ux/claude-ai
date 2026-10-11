@@ -771,8 +771,22 @@ export function useInventory() {
       operationId: delivery.id,
     })));
     if (!logged.ok) {
-      persist(prev); setProducts(prev); // revert the stock so the retry is clean
-      return { ok: false, applied: 0, error: 'Couldn’t save the delivery record — please retry.' };
+      // Audit D2 (round 2): the operation record failed, so roll the stock back to `prev`. Previously the
+      // rollback's result was IGNORED — if it ALSO failed (quota), stock stayed incremented while the delivery
+      // was unguarded, so a plain "please retry" let the owner double-count on the next tap. Now we check it.
+      const reverted = persist(prev);
+      if (reverted.ok) {
+        setProducts(prev); // stock cleanly reverted → a retry re-applies exactly once (hasOperation still false)
+        return { ok: false, applied: 0, error: 'Couldn’t save the delivery record — please retry.' };
+      }
+      // Rollback ALSO failed: stock is left applied and the delivery has no operationId guard. Reflect the true
+      // persisted state and return a distinct needs-recovery signal so the caller BLOCKS a naive retry (which
+      // would add the units again) until the owner reloads and verifies.
+      setProducts(next);
+      return {
+        ok: false, applied: 0, unsafe: true, needsRecovery: true,
+        error: 'Stock was saved but the delivery record could not be written or undone. Do NOT receive this delivery again — reload the app and check stock levels first.',
+      };
     }
     setProducts(next);
     // Queue price-change alerts (retail is never auto-changed — owner approves in the queue).

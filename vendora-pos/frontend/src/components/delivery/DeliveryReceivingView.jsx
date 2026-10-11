@@ -47,6 +47,7 @@ export default function DeliveryReceivingView() {
   const [draft, setDraft] = useState(null); // working copy (persisted on every change)
   const [code, setCode] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [needsRecovery, setNeedsRecovery] = useState(false); // D2: block a naive retry after an unsafe partial save
   const photoInputs = useRef({});
 
   const recent = useMemo(
@@ -92,8 +93,19 @@ export default function DeliveryReceivingView() {
     if (!draft) return;
     const totals = deliveryTotals(draft);
     if (totals.acceptedUnits <= 0) { toast.error('Nothing to receive — add delivered quantities'); return; }
+    if (needsRecovery) return; // D2: an unsafe partial save already happened — don't let a re-tap double-count
     const res = applyDelivery(draft);
-    if (!res.ok) { toast.error(res.error || 'Couldn’t receive'); return; }
+    if (!res.ok) {
+      if (res.needsRecovery) {
+        // D2: stock was saved but the delivery record failed AND couldn't be undone. A retry would add the
+        // units again, so lock this screen and tell the owner to reload + verify before any further action.
+        setNeedsRecovery(true);
+        toast.error(res.error, { duration: 12000 });
+        return;
+      }
+      toast.error(res.error || 'Couldn’t receive');
+      return;
+    }
     markReceived(draft.id);
     // If this delivery fulfils an order, record the accepted units against it.
     if (draft.orderId) {
@@ -320,10 +332,19 @@ export default function DeliveryReceivingView() {
               <span><span className="font-bold text-gray-900">{totals.acceptedUnits}</span> units · {money(totals.cost)}</span>
               {totals.discrepancies > 0 && <span className="flex items-center gap-1 font-semibold text-danger"><AlertTriangle className="h-3.5 w-3.5" /> {totals.discrepancies} to check</span>}
             </div>
-            <button type="button" onClick={receive} className="flex w-full items-center justify-center gap-2 rounded-xl bg-success px-4 py-3 text-sm font-bold text-white shadow active:scale-[0.99]">
-              <Check className="h-5 w-5" /> Receive → update stock &amp; costs
-            </button>
-            <p className="mt-1 text-center text-[10px] text-gray-400">Updates stock and purchase cost. Retail prices are never changed automatically.</p>
+            {needsRecovery ? (
+              <div className="rounded-xl bg-danger/10 px-3 py-2.5 text-center text-xs font-semibold text-danger" role="alert">
+                <AlertTriangle className="mr-1 inline h-4 w-4" />
+                Stock was saved but the delivery record didn’t. Don’t receive again — reload the app and check stock levels first.
+              </div>
+            ) : (
+              <>
+                <button type="button" onClick={receive} className="flex w-full items-center justify-center gap-2 rounded-xl bg-success px-4 py-3 text-sm font-bold text-white shadow active:scale-[0.99]">
+                  <Check className="h-5 w-5" /> Receive → update stock &amp; costs
+                </button>
+                <p className="mt-1 text-center text-[10px] text-gray-400">Updates stock and purchase cost. Retail prices are never changed automatically.</p>
+              </>
+            )}
           </div>
         </div>
       )}
