@@ -173,6 +173,27 @@ export function migrateGuestIntoShop(shopId, { overwrite = false } = {}) {
   return copyWorkspace(LOCAL_WORKSPACE, shopWorkspace(id), { overwrite });
 }
 
+/**
+ * Remove any leftover data from the on-device GUEST workspace once the shop is properly signed in — so the
+ * pre-login "welcome" space never retains real shop data. Deliberately conservative to avoid any data loss:
+ *  - only when accounts are ENABLED (with no auth, the guest workspace IS the shop's only data — never wipe it);
+ *  - only when a shop is SIGNED IN and its own workspace already has data (an established shop — so a fresh
+ *    account still waiting to migrate its guest data keeps it, and the explicit guest→shop import still works);
+ *  - only if the guest workspace actually has something (otherwise a no-op).
+ * Returns true if it purged. Safe to call on every boot (idempotent: no-op once the guest space is empty).
+ */
+export function purgeStaleGuestData({ enabled = ACCOUNTS_ENABLED } = {}) {
+  try {
+    if (!enabled) return false;
+    const shop = currentShop();
+    if (!isLoggedIn() || !shop || !shop.id) return false;
+    if (!workspaceHasData(LOCAL_WORKSPACE)) return false; // nothing left in the guest/welcome space
+    if (!workspaceHasData(shopWorkspace(shop.id))) return false; // shop not populated yet → keep guest for migration
+    purgeWorkspace(LOCAL_WORKSPACE);
+    return true;
+  } catch { return false; }
+}
+
 // --- React hook ---------------------------------------------------------------------------
 export function useSession() {
   const [session, setSession] = useState(loadSession);

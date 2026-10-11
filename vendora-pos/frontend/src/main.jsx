@@ -5,6 +5,7 @@ import App from './App.jsx';
 import { registerServiceWorker } from './pwa.js';
 import { migrateLegacyToLocalOnce, initStorage, hasAnyLocalData } from './lib/storage.js';
 import { startSync } from './lib/sync.js';
+import { purgeStaleGuestData } from './lib/account.js';
 import './index.css';
 
 function renderApp() {
@@ -39,6 +40,12 @@ async function boot() {
   if (!hasAnyLocalData()) {
     try { await init; } catch { /* fall through to render regardless */ }
   }
+
+  // Keep the pre-login "welcome" space free of real data: once a shop is signed in and set up, clear any leftover
+  // guest-workspace data from the pre-login-gate era. Conservative (see purgeStaleGuestData) so it never loses a
+  // no-auth deployment's data or a fresh account's not-yet-migrated data.
+  try { purgeStaleGuestData(); } catch { /* best-effort cleanup */ }
+
   renderApp();
 
   // Cross-device sync (infra Stage 3). No-ops unless accounts are enabled AND a shop is signed in;
