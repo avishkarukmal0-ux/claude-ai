@@ -4,6 +4,45 @@
 // the main thread) and degrades gracefully: on any failure it returns the original input unchanged, so a
 // browser without these APIs (or jsdom) still works.
 
+// Strip EXIF/GPS/IPTC/comment marker segments from a JPEG data URL WITHOUT a canvas (audit F6, round 2). Phone
+// photos are JPEG and carry GPS/device data in the APP1 (Exif) segment; when no canvas re-encode is available
+// we still remove those bytes so location data never reaches a backup. Returns a sanitised JPEG data URL, or
+// null if the input isn't a parseable JPEG (the caller then keeps the original — e.g. a PNG, which carries no
+// such metadata here). Never throws.
+function stripJpegMarkers(dataUrl) {
+  try {
+    if (typeof dataUrl !== 'string') return null;
+    const m = /^data:image\/jpe?g;base64,(.*)$/i.exec(dataUrl);
+    if (!m) return null;
+    const bin = atob(m[1]);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i += 1) bytes[i] = bin.charCodeAt(i);
+    if (len < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null; // not a JPEG SOI
+    const out = [0xFF, 0xD8];
+    let pos = 2;
+    let changed = false;
+    while (pos + 1 < len) {
+      if (bytes[pos] !== 0xFF) return null; // misaligned — bail rather than risk corrupting the image
+      const marker = bytes[pos + 1];
+      if (marker === 0xDA) { for (let i = pos; i < len; i += 1) out.push(bytes[i]); break; } // SOS → copy the rest as-is
+      if (marker >= 0xD0 && marker <= 0xD9) { out.push(0xFF, marker); pos += 2; continue; } // standalone marker, no length
+      if (pos + 3 >= len) return null;
+      const segLen = (bytes[pos + 2] << 8) | bytes[pos + 3];
+      if (segLen < 2 || pos + 2 + segLen > len) return null;
+      const strip = marker === 0xE1 /* APP1/Exif(GPS) */ || marker === 0xED /* APP13/IPTC */
+        || marker === 0xFE /* COM */ || (marker >= 0xE2 && marker <= 0xEF); /* APP2..APP15 */
+      if (strip) changed = true;
+      else for (let i = pos; i < pos + 2 + segLen; i += 1) out.push(bytes[i]);
+      pos += 2 + segLen;
+    }
+    if (!changed) return dataUrl; // nothing sensitive present — return as-is
+    let s = '';
+    for (let i = 0; i < out.length; i += 1) s += String.fromCharCode(out[i]);
+    return `data:image/jpeg;base64,${btoa(s)}`;
+  } catch { return null; }
+}
+
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -78,11 +117,14 @@ export async function downscaleImage(src, { maxDim = 1600, quality = 0.7, type =
     if (src instanceof Blob) { try { return await blobToDataUrl(src); } catch { return null; } }
     return null;
   };
+  // Last-resort fallback when NO canvas re-encode was possible: still strip JPEG EXIF/GPS byte-wise so we never
+  // return metadata-bearing phone-photo bytes (audit F6 r2). Non-JPEGs (e.g. PNG) are returned unchanged.
+  const fallback = async () => { const url = await asDataUrl(); return (url && stripJpegMarkers(url)) || url; };
   try {
     const bitmap = await toBitmap(src);
     // No modern bitmap decode → try the <img>+canvas fallback (still strips metadata) before degrading to the
-    // original bytes, so a browser without createImageBitmap doesn't leak EXIF/GPS into backups (audit F6).
-    if (!bitmap) { const viaImg = await downscaleViaImg(src, { maxDim, quality, type }); return viaImg || (await asDataUrl()); }
+    // byte-wise JPEG stripper, so a browser without createImageBitmap doesn't leak EXIF/GPS into backups (F6).
+    if (!bitmap) { const viaImg = await downscaleViaImg(src, { maxDim, quality, type }); return viaImg || (await fallback()); }
     const { width, height } = bitmap;
     const longest = Math.max(width, height) || 1;
     const scale = Math.min(1, maxDim / longest);
@@ -94,12 +136,12 @@ export async function downscaleImage(src, { maxDim = 1600, quality = 0.7, type =
     const canvas = (typeof OffscreenCanvas !== 'undefined') ? new OffscreenCanvas(w, h) : document.createElement('canvas');
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d');
-    if (!ctx) { try { bitmap.close && bitmap.close(); } catch { /* ignore */ } return await asDataUrl(); }
+    if (!ctx) { try { bitmap.close && bitmap.close(); } catch { /* ignore */ } return await fallback(); }
     ctx.drawImage(bitmap, 0, 0, w, h);
     try { bitmap.close && bitmap.close(); } catch { /* ignore */ }
     if (canvas.convertToBlob) { const blob = await canvas.convertToBlob({ type, quality }); return await blobToDataUrl(blob); }
     return canvas.toDataURL(type, quality);
   } catch {
-    return await asDataUrl();
+    return await fallback();
   }
 }
