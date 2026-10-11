@@ -1,0 +1,76 @@
+name: CI
+
+# Audit "Dependency and release observations": the repo had no build/test workflow, so a green scheduled digest
+# run was not evidence that the PWA tests or the production build passed. This runs the frontend build + tests and
+# the backend tests (including DB-backed auth/sync integration against a throwaway MongoDB) on every push/PR, so a
+# red check blocks a bad build. Provider-specific integration suites (Stripe/Insights/docs/images) self-skip
+# without their env and are not required here; add their secrets to extend coverage later.
+
+on:
+  push:
+    branches: ['**']
+    paths: ['vendora-pos/**', '.github/workflows/ci.yml']
+  pull_request:
+    paths: ['vendora-pos/**', '.github/workflows/ci.yml']
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend — build + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: vendora-pos/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vendora-pos/frontend/package-lock.json
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Unit + component tests
+        run: npm test
+
+  backend:
+    name: Backend — tests (+ DB-backed auth/sync)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: vendora-pos/backend
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      JWT_SECRET: ci-test-jwt-secret-not-a-real-key-0123456789
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-not-a-real-key-0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vendora-pos/backend/package-lock.json
+      - run: npm ci
+      - name: App boots
+        run: node -e "require('./src/app.js'); console.log('app loads OK')"
+      - name: Unit + pure tests (DB-gated suites self-skip without a URI)
+        run: npm test
+      - name: DB-backed integration — PWA auth + sync (throwaway Mongo)
+        env:
+          VENDORA_TEST_URI: mongodb://localhost:27017/vendora_test
+        run: |
+          npm run test:pwa-auth
+          npm run test:pwa-sync
