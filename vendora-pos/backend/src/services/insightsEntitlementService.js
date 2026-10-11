@@ -54,12 +54,18 @@ const NP = 'entitlements.neighbourhoodInsights'; // nested path
 async function setEntitlementIfNewer(accountId, patch, eventCreatedMs) {
   const current = await getEntitlement(accountId);
   const merged = { ...DEFAULT, ...current, ...patch };
+  // Audit B1: Stripe `created` is SECOND-resolution, so two real events (e.g. a renewal and a same-second ending)
+  // share the same eventCreatedMs. A strict `$lt` dropped the second one as "stale" — leaving the wrong
+  // entitlement (ending ignored, access stays active). Use `$lte` so same-timestamp events still apply (in
+  // delivery order, which Stripe sends in creation order), matching decideIngest (which treats equal as not
+  // stale). Genuinely older events (`stored > eventCreatedMs`) are still skipped; duplicates are caught by the
+  // separate eventId idempotency ledger, not by this timestamp guard.
   const guard = {
     _id: accountId,
     $or: [
       { [`${NP}.lastEventAt`]: { $exists: false } },
       { [`${NP}.lastEventAt`]: null },
-      { [`${NP}.lastEventAt`]: { $lt: eventCreatedMs } },
+      { [`${NP}.lastEventAt`]: { $lte: eventCreatedMs } },
     ],
   };
   const doc = await Account.findOneAndUpdate(guard, { $set: { [NP]: merged } }, { new: true }).lean();

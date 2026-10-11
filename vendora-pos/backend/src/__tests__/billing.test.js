@@ -158,6 +158,12 @@ describe('entitlement ingest decision — duplicate + out-of-order safety (pure)
   test('applies a newer event', () => {
     expect(ent.decideIngest({ lastEventAt: 200, lastEventId: 'e2' }, { eventCreatedMs: 250, eventId: 'e3' }).apply).toBe(true);
   });
+  test('B1: a DIFFERENT event with the SAME second-resolution timestamp still applies (not dropped as stale)', () => {
+    // e.g. a renewal and a same-second ending share eventCreatedMs; the second must not be silently skipped.
+    const d = ent.decideIngest({ lastEventAt: 200, lastEventId: 'e-renew' }, { eventCreatedMs: 200, eventId: 'e-end' });
+    expect(d.apply).toBe(true);
+    expect(d.reason).toBe('ok');
+  });
 });
 
 describe('entitlementPatchFor — maps identifiers + stamps the ordering guard', () => {
