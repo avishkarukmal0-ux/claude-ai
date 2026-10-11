@@ -127,3 +127,42 @@ describe('claimStore.applyCredit — D4: a failed claim write is NOT reported as
     expect(applied).toBeNull(); // was a truthy claim object before the fix (rollback never fired)
   });
 });
+
+describe('claimStore — D4 round 2: removeCredit reports failure + state only updates on commit', () => {
+  it('removeCredit returns ok:false on a failed write (so the caller does NOT clear the note side)', () => {
+    const { result } = renderHook(() => useClaims());
+    let claim;
+    act(() => { claim = result.current.createClaim({ supplierName: 'Bestway', items: [{ reason: 'damaged', amount: 10, qty: 1 }] }); });
+    act(() => { result.current.applyCredit(claim.id, { creditNoteId: 'cnX', creditNoteRef: 'CNX', amount: 5 }); });
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockReturnValue({ ok: false, error: 'quota' });
+    let r;
+    act(() => { r = result.current.removeCredit(claim.id, 'cnX'); });
+    spy.mockRestore();
+    expect(r.ok).toBe(false);
+    const c = result.current.claims.find((x) => x.id === claim.id);
+    expect((c.credits || []).some((cr) => cr.creditNoteId === 'cnX')).toBe(true); // credit kept (write failed)
+  });
+
+  it('removeCredit returns ok:true and drops the credit on success', () => {
+    const { result } = renderHook(() => useClaims());
+    let claim;
+    act(() => { claim = result.current.createClaim({ supplierName: 'Bestway', items: [{ reason: 'damaged', amount: 10, qty: 1 }] }); });
+    act(() => { result.current.applyCredit(claim.id, { creditNoteId: 'cnY', creditNoteRef: 'CNY', amount: 5 }); });
+    let r;
+    act(() => { r = result.current.removeCredit(claim.id, 'cnY'); });
+    expect(r.ok).toBe(true);
+    const c = result.current.claims.find((x) => x.id === claim.id);
+    expect((c.credits || []).some((cr) => cr.creditNoteId === 'cnY')).toBe(false);
+  });
+
+  it('a failed applyCredit does NOT leave the uncommitted credit in the in-memory claim', () => {
+    const { result } = renderHook(() => useClaims());
+    let claim;
+    act(() => { claim = result.current.createClaim({ supplierName: 'Booker', items: [{ reason: 'damaged', amount: 10, qty: 1 }] }); });
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockReturnValue({ ok: false, error: 'quota' });
+    act(() => { result.current.applyCredit(claim.id, { creditNoteId: 'cnZ', creditNoteRef: 'CNZ', amount: 5 }); });
+    spy.mockRestore();
+    const c = result.current.claims.find((x) => x.id === claim.id);
+    expect((c.credits || []).length).toBe(0); // persistAll no longer sets state on a failed write
+  });
+});

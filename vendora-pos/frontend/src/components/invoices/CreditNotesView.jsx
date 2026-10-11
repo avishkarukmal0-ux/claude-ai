@@ -72,27 +72,38 @@ export default function CreditNotesView({ onBack }) {
                       // the note read "unallocated" — so it could be re-allocated elsewhere and double-count. Route an
                       // empty amount through the same both-sides removal as the Remove button.
                       if (!(amt > 0)) {
+                        // Remove on BOTH ledgers (D6). D4 r2: clear the CLAIM side first; only clear the note side
+                        // once that committed — so a failed claim write can't leave the note "unallocated" while the
+                        // claim still credits the money (which could then be re-allocated and double-count).
+                        const rc = removeCredit(claim.id, cn.id);
+                        if (!rc.ok) { toast.error(rc.error || 'Couldn’t update the claim — try again'); return; }
                         const r = setAllocation(cn.id, claim.id, 0);
                         if (!r.ok) { toast.error(r.error || 'Couldn’t update'); return; }
-                        removeCredit(claim.id, cn.id);
                         toast('Allocation removed');
                         return;
                       }
+                      // D4 r2: capture any PRIOR allocation for this claim so a failed claim-side write restores it
+                      // rather than clearing it to £0 (losing a correct prior credit).
+                      const prior = (cn.allocations || []).find((a) => a.claimId === claim.id);
+                      const priorAmt = prior ? (Number(prior.amount) || 0) : 0;
                       const r = setAllocation(cn.id, claim.id, amt);
                       if (!r.ok) { toast.error(r.error || 'Couldn’t allocate'); return; }
                       const applied = applyCredit(claim.id, { creditNoteId: cn.id, creditNoteRef: cn.reference, amount: amt });
                       if (!applied) {
-                        // Claim side didn't record — roll the note allocation back so the two ledgers can't diverge.
-                        setAllocation(cn.id, claim.id, 0);
+                        // Claim side didn't record — restore the note allocation to its PRIOR value (not £0) so a
+                        // previously-correct credit isn't wiped and the two ledgers stay in step.
+                        setAllocation(cn.id, claim.id, priorAmt);
                         toast.error('Couldn’t record the credit on the claim');
                         return;
                       }
                       toast.success(`Allocated ${gbp(amt)} to ${claim.supplierName || 'claim'}`);
                     }}
                     onUnapply={(claim) => {
+                      // D4 r2: clear the CLAIM side first; only clear the note side once that committed.
+                      const rc = removeCredit(claim.id, cn.id);
+                      if (!rc.ok) { toast.error(rc.error || 'Couldn’t update the claim — try again'); return; }
                       const r = setAllocation(cn.id, claim.id, 0);
                       if (!r.ok) { toast.error(r.error || 'Couldn’t update'); return; }
-                      removeCredit(claim.id, cn.id);
                       toast('Allocation removed');
                     }}
                   />

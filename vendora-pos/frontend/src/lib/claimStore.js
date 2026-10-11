@@ -80,7 +80,9 @@ export function useClaims() {
     };
   }, []);
 
-  const persistAll = (next) => { const res = persist(next); setClaims(next); return res; }; // return the write result (audit D4)
+  // Audit D4 (round 2): only update React state when the write actually COMMITTED — otherwise the UI showed the
+  // uncommitted value while storage kept the old one (they diverge until reload). Return the write result.
+  const persistAll = (next) => { const res = persist(next); if (res && res.ok) setClaims(next); return res; };
 
   const createFromDelivery = useCallback((delivery) => {
     const items = claimItemsFromDelivery(delivery);
@@ -146,14 +148,17 @@ export function useClaims() {
     return (res && res.ok) ? updated : null;
   }, []);
 
-  /** Remove a credit note's allocation from a claim (correction). Recomputes received from remaining credits. */
+  /** Remove a credit note's allocation from a claim (correction). Recomputes received from remaining credits.
+   *  Audit D4 (round 2): RETURN the write result so the caller doesn't clear the note side when the claim write
+   *  failed (the two ledgers must not diverge). */
   const removeCredit = useCallback((claimId, creditNoteId) => {
-    persistAll(load().map((c) => {
+    const res = persistAll(load().map((c) => {
       if (c.id !== claimId) return c;
       const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId);
       const received = credits.length ? sumMoney(credits.map((x) => x.amount)) : null;
       return { ...c, credits, receivedAmount: received, updatedAt: Date.now(), history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit-removed', creditNoteId }] };
     }));
+    return (res && res.ok) ? { ok: true } : { ok: false, error: (res && res.error) || 'Couldn’t update the claim' };
   }, []);
 
   /** Edit one claim item (e.g. enter the agreed price on a wrong-price line). For wrong_price we recompute
