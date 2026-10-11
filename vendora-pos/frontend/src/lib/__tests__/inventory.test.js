@@ -227,6 +227,39 @@ describe('audit D3 — a failed stock write must not report success or log a mov
     expect(movements().filter((m) => m.type === 'waste').length).toBe(0);
   });
 
+  it('R4: recordWaste rolls stock back when the ledger write fails (was missing the round-2 verify)', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    act(() => { id = result.current.addProduct({ name: 'Milk', cost: 0.5, price: 1, qty: 6 }).id; });
+    const orig = storageNs.writeJSON; // stock write succeeds; only the movements (ledger) write fails
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'movements_v1' ? { ok: false, error: 'quota' } : orig(name, value, ws)));
+    let res;
+    act(() => { res = result.current.recordWaste({ id, qty: 2, batchId: 'rwR4' }); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(readJSON('inventory_v1', []).find((p) => p.id === id).qty).toBe(6); // rolled back (not 4)
+    expect(movements().filter((m) => m.type === 'waste').length).toBe(0);      // no phantom waste movement
+  });
+
+  it('R4: recordWaste returns needsRecovery when the ledger AND the rollback both fail', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    act(() => { id = result.current.addProduct({ name: 'Bread', cost: 0.5, price: 1, qty: 6 }).id; });
+    const orig = storageNs.writeJSON;
+    let invCalls = 0; // the decrement succeeds; the ledger fails; the rollback (2nd inventory write) also fails
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => {
+      if (name === 'movements_v1') return { ok: false };
+      if (name === 'inventory_v1') { invCalls += 1; return invCalls === 1 ? orig(name, value, ws) : { ok: false, error: 'quota' }; }
+      return orig(name, value, ws);
+    });
+    let res;
+    act(() => { res = result.current.recordWaste({ id, qty: 2, batchId: 'rwR4b' }); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(res.unsafe).toBe(true);
+    expect(res.needsRecovery).toBe(true); // distinct signal — the caller records a DURABLE block, not a plain retry
+  });
+
   it('D3 r2: applyCounts rolls stock back when the stocktake ledger write fails', () => {
     const { result } = renderHook(() => useInventory());
     let id;

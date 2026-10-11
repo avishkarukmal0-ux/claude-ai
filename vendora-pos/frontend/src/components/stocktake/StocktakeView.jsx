@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useInventory } from '../../lib/inventoryStore';
 import { useStocktake, buildSummary } from '../../lib/stocktakeStore';
+import { useRecoveryGuard } from '../../lib/recoveryGuard';
 import BarcodeScanner from '../scan/BarcodeScanner';
 
 const money = (n) => `£${(Math.round(Math.abs(n) * 100) / 100).toFixed(2)}`;
@@ -15,6 +16,8 @@ const dateLabel = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric
 export default function StocktakeView({ onBack }) {
   const { products, applyCounts } = useInventory();
   const { session, history, start, countItem, bumpItem, setReason, cancel, saveSummary } = useStocktake();
+  const recovery = useRecoveryGuard();
+  const countBlocked = recovery.has('stocktake'); // R4: a prior count apply left an unsafe needs-recovery state
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState('all'); // quick-count scope by category (Phase 2.8c)
   const [scanning, setScanning] = useState(false);
@@ -74,8 +77,15 @@ export default function StocktakeView({ onBack }) {
     // Audit D3: only finalise the count (save the summary, close the review, clear the session) if the stock
     // write actually committed. On a failed save, keep the session open so the counts aren't lost and the owner
     // can retry — never report "applied" when they weren't.
+    // R4: if a previous apply was left unsafe (stock changed, ledger + rollback both failed), block re-applying —
+    // a retry would apply the correction again on top of already-changed stock. The owner must reload + verify.
+    if (countBlocked) { toast.error('A previous count save was left unsafe — reload the app and check stock before applying again.'); return; }
     const res = applyCounts(items);
-    if (res && res.ok === false) { toast.error(res.error || 'Couldn’t save the counts — your count is kept, please try again.'); return; }
+    if (res && res.ok === false) {
+      // A failed+un-undoable apply is unsafe → record a DURABLE block so a re-tap can't double-apply the counts.
+      if (res.needsRecovery) recovery.record('stocktake', { kind: 'count' });
+      toast.error(res.error || 'Couldn’t save the counts — your count is kept, please try again.'); return;
+    }
     saveSummary(summary, { name: session.name, startedAt: session.startedAt });
     setReviewing(false);
     const net = summary.netValue;
@@ -195,7 +205,17 @@ export default function StocktakeView({ onBack }) {
           </div>
         )}
 
-        <button type="button" onClick={applyAndFinish} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-bold text-white shadow-sm active:scale-[0.99]">
+        {countBlocked && (
+          <div className="mb-3 rounded-xl bg-danger/10 px-3 py-2.5 text-xs font-semibold text-danger" role="alert">
+            <AlertTriangle className="mr-1 inline h-4 w-4" />
+            A previous count save was left unsafe (stock changed but the record didn’t). Reload the app and check
+            stock before applying again.
+            <button type="button" onClick={() => recovery.clear('stocktake')} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-[11px] font-bold text-danger active:scale-95">
+              I’ve reloaded and checked stock — clear this
+            </button>
+          </div>
+        )}
+        <button type="button" disabled={countBlocked} onClick={applyAndFinish} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-bold text-white shadow-sm active:scale-[0.99] disabled:opacity-50">
           <Check className="h-4 w-4" /> Apply counts to stock
         </button>
         <p className="mt-2 text-center text-[11px] text-gray-400">Applies each count as a correction (safe if stock moved mid-count) and saves it. Count only the items you check — a shelf at a time is fine.</p>

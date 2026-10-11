@@ -4,6 +4,7 @@ import { ArrowLeft, Trash2, TrendingDown, PiggyBank, AlertTriangle, CalendarCloc
 import { useWaste } from '../../lib/wasteStore';
 import { useInventory, DATE_TYPES, fefo, undatedQty } from '../../lib/inventoryStore';
 import { useMarkdowns, markdownLabelText, markdownTotals } from '../../lib/markdownStore';
+import { useRecoveryGuard } from '../../lib/recoveryGuard';
 
 function newOpId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -18,6 +19,7 @@ export default function WasteView({ onBack }) {
   const { entries, addEntry, removeEntry, monthWasted, monthSaved } = useWaste();
   const { products, recordWaste, reverseWaste, wasteBatch, reverseBatchWaste, addBatch } = useInventory();
   const { markdowns, createMarkdown, recordOutcome, removeMarkdown } = useMarkdowns();
+  const recovery = useRecoveryGuard();
 
   const [form, setForm] = useState({ name: '', value: '', qty: '1' });
   const [dc, setDc] = useState({ open: false, productId: '', qty: '', expiry: '', dateType: 'best-before' });
@@ -84,6 +86,8 @@ export default function WasteView({ onBack }) {
     if (want > 0) {
       const p = products.find((x) => x.id === m.productId);
       if (!p) { toast.error('That product no longer exists — markdown left open.'); return; }
+      // R4: an earlier unsafe save on this item blocks further stock changes until the owner reloads + verifies.
+      if (recovery.has(`product:${m.productId}`)) { toast.error('This item needs checking after a failed save — reload and verify its stock first.'); return; }
       const opGroupId = newOpId();
       // Audit D11: don't pass a single-unit valuation (the store values it at cost × actual applied), and do
       // NOT report binning or close the markdown unless the waste actually committed. Record the ACTUAL applied
@@ -91,7 +95,11 @@ export default function WasteView({ onBack }) {
       const res = m.batchId
         ? wasteBatch({ id: p.id, batchId: m.batchId, qty: want, reason: 'marked down — unsold, binned', opGroupId })
         : recordWaste({ id: p.id, qty: want, reason: 'marked down — unsold, binned', batchId: opGroupId });
-      if (!res || !res.ok) { toast.error((res && res.error) || 'Couldn’t bin that stock — markdown left open to try again.'); return; }
+      if (!res || !res.ok) {
+        // R4: a failed+un-undoable save is unsafe — record a DURABLE block so a re-tap can't double-bin.
+        if (res && res.needsRecovery) recovery.record(`product:${m.productId}`, { kind: 'waste', name: p.name });
+        toast.error((res && res.error) || 'Couldn’t bin that stock — markdown left open to try again.'); return;
+      }
       appliedBinned = res.applied;
       addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: m.batchId || undefined, batchInfo: res.batch, reason: 'marked down — unsold' });
       if (appliedBinned < want) toast(`Only ${appliedBinned} of ${want} were still in stock to bin.`, { icon: 'ℹ️' });
@@ -111,15 +119,18 @@ export default function WasteView({ onBack }) {
   // stock + log a typed waste movement + add the £ ledger entry, linked for undo.
   function binRow(row) {
     const { product: p, batchId, dateType } = row;
+    // R4: block a bin on an item left in an unsafe needs-recovery state by an earlier failed save (durable, so it
+    // holds across reload/navigation) — a re-tap would otherwise double-bin.
+    if (recovery.has(`product:${p.id}`)) { toast.error('This item needs checking after a failed save — reload and verify its stock before binning again.'); return; }
     const opGroupId = newOpId();
     const valuation = (p.cost ?? 0) * 1;
     if (batchId) {
       const res = wasteBatch({ id: p.id, batchId, qty: 1, valuation, reason: 'expired / near-date', opGroupId });
-      if (!res.ok) { toast.error(res.error || 'Couldn’t bin that'); return; }
+      if (!res.ok) { if (res.needsRecovery) recovery.record(`product:${p.id}`, { kind: 'waste', name: p.name }); toast.error(res.error || 'Couldn’t bin that'); return; }
       addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: batchId, batchInfo: res.batch, reason: 'expired / near-date' });
     } else {
       const res = recordWaste({ id: p.id, qty: 1, valuation, reason: 'expired / near-date', batchId: opGroupId });
-      if (!res.ok) { toast.error(res.error || 'Couldn’t bin that'); return; }
+      if (!res.ok) { if (res.needsRecovery) recovery.record(`product:${p.id}`, { kind: 'waste', name: p.name }); toast.error(res.error || 'Couldn’t bin that'); return; }
       addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, reason: 'expired / near-date' });
     }
     toast.success(`Binned 1 × ${p.name} · stock updated`);
@@ -160,6 +171,19 @@ export default function WasteView({ onBack }) {
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Waste &amp; savings</h2>
       <p className="mb-4 text-xs text-gray-400">Log what you bin and what you rescue. See the money either way.</p>
+
+      {/* R4: durable needs-recovery notice — an earlier bin saved stock but its record couldn’t be written or
+          undone. Binning that item stays blocked until the owner reloads, checks real stock, and clears this. */}
+      {recovery.list().filter((g) => g.kind === 'waste').map((g) => (
+        <div key={g.opKey} className="mb-3 rounded-xl bg-danger/10 px-3 py-2.5 text-xs font-semibold text-danger" role="alert">
+          <AlertTriangle className="mr-1 inline h-4 w-4" />
+          “{g.name || 'An item'}” was binned but its record didn’t save and couldn’t be undone. Reload the app and
+          check this item’s stock before binning it again.
+          <button type="button" onClick={() => recovery.clear(g.opKey)} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-[11px] font-bold text-danger active:scale-95">
+            I’ve reloaded and checked its stock — clear this
+          </button>
+        </div>
+      ))}
 
       {/* FEFO — expiring / sell first, earliest-expiry batch first */}
       {rows.length > 0 && (

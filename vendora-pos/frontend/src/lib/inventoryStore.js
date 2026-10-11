@@ -495,10 +495,13 @@ export function useInventory() {
     const applied = Math.min(want, Number(p.qty) || 0);
     if (applied <= 0) return { ok: false, error: 'No stock left to bin' };
     const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - applied, updatedAt: Date.now() }) : x));
-    const res = persist(next);
-    if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
+    const saved = persist(next);
+    if (!saved.ok) return { ok: false, error: saved.error || 'Couldn’t save on this device' };
     setProducts(next);
-    recordMovement({
+    // Audit R4 (round 3): recordWaste never checked the ledger write (wasteBatch/applyCounts got this in round 2
+    // but recordWaste was missed). A failed movement left stock reduced with no history, reported ok. Verify it;
+    // roll the stock back on failure, and surface needs-recovery if the rollback also fails.
+    const logged = recordMovement({
       productId: id,
       type: MOVEMENT_TYPES.WASTE,
       delta: -applied,
@@ -506,6 +509,12 @@ export function useInventory() {
       reason: reason || 'binned',
       batchId,
     });
+    if (!logged) {
+      const reverted = persist(prev);
+      if (reverted.ok) { setProducts(prev); return { ok: false, error: 'Couldn’t save the waste record — please retry.' }; }
+      setProducts(next);
+      return { ok: false, unsafe: true, needsRecovery: true, error: 'Stock was reduced but the waste record failed and couldn’t be undone — reload and check stock before retrying.' };
+    }
     return { ok: true, applied };
   }, []);
 
