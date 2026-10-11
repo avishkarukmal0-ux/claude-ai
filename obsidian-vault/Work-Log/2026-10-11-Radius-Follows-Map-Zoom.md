@@ -79,7 +79,22 @@ Still not a fix for the *first* visit to a brand-new radius (one Nomis fetch, + 
 lever there is the deferred **headline-only fast path** (fetch just population + households for the free card instead of
 all 4 tables). FE insights 17/17 + suite 390/390 + build green.
 
+## Update 3 — headline-only fast path (backend; ~2× faster first visit)
+The free card shows only People + Households, but `buildProfile` fetched all **four** Nomis tables per radius. Added a
+`headlineOnly` path so the free card's first visit to a radius is roughly twice as fast:
+- `insightsData/nomis.js` `fetchAreaProfiles(point, radiusM, { headlineOnly })`: when set, fetches **only** the age table
+  (→ population) and household-composition table (→ households) and skips ethnic group + language. Headline results are
+  cached under a **separate key** (`<base>:h`) so a later FULL request (the paid view, which needs all breakdowns) never
+  reads back an incomplete profile; a cached FULL result is a superset and still satisfies a headline request (no refetch).
+- `insightsService.buildProfile({ postcode, radiusM, headlineOnly })` threads it to the provider.
+- `pwaNeighbourhoodRoutes` `GET /radius` passes `headlineOnly: true` (server-side only — **no frontend change**). The paid
+  `/profile` route is untouched (full four-table profile).
+- Tests: BE insightsData +3 (only 2 datasets fetched in headline mode; headline cache not reused for a full request; full
+  cache satisfies a later headline request). **Backend insights suites 42/42** + app loads.
+
+**Needs a Render backend redeploy to take effect** (it's a backend change). After redeploy, the first visit to each 250 m
+radius on the free card does 2 Nomis calls instead of 4.
+
 ## Follow-ups
 - [ ] Carry-over: remove/flag-gate the grey `radius:` diagnostic line once the figures are confirmed working live.
-- [ ] Optional backend (needs redeploy): headline-only fast path for the free card (2 Nomis tables, not 4) ≈ halves the
-      first-visit fetch time; and/or a keep-warm ping so the first lookup skips Render's cold start.
+- [ ] Optional backend: a keep-warm ping so the first lookup skips Render's ~50 s cold start (not done — infra choice).

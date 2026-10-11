@@ -119,26 +119,41 @@ async function fetchTable(def, oaCodes) {
 /**
  * The interface insightsService calls. Returns per-OA profiles for the OAs within the radius; throws when the
  * centroid data isn't loaded (→ service reports configured:false). Cached per rounded point + radius.
+ *
+ * `opts.headlineOnly` fetches ONLY the two tables that feed the headline numbers (age → population,
+ * household composition → households) and skips ethnic group + language. The free "Your area" card shows only
+ * population + households, so this halves the Nomis round-trips (4 tables → 2) and roughly halves first-visit
+ * time. Headline results are cached under a separate key so a later FULL request (the paid view, which needs all
+ * four breakdowns) never reads back an incomplete profile; a cached FULL result is a superset and satisfies both.
  */
-async function fetchAreaProfiles(point, radiusM) {
+async function fetchAreaProfiles(point, radiusM, opts = {}) {
+  const headlineOnly = !!opts.headlineOnly;
   await centroids.load();
   if (!centroids.isLoaded()) { const e = new Error('OA centroids not loaded'); e.code = 'NO_CENTROIDS'; throw e; }
 
-  const key = `${Number(point.lat).toFixed(4)}:${Number(point.lng).toFixed(4)}:${radiusM}`;
-  const cached = _cache.get(key);
-  if (cached) return cached;
+  const base = `${Number(point.lat).toFixed(4)}:${Number(point.lng).toFixed(4)}:${radiusM}`;
+  const full = _cache.get(base);                       // a full profile satisfies any request
+  if (full) return full;
+  if (headlineOnly) { const h = _cache.get(`${base}:h`); if (h) return h; }
 
   const selected = geo.selectAreasInRadius(centroids.all(), point, radiusM);
   if (!selected.length) return [];
   const oaCodes = selected.slice(0, DATA().maxOutputAreas).map((s) => s.oa);
 
   const T = tables();
-  const [eth, lang, age, hh] = await Promise.all([
-    fetchTable(T.ethnicGroup, oaCodes),
-    fetchTable(T.language, oaCodes),
+  // Always need age (population) + household composition (households). Ethnic group + language only for the full
+  // profile — skip them in headlineOnly so the free card's first visit to a radius is ~2× faster.
+  let eth = {}; let lang = {};
+  const [age, hh] = await Promise.all([
     fetchTable(T.age, oaCodes),
     fetchTable(T.householdComposition, oaCodes),
   ]);
+  if (!headlineOnly) {
+    [eth, lang] = await Promise.all([
+      fetchTable(T.ethnicGroup, oaCodes),
+      fetchTable(T.language, oaCodes),
+    ]);
+  }
 
   const sum = (m) => Object.values(m || {}).reduce((a, b) => a + (Number(b) || 0), 0);
   const profiles = oaCodes.map((oa) => {
@@ -167,7 +182,7 @@ async function fetchAreaProfiles(point, radiusM) {
     sampleHhCats: s0 ? Object.keys(hh[s0] || {}).length : 0,
   };
 
-  _cache.set(key, profiles, DATA().cacheTtlSeconds);
+  _cache.set(headlineOnly ? `${base}:h` : base, profiles, DATA().cacheTtlSeconds);
   return profiles;
 }
 

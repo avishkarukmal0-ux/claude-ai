@@ -99,6 +99,45 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     expect(far.population).toBe(240);  // 3 × 80
   });
 
+  test('headlineOnly fetches ONLY the age + household tables (2, not 4) and still gives population + households', async () => {
+    const seen = [];
+    const base = stubTransport();
+    nomis.__setTransport(async (url) => { seen.push((url.match(/dataset\/([^.]+)\.data\.json/) || [])[1]); return base(url); });
+    const profiles = await nomis.fetchAreaProfiles(POINT, 500, { headlineOnly: true });
+    const datasets = [...new Set(seen)].sort();
+    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1']);       // age + household composition only
+    expect(datasets).not.toContain('NM_2041_1');                // ethnic group skipped
+    expect(datasets).not.toContain('NM_2045_1');                // language skipped
+    const [oa] = profiles;
+    expect(oa.population).toBe(80);                             // still correct (Σ age, Total excluded)
+    expect(oa.households).toBe(35);                             // still correct (Σ composition)
+    expect(Object.keys(oa.categories.ethnicGroup)).toHaveLength(0); // no breakdowns fetched
+    expect(Object.keys(oa.categories.language)).toHaveLength(0);
+  });
+
+  test('a headline cache is NOT reused for a full request (the full profile still fetches all 4 tables)', async () => {
+    const seen = [];
+    const base = stubTransport();
+    nomis.__setTransport(async (url) => { seen.push((url.match(/dataset\/([^.]+)\.data\.json/) || [])[1]); return base(url); });
+    await nomis.fetchAreaProfiles(POINT, 500, { headlineOnly: true }); // caches under the headline key only
+    seen.length = 0;
+    const full = await nomis.fetchAreaProfiles(POINT, 500);            // must NOT read the headline cache
+    const datasets = [...new Set(seen)].sort();
+    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1', 'NM_2041_1', 'NM_2045_1']); // all 4 fetched
+    expect(Object.keys(full[0].categories.ethnicGroup).length).toBeGreaterThan(0);  // full breakdowns present
+  });
+
+  test('a full cache DOES satisfy a later headline request (no refetch)', async () => {
+    const seen = [];
+    const base = stubTransport();
+    nomis.__setTransport(async (url) => { seen.push((url.match(/dataset\/([^.]+)\.data\.json/) || [])[1]); return base(url); });
+    await nomis.fetchAreaProfiles(POINT, 500);                 // full → cached under the base key
+    seen.length = 0;
+    const head = await nomis.fetchAreaProfiles(POINT, 500, { headlineOnly: true });
+    expect(seen).toHaveLength(0);                              // served from the full cache, no new fetch
+    expect(head[0].population).toBe(80);
+  });
+
   test('aggregate preserves small-cell suppression', async () => {
     const agg = geo.combineAreaProfile(await nomis.fetchAreaProfiles(POINT, 500), { radiusM: 500 });
     const eth = agg.categories.ethnicGroup;

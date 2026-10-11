@@ -65,7 +65,8 @@ router.get('/radius', ownerOrManager, async (req, res, next) => {
     const postcode = (req.query.postcode || '').toString();
     const radiusM = Number(req.query.radiusM);
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
-    const out = await insights.buildProfile({ postcode, radiusM });
+    // The free card shows only people + households, so fetch just those (2 Nomis tables, not 4) — faster first load.
+    const out = await insights.buildProfile({ postcode, radiusM, headlineOnly: true });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
     res.json({ success: true, testUnlock: true, ...out });
   } catch (err) {

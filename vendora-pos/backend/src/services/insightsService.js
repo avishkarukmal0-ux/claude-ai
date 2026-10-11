@@ -108,7 +108,7 @@ function preview() {
  * unsupported country / invalid postcode) it returns a clear, honest shape instead of numbers.
  * @returns {{ ok, supported?, configured?, location?, profile?, preview?, reason? , ...meta }}
  */
-async function buildProfile({ postcode, radiusM }) {
+async function buildProfile({ postcode, radiusM, headlineOnly = false }) {
   const r = Math.round(Number(radiusM));
   const { min, max } = radiusBounds();
   if (!Number.isFinite(r) || r < min || r > max) {
@@ -130,7 +130,9 @@ async function buildProfile({ postcode, radiusM }) {
   }
 
   let areas = [];
-  try { areas = await provider.fetchAreaProfiles(location.point, r); }
+  // headlineOnly → the provider fetches just population + households (2 tables, not 4). The free "Your area" card
+  // shows only those, so it's ~2× faster on the first visit to a radius; the paid view omits it to get all breakdowns.
+  try { areas = await provider.fetchAreaProfiles(location.point, r, { headlineOnly }); }
   catch { return { ok: true, supported: true, configured: false, location: locOut, preview: preview(), reason: 'The neighbourhood data provider is unavailable right now.', ...BASE_META() }; }
 
   const profile = geo.combineAreaProfile(areas, { radiusM: r, meta: BASE_META() });
