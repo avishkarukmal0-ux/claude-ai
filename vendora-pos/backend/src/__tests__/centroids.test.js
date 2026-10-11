@@ -47,12 +47,15 @@ describe('centroids — BNG easting/northing → WGS84 conversion (ONS PWC files
     expect(bng.oa).toBe('E00000001');
     expect(bng.lat).toBeCloseTo(52.65798, 3);
     expect(bng.lng).toBeCloseTo(1.71605, 3);
-    // Explicit lat/long → used as-is:
+    // Explicit lat/long → used as-is (lsoa is null when the row has no LSOA column — optional, for the B2/IMD radius):
     const ll = centroids.parseLatLng({ OA21CD: 'E00000002', lat: '51.5', long: '-0.1' });
-    expect(ll).toEqual({ oa: 'E00000002', lat: 51.5, lng: -0.1 });
+    expect(ll).toEqual({ oa: 'E00000002', lat: 51.5, lng: -0.1, lsoa: null });
     // Small x/y treated as lng/lat:
     const sm = centroids.parseLatLng({ oa: 'E00000003', x: '-0.12', y: '51.51' });
-    expect(sm).toEqual({ oa: 'E00000003', lat: 51.51, lng: -0.12 });
+    expect(sm).toEqual({ oa: 'E00000003', lat: 51.51, lng: -0.12, lsoa: null });
+    // An LSOA column is carried through when present (enables the radius deprivation average):
+    const withLsoa = centroids.parseLatLng({ OA21CD: 'E00000004', lat: '51.5', long: '-0.1', LSOA21CD: 'E01000001' });
+    expect(withLsoa).toEqual({ oa: 'E00000004', lat: 51.5, lng: -0.1, lsoa: 'E01000001' });
     // No usable coords → null:
     expect(centroids.parseLatLng({ x: '1', y: '2' })).toBeNull();
   });

@@ -16,7 +16,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "csv-parse": "^5.5.3",
+    "csv-parse": "^7.0.3",
     "csv-stringify": "^6.4.5",
     "dayjs": "^1.11.10",
     "dotenv": "^17.4.0",
@@ -42,7 +42,7 @@
     "speakeasy": "^2.0.0",
     "stripe": "^22.0.0",
     "twilio": "^6.0.2",
-    "uuid": "^9.0.1",
+    "uuid": "^11.1.1",
     "winston": "^3.11.0",
     "winston-daily-rotate-file": "^4.7.1"
   },
@@ -51,6 +51,10 @@
     "mongodb-memory-server": "^9.1.6",
     "nodemon": "^3.0.2",
     "supertest": "^6.3.3"
+  },
+  "overrides": {
+    "uuid": "^11.1.1",
+    "qs": "^6.16.0"
   },
   "jest": {
     "testEnvironment": "node",
