@@ -271,6 +271,41 @@ describe('productImages — F2 round 2: no recreation in a purged workspace afte
     expect(Object.keys(map)).toHaveLength(0);
   });
 
+  it('V3: a workspace switch during the durable-trash wait deletes only the ORIGINATING shop’s image', async () => {
+    const id = 'shared_v3';
+    // The SAME image id exists in two shops (shared/copy/import-derived).
+    storageNs.write(`pimg_full_${id}`, DATA, 'shop:A');
+    storageNs.write(`pimg_thumb_${id}`, DATA, 'shop:A');
+    storageNs.write(`pimg_full_${id}`, DATA, 'shop:B');
+    storageNs.write(`pimg_thumb_${id}`, DATA, 'shop:B');
+    setActiveWorkspace('shop:A');
+    // Durable backend that SWITCHES the active workspace to B mid-commit; force the overflow path so removeImage
+    // awaits the durable barrier (localStorage rejects the trash key → IndexedDB holds it).
+    const map = new Map();
+    storageNs.__setDurableBackend({
+      available: () => true,
+      getAll: async () => [...map.entries()].map(([k, v]) => ({ key: k, value: v })),
+      set: async (k, v) => { map.set(k, v); setActiveWorkspace('shop:B'); return true; },
+      get: async (k) => map.get(k),
+      del: async (k) => { map.delete(k); return true; },
+    });
+    const orig = Storage.prototype.setItem;
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function block(k, v) {
+      if (String(k).indexOf('pimg_trash_') !== -1) throw new DOMException('quota', 'QuotaExceededError');
+      return orig.call(this, k, v);
+    });
+    const res = await removeImage(id);
+    setSpy.mockRestore();
+    storageNs.__setDurableBackend(null);
+
+    expect(res.ok).toBe(true);
+    // B (the shop switched to mid-commit) is UNTOUCHED — pre-fix the removal retargeted B and wiped it.
+    expect(storageNs.read(`pimg_full_${id}`, null, 'shop:B')).toBeTruthy();
+    expect(storageNs.read(`pimg_thumb_${id}`, null, 'shop:B')).toBeTruthy();
+    // A (the originating shop) had its image removed as intended.
+    expect(storageNs.read(`pimg_full_${id}`, null, 'shop:A')).toBe(null);
+  });
+
   it('fetchImageToCache: switching accounts during the download does not write bytes into the purged shop', async () => {
     try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token: 't2', shop: { id: 'shopC' } })); } catch { /* ignore */ }
     setActiveWorkspace('shop:shopC');

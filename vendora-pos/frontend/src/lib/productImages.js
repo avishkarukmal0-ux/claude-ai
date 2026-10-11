@@ -129,34 +129,39 @@ export async function saveImage(src, { source = 'owner', ws = getActiveWorkspace
  *  DURABLE commit of the trash before deleting the originals. */
 export async function removeImage(id) {
   if (!id) return { ok: false };
-  const full = getFullLocal(id); const thumb = getThumbLocal(id);
-  if (!full && !thumb) { clearBackupState(id); return { ok: true, recoverable: false }; } // nothing stored to delete
-  // Audit R1 (round 3): COMMIT-BEFORE-DELETE must confirm a DURABLE commit. Round 2 checked write()'s SYNCHRONOUS
-  // result — but in the overflow case (localStorage full, value queued to IndexedDB) write() returns ok before
-  // the IndexedDB commit lands, so deleting the originals on that sync ok could destroy the only copy if the
-  // commit then failed. writeDurable awaits the barrier and reads the trash back; only a confirmed-durable trash
-  // lets us delete the originals. On failure, keep the originals + server backup and report it.
-  const w = await writeDurable(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }));
+  // Audit V3 (round 4): removeImage is async (it awaits the durable trash commit), so a workspace switch DURING
+  // that await must not retarget the reads/removes at the NEW shop — which, when both shops hold the same image
+  // id (shared/copy/import-derived), would delete the wrong shop's bytes. Pin the workspace at entry and pass it
+  // explicitly to every read/write/remove below.
+  const ws = getActiveWorkspace();
+  const full = getFullLocal(id, ws); const thumb = getThumbLocal(id, ws);
+  if (!full && !thumb) { clearBackupState(id, ws); return { ok: true, recoverable: false }; } // nothing stored to delete
+  // Audit R1 (round 3): COMMIT-BEFORE-DELETE must confirm a DURABLE commit. In the overflow case write() returns
+  // ok before the IndexedDB commit lands, so deleting the originals on that sync ok could destroy the only copy
+  // if the commit then failed. writeDurable awaits the barrier and reads the trash back; only a confirmed-durable
+  // trash lets us delete the originals. On failure, keep the originals + server backup and report it.
+  const w = await writeDurable(TRASH(id), JSON.stringify({ full, thumb, at: Date.now() }), ws);
   if (!(w && w.ok !== false)) return { ok: false, recoverable: false, error: 'Couldn’t move the photo to trash (storage full) — it was not deleted.' };
-  removeKey(FULL(id)); removeKey(THUMB(id));
-  clearBackupState(id); // the server copy is removed separately via deleteBackup() (authorised, async)
+  removeKey(FULL(id), ws); removeKey(THUMB(id), ws);
+  clearBackupState(id, ws); // the server copy is removed separately via deleteBackup() (authorised, async)
   return { ok: true, recoverable: true };
 }
 
 /** Undo a recoverable delete. Async: confirms the restored bytes are DURABLE before dropping the trash (the trash
  *  is the only recovery copy, so the same overflow blind spot as removeImage applies here). @returns {{ok, thumb?}} */
 export async function restoreImage(id) {
+  const ws = getActiveWorkspace(); // V3: pin ws — restoreImage is async (awaits durable writes); don't retarget
   let t = null;
-  try { t = JSON.parse(read(TRASH(id), 'null')); } catch { t = null; }
+  try { t = JSON.parse(read(TRASH(id), 'null', ws)); } catch { t = null; }
   if (!t) return { ok: false };
-  const wrote = await putLocalDurable(id, { full: t.full, thumb: t.thumb });
+  const wrote = await putLocalDurable(id, { full: t.full, thumb: t.thumb }, ws);
   // Audit F4/R1: KEEP the trash unless EVERY byte present in it actually restored DURABLY — the trash is the only
   // recovery copy. Check both full and thumb (a thumbnail-only image must not lose its one copy), and require a
   // confirmed durable commit (not just a synchronous ok) before dropping the trash.
   const fullRestored = t.full ? (wrote.full !== false) : true;
   const thumbRestored = t.thumb ? (wrote.thumb !== false) : true;
   if (!fullRestored || !thumbRestored) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
-  removeKey(TRASH(id));
+  removeKey(TRASH(id), ws);
   return { ok: true, thumb: t.thumb };
 }
 
