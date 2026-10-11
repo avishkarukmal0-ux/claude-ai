@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v12';
+const CACHE_VERSION = 'vendora-v13';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -20,15 +20,43 @@ const SHELL_ASSETS = [
   '/favicon.svg',
 ];
 
+/** Put a URL in the cache, best-effort (never throws). */
+async function cachePut(cache, url) {
+  try { const r = await fetch(url, { cache: 'no-cache' }); if (r && r.ok) await cache.put(url, r.clone()); } catch { /* ignore */ }
+}
+
+/**
+ * Precache the COMPLETE built entry asset graph (audit F10): fetch index.html and cache every same-origin
+ * JS/CSS/font it references — the module entry, its `<link rel="modulepreload">` chunks (vendor-react, vendor-ui,
+ * vendor-forms, …) and stylesheets. Without this, a fresh install opened offline had the shell HTML but none of
+ * its hashed assets → a blank page on first offline reload. Best-effort per asset; install waits for it, so the
+ * worker only becomes ready once the entry graph is cached. Lazy route chunks are still filled in at runtime.
+ */
+async function precacheBuiltAssets(cache) {
+  try {
+    const res = await fetch('/index.html', { cache: 'no-cache' });
+    if (!res || !res.ok) return;
+    try { await cache.put('/index.html', res.clone()); } catch { /* ignore */ }
+    const html = await res.text();
+    const urls = new Set();
+    const re = /(?:href|src)\s*=\s*"([^"]+\.(?:js|css|woff2?))(?:\?[^"]*)?"/gi;
+    let m;
+    while ((m = re.exec(html))) { const u = m[1]; if (u.startsWith('/')) urls.add(u); }
+    await Promise.all([...urls].map((u) => cachePut(cache, u)));
+  } catch { /* best-effort — the shell cache still gives a basic offline fallback */ }
+}
+
 self.addEventListener('install', (event) => {
-  // Precache the shell, then WAIT. We deliberately do NOT skipWaiting here (audit F10): a new build
-  // must not activate and reload the page out from under a shopkeeper who's mid-form. The new worker
-  // sits in "waiting" until the user taps Refresh (client posts SKIP_WAITING) — or until the app is
-  // next fully reopened, which activates it naturally. So updates are prompt-driven, never disruptive,
-  // and the app can't get stuck on a stale build.
-  event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
-  );
+  // Precache the shell AND the full built entry asset graph, then WAIT. We deliberately do NOT skipWaiting here:
+  // a new build must not activate and reload the page out from under a shopkeeper who's mid-form. The new worker
+  // sits in "waiting" until the user taps Refresh (client posts SKIP_WAITING) — or until the app is next fully
+  // reopened, which activates it naturally. Shell assets are cached individually (best-effort) so one missing
+  // icon can't abort the whole install.
+  event.waitUntil((async () => {
+    const cache = await caches.open(SHELL_CACHE);
+    await Promise.all(SHELL_ASSETS.map((u) => cachePut(cache, u)));
+    await precacheBuiltAssets(cache);
+  })());
 });
 
 self.addEventListener('activate', (event) => {
