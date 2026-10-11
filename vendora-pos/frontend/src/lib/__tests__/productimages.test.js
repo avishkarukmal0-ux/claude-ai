@@ -195,4 +195,55 @@ describe('productImages — F2 (session pin) + F4 (commit-before-delete)', () =>
     expect(res.recoverable).toBe(false);
     expect(getThumbLocal(saved.id)).toBeTruthy(); // originals NOT deleted (commit-before-delete)
   });
+
+  it('F4 r2: a THUMBNAIL-ONLY restore whose thumb write fails reports not-ok and KEEPS the trash', () => {
+    setActiveWorkspace('shop:f4b');
+    const id = 'pi_thumbonly';
+    // Seed a thumbnail-only trash entry (no full) — e.g. a legacy image, or a full that never stored.
+    storageNs.write(`pimg_trash_${id}`, JSON.stringify({ full: null, thumb: DATA, at: Date.now() }));
+    const spy = vi.spyOn(storageNs, 'write').mockReturnValue({ ok: false, error: 'quota' });
+    const res = restoreImage(id);
+    spy.mockRestore();
+    expect(res.ok).toBe(false); // round 1 only checked the full (true for a thumb-only) → wrongly reported ok
+    // The trash is still present, so a retry can recover it.
+    const retry = restoreImage(id);
+    expect(retry.ok).toBe(true);
+    expect(getThumbLocal(id)).toBeTruthy();
+  });
+});
+
+describe('productImages — F2 round 2: no recreation in a purged workspace after an async op', () => {
+  afterEach(() => { __setBackupAvailability(null); try { localStorage.removeItem(AUTH_KEY); } catch { /* ignore */ } });
+
+  it('backupImage: signing OUT during the upload does not write a DONE record in the purged shop', async () => {
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token: 't', shop: { id: 'shopB' } })); } catch { /* ignore */ }
+    setActiveWorkspace('shop:shopB');
+    const saved = await saveImage(DATA, { source: 'owner' });
+    __setBackupAvailability(true);
+    __setImageTransport({
+      status: async () => ({ enabled: true }),
+      upload: async () => { try { localStorage.removeItem(AUTH_KEY); } catch { /* ignore */ } return {}; }, // sign out mid-upload
+      download: async () => null, remove: async () => true,
+    });
+    const r = await backupImage(saved.id, { source: 'owner', ws: 'shop:shopB', token: 't' });
+    expect(r.cancelled).toBe(true);
+    setActiveWorkspace('shop:shopB');
+    expect(getBackupState(saved.id).state).not.toBe(BACKUP_STATE.DONE); // DONE not recreated after the account change
+  });
+
+  it('fetchImageToCache: switching accounts during the download does not write bytes into the purged shop', async () => {
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify({ token: 't2', shop: { id: 'shopC' } })); } catch { /* ignore */ }
+    setActiveWorkspace('shop:shopC');
+    __setBackupAvailability(true);
+    __setImageTransport({
+      status: async () => ({ enabled: true }), upload: async () => ({}),
+      download: async () => { try { localStorage.removeItem(AUTH_KEY); } catch { /* ignore */ } return new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' }); },
+      remove: async () => true,
+    });
+    const id = 'pi_fetch_f2r2';
+    const r = await fetchImageToCache(id);
+    expect(r.cancelled).toBe(true);
+    setActiveWorkspace('shop:shopC');
+    expect(getThumbLocal(id)).toBe(null); // nothing recreated in the purged shop workspace
+  });
 });

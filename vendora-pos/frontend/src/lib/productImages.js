@@ -138,10 +138,12 @@ export function restoreImage(id) {
   try { t = JSON.parse(read(TRASH(id), 'null')); } catch { t = null; }
   if (!t) return { ok: false };
   const wrote = putLocal(id, { full: t.full, thumb: t.thumb });
-  // Audit F4: the FULL is the only full-quality copy. KEEP the trash unless the full actually restored — a partial
-  // restore (thumb ok, full failed) must not discard the trash and lose the full-quality image.
+  // Audit F4: KEEP the trash unless EVERY byte present in it actually restored — the trash is the only recovery
+  // copy. Round 2: the old guard only checked the full, so a THUMBNAIL-ONLY image (no full) whose thumb write
+  // failed still passed, deleted the trash and reported success → the only copy was lost. Now check both.
   const fullRestored = t.full ? (wrote.full !== false) : true;
-  if (!fullRestored) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
+  const thumbRestored = t.thumb ? (wrote.thumb !== false) : true;
+  if (!fullRestored || !thumbRestored) return { ok: false, error: 'Couldn’t restore the photo (storage full).' };
   removeKey(TRASH(id));
   return { ok: true, thumb: t.thumb };
 }
@@ -169,6 +171,11 @@ export function resolveImage(product, suggested = null) {
 // Audit FE1: pin the bearer token captured at the operation's entry so an upload/download/delete can never run
 // under a shop the user has since switched to. A null token falls back to the current session (sync callers).
 function currentToken() { const s = currentSession(); return s && s.token ? s.token : null; }
+// Audit F2 (round 2): capture the session identity at an async op's entry so LOCAL writes that follow an await
+// (backup-state map, cached bytes) never land in a workspace the user has since left/purged (sign-out or
+// account switch during the upload/download). A bare workspace change with the SAME session still writes (FE1).
+function sessionPin() { const s = currentSession ? currentSession() : null; return { token: (s && s.token) || null, shop: (s && s.shop && s.shop.id) || null }; }
+function sessionUnchanged(pin) { const s = currentSession ? currentSession() : null; return (((s && s.token) || null) === pin.token) && (((s && s.shop && s.shop.id) || null) === pin.shop); }
 function authHeaderFor(token) { const tk = token || currentToken(); return tk ? { Authorization: `Bearer ${tk}` } : {}; }
 async function _status(token) {
   const res = await fetch(`${BASE}/status`, { headers: authHeaderFor(token) });
@@ -222,19 +229,26 @@ export async function backupAvailable(token) {
  * Best-effort (never throws); returns { ok, state }.
  */
 export async function backupImage(id, { barcode = null, source = 'owner', ws = getActiveWorkspace(), token = currentToken() } = {}) {
+  const pin = sessionPin(); // F2 r2: don't recreate the local backup-state map in a purged ws after an await
   const full = getFullLocal(id, ws);
   if (!full) return { ok: false, state: BACKUP_STATE.LOCAL, error: 'nothing to back up' };
   if (!(await backupAvailable(token))) {
+    if (!sessionUnchanged(pin)) return { ok: false, cancelled: true, state: BACKUP_STATE.LOCAL };
     // Keep it queued as FAILED so it uploads once backup becomes available (sign-in / flag on / back online).
     setBackupState(id, { state: BACKUP_STATE.FAILED, error: 'backup unavailable', barcode, source }, ws);
     return { ok: false, state: BACKUP_STATE.FAILED, error: 'backup unavailable' };
   }
+  if (!sessionUnchanged(pin)) return { ok: false, cancelled: true, state: BACKUP_STATE.LOCAL };
   setBackupState(id, { state: BACKUP_STATE.PENDING, barcode, source, error: null }, ws);
   try {
     await _t.upload(id, await dataUrlToBlob(full), { barcode, source, token }); // pinned token (FE1)
+    // The upload committed server-side; if the account changed meanwhile, don't recreate A's local map in the
+    // purged workspace — the server copy stands and the originating device already cleared its state.
+    if (!sessionUnchanged(pin)) return { ok: true, cancelled: true, state: BACKUP_STATE.DONE };
     setBackupState(id, { state: BACKUP_STATE.DONE, error: null, barcode, source }, ws);
     return { ok: true, state: BACKUP_STATE.DONE };
   } catch (err) {
+    if (!sessionUnchanged(pin)) return { ok: false, cancelled: true, state: BACKUP_STATE.LOCAL };
     setBackupState(id, { state: BACKUP_STATE.FAILED, error: err.message || 'upload failed', barcode, source }, ws);
     return { ok: false, state: BACKUP_STATE.FAILED, error: err.message || 'upload failed' };
   }
@@ -308,11 +322,13 @@ export async function confirmSuggested(suggested, { barcode = null } = {}) {
 /** Fetch an image from the shop's server store into the local cache (for a device that doesn't hold it). */
 export async function fetchImageToCache(id) {
   const ws = getActiveWorkspace(); const token = currentToken(); // pin identity at entry (FE1)
+  const pin = sessionPin(); // F2 r2: don't write downloaded bytes into a workspace the user has since left
   try {
     const blob = await _t.download(id, token);
     if (!blob) return { ok: false };
     const full = await blobToDataUrl(blob);
     const { thumb } = await processImage(full);
+    if (!sessionUnchanged(pin)) return { ok: false, cancelled: true }; // account switched mid-download — don't recreate in the purged ws
     putLocal(id, { full, thumb }, ws);
     setBackupState(id, { state: BACKUP_STATE.DONE }, ws); // it came FROM the server, so it's backed up here now
     return { ok: true, thumb };
