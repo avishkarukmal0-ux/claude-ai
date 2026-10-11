@@ -556,11 +556,20 @@ export function useInventory() {
     const saved = persist(next);
     if (!saved.ok) return { ok: false, error: saved.error || 'Couldn’t save on this device' };
     setProducts(next);
-    recordMovement({
+    // Audit D3 (round 2): the waste LEDGER write must succeed too, else stock dropped with no history.
+    // recordMovement returns null on a failed write — roll the stock back so a retry is clean; if the rollback
+    // ALSO fails, surface needs-recovery rather than a plain retry that would double-waste.
+    const logged = recordMovement({
       productId: id, type: MOVEMENT_TYPES.WASTE, delta: -applied,
       valuation: valuation != null ? Number(valuation) : (Number(p.cost) || 0) * applied,
       reason: reason || 'expired batch', batchId: opGroupId, productBatchId: batchId,
     });
+    if (!logged) {
+      const reverted = persist(prev);
+      if (reverted.ok) { setProducts(prev); return { ok: false, error: 'Couldn’t save the waste record — please retry.' }; }
+      setProducts(next);
+      return { ok: false, unsafe: true, needsRecovery: true, error: 'Stock was reduced but the waste record failed and couldn’t be undone — reload and check stock before retrying.' };
+    }
     return { ok: true, applied, batch: { expiry: b.expiry, dateType: b.dateType } };
   }, []);
 
@@ -579,10 +588,21 @@ export function useInventory() {
     });
     if (!toppedUp && batch) newBatches.unshift({ id: newId(), qty: restore, expiry: batch.expiry, dateType: batch.dateType, createdAt: Date.now() });
     const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, batches: batch ? newBatches : batchesOf(x), updatedAt: Date.now() } : x));
-    persist(next);
+    // Audit D3 (round 2): don't clear/compensate the history unless the restored stock actually saved — else
+    // the ledger says "undone" while stock stays reduced. Check the persist; only then reverse the ledger.
+    const saved = persist(next);
+    if (!saved.ok) return { ok: false, error: 'Couldn’t save the restored stock — please retry.' };
     setProducts(next);
     // Keep history: append a compensating correction rather than deleting the waste movement (Phase 1.2d).
-    if (opGroupId) reverseByBatch(opGroupId, { reason: 'waste undone' });
+    if (opGroupId) {
+      const rev = reverseByBatch(opGroupId, { reason: 'waste undone' });
+      if (rev && rev.ok === false) {
+        const back = persist(prev);
+        if (back.ok) { setProducts(prev); return { ok: false, error: 'Couldn’t update the history — please retry.' }; }
+        setProducts(next);
+        return { ok: false, unsafe: true, needsRecovery: true, error: 'Stock was restored but the history update failed and couldn’t be undone — reload and verify.' };
+      }
+    }
     return { ok: true };
   }, []);
 
@@ -591,9 +611,19 @@ export function useInventory() {
     const restore = Math.max(0, Number(qty) || 0);
     const prev = load();
     const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, updatedAt: Date.now() } : x));
-    persist(next);
+    // Audit D3 (round 2): only reverse the ledger if the restored stock saved (no "undone" history over reduced stock).
+    const saved = persist(next);
+    if (!saved.ok) return { ok: false, error: 'Couldn’t save the restored stock — please retry.' };
     setProducts(next);
-    if (batchId) reverseByBatch(batchId, { reason: 'waste undone' });
+    if (batchId) {
+      const rev = reverseByBatch(batchId, { reason: 'waste undone' });
+      if (rev && rev.ok === false) {
+        const back = persist(prev);
+        if (back.ok) { setProducts(prev); return { ok: false, error: 'Couldn’t update the history — please retry.' }; }
+        setProducts(next);
+        return { ok: false, unsafe: true, needsRecovery: true, error: 'Stock was restored but the history update failed and couldn’t be undone — reload and verify.' };
+      }
+    }
     return { ok: true };
   }, []);
 
@@ -827,11 +857,17 @@ export function useInventory() {
     const saved = persist(next);
     if (!saved.ok) return { ok: false, error: saved.error || 'Couldn’t save the counts on this device', applied: 0, changes: [] };
     setProducts(next);
-    for (const c of changes) {
-      recordMovement({
-        productId: c.id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta: c.delta,
-        reason: c.reason ? `stocktake: ${c.reason}` : 'stocktake',
-      });
+    // Audit D3 (round 2): write the stock_adjustment ledger rows ATOMICALLY (recordMany) and verify — a failed
+    // history write must not report a completed count with missing movements. Roll the stock back on failure.
+    const logged = recordMany(changes.map((c) => ({
+      productId: c.id, type: MOVEMENT_TYPES.STOCK_ADJUSTMENT, delta: c.delta,
+      reason: c.reason ? `stocktake: ${c.reason}` : 'stocktake',
+    })));
+    if (!logged.ok) {
+      const reverted = persist(prev);
+      if (reverted.ok) { setProducts(prev); return { ok: false, error: 'Couldn’t save the stocktake record — please retry.', applied: 0, changes: [] }; }
+      setProducts(next);
+      return { ok: false, unsafe: true, needsRecovery: true, error: 'The counts were saved but the stocktake record failed and couldn’t be undone — reload and verify before retrying.', applied: 0, changes: [] };
     }
     return { ok: true, applied: changes.length, changes };
   }, []);

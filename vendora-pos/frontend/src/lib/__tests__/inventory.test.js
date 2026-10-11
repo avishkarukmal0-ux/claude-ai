@@ -211,4 +211,49 @@ describe('audit D3 — a failed stock write must not report success or log a mov
     expect(readJSON('inventory_v1', []).find((p) => p.id === id).qty).toBe(6); // unchanged
     expect(movements().filter((m) => m.type === 'waste').length).toBe(0); // no phantom waste movement
   });
+
+  it('D3 r2: wasteBatch rolls stock back when the HISTORY write fails (no success with missing history)', () => {
+    const { result } = renderHook(() => useInventory());
+    let id; let batchId;
+    act(() => { id = result.current.addProduct({ name: 'Yoghurt', cost: 0.5, price: 1, qty: 6 }).id; });
+    act(() => { batchId = result.current.addBatch(id, { qty: 4, expiry: '2099-01-01', dateType: 'use-by' }).batchId; });
+    const orig = storageNs.writeJSON; // stock write succeeds; only the movements (ledger) write fails
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'movements_v1' ? { ok: false, error: 'quota' } : orig(name, value, ws)));
+    let res;
+    act(() => { res = result.current.wasteBatch({ id, batchId, qty: 2, opGroupId: 'wbD3r2' }); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(readJSON('inventory_v1', []).find((p) => p.id === id).qty).toBe(6); // rolled back (not 4)
+    expect(movements().filter((m) => m.type === 'waste').length).toBe(0);
+  });
+
+  it('D3 r2: applyCounts rolls stock back when the stocktake ledger write fails', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    act(() => { id = result.current.addProduct({ name: 'Eggs', cost: 1, price: 2, qty: 10 }).id; });
+    const orig = storageNs.writeJSON;
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'movements_v1' ? { ok: false } : orig(name, value, ws)));
+    let res;
+    act(() => { res = result.current.applyCounts([{ id, counted: 4 }]); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    expect(readJSON('inventory_v1', []).find((p) => p.id === id).qty).toBe(10); // rolled back (not 4)
+    expect(movements().filter((m) => m.type === 'stock_adjustment').length).toBe(0);
+  });
+
+  it('D3 r2: reverseWaste does NOT reverse the ledger when the stock-restore write fails', () => {
+    const { result } = renderHook(() => useInventory());
+    let id; let batchId;
+    act(() => { id = result.current.addProduct({ name: 'Rolls', cost: 0.5, price: 1, qty: 6 }).id; });
+    act(() => { batchId = result.current.addBatch(id, { qty: 4, expiry: '2099-01-01', dateType: 'use-by' }).batchId; });
+    act(() => { result.current.wasteBatch({ id, batchId, qty: 2, opGroupId: 'wRev' }); }); // a real waste first
+    const orig = storageNs.writeJSON; // now the reverse's stock-restore write fails
+    const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'inventory_v1' ? { ok: false, error: 'quota' } : orig(name, value, ws)));
+    let res;
+    act(() => { res = result.current.reverseWaste({ id, qty: 2, batchId: 'wRev' }); });
+    spy.mockRestore();
+    expect(res.ok).toBe(false);
+    // The ledger was NOT reversed (no "waste undone" correction), so stock+history stay consistent for a retry.
+    expect(movements().filter((m) => m.reason === 'waste undone').length).toBe(0);
+  });
 });
