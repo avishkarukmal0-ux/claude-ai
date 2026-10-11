@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v13';
+const CACHE_VERSION = 'vendora-v14';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -25,6 +25,14 @@ async function cachePut(cache, url) {
   try { const r = await fetch(url, { cache: 'no-cache' }); if (r && r.ok) await cache.put(url, r.clone()); } catch { /* ignore */ }
 }
 
+/** Cache a REQUIRED asset — THROWS if it can't be fetched/cached, so a failed required chunk aborts the install
+ *  (audit F10 r2) instead of leaving a half-cached shell that blanks on the first offline load. */
+async function cachePutRequired(cache, url) {
+  const r = await fetch(url, { cache: 'no-cache' });
+  if (!r || !r.ok) throw new Error(`precache(required) failed: ${url} (${r && r.status})`);
+  await cache.put(url, r.clone());
+}
+
 /**
  * Precache the COMPLETE built entry asset graph (audit F10): fetch index.html and cache every same-origin
  * JS/CSS/font it references — the module entry, its `<link rel="modulepreload">` chunks (vendor-react, vendor-ui,
@@ -33,17 +41,24 @@ async function cachePut(cache, url) {
  * worker only becomes ready once the entry graph is cached. Lazy route chunks are still filled in at runtime.
  */
 async function precacheBuiltAssets(cache) {
-  try {
-    const res = await fetch('/index.html', { cache: 'no-cache' });
-    if (!res || !res.ok) return;
-    try { await cache.put('/index.html', res.clone()); } catch { /* ignore */ }
-    const html = await res.text();
-    const urls = new Set();
-    const re = /(?:href|src)\s*=\s*"([^"]+\.(?:js|css|woff2?))(?:\?[^"]*)?"/gi;
-    let m;
-    while ((m = re.exec(html))) { const u = m[1]; if (u.startsWith('/')) urls.add(u); }
-    await Promise.all([...urls].map((u) => cachePut(cache, u)));
-  } catch { /* best-effort — the shell cache still gives a basic offline fallback */ }
+  // index.html + the entry JS/CSS are REQUIRED: if any can't be cached the install THROWS (audit F10 r2), so the
+  // worker never becomes ready with an incomplete shell — the old worker keeps serving a complete one and the
+  // browser retries the install. Fonts (woff/woff2) stay best-effort so a missing font can't block an install.
+  const res = await fetch('/index.html', { cache: 'no-cache' });
+  if (!res || !res.ok) throw new Error('precache: index.html unavailable');
+  await cache.put('/index.html', res.clone());
+  const html = await res.text();
+  const required = new Set();
+  const optional = new Set();
+  const re = /(?:href|src)\s*=\s*"([^"]+\.(?:js|css|woff2?))(?:\?[^"]*)?"/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const u = m[1];
+    if (!u.startsWith('/')) continue;
+    (/\.(?:js|css)$/i.test(u) ? required : optional).add(u);
+  }
+  await Promise.all([...optional].map((u) => cachePut(cache, u)));          // fonts — best-effort
+  await Promise.all([...required].map((u) => cachePutRequired(cache, u)));  // entry JS/CSS — must cache or install fails
 }
 
 self.addEventListener('install', (event) => {
