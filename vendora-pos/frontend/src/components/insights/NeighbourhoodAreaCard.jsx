@@ -5,6 +5,7 @@ import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbo
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 import RadiusControl from './RadiusControl';
 import RadiusMap from './RadiusMap';
+import RadiusFigures from './RadiusFigures';
 import { fmtRadius } from '../../lib/radiusUnits';
 
 // The catchment circle on the free card is a VISUAL guide around the shop (its own location). The figures below
@@ -26,6 +27,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [radiusM, setRadiusM] = useState(1000);
   const [radProfile, setRadProfile] = useState(null);
   const [radState, setRadState] = useState('idle'); // idle | loading | ok | unconfigured | locked | error
+  const [radHttp, setRadHttp] = useState(null);      // last radius request HTTP status (for the on-card diagnostic)
 
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
@@ -41,10 +43,12 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       try {
         const out = await getRadiusProfile({ postcode: radPostcode, radiusM });
         if (!live) return;
+        setRadHttp(200);
         if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); }
         else { setRadProfile(null); setRadState('unconfigured'); }
       } catch (e) {
         if (!live) return;
+        setRadHttp((e && e.status) || 0);
         setRadState(e && e.status === 403 ? 'locked' : 'error');
       }
     }, 450);
@@ -111,19 +115,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} /></div>
               <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
 
-              {radState === 'loading' && <p className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Counting people in this radius…</p>}
-              {radState === 'ok' && radProfile && (
-                <>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <div className="rounded-xl bg-gray-50 p-2.5"><span className="block text-[10px] text-gray-400">People in {fmtRadius(radiusM, unit)} (est.)</span><span className="block text-lg font-extrabold tabular-nums text-gray-900">{fmtNum(radProfile.population)}</span></div>
-                    <div className="rounded-xl bg-gray-50 p-2.5"><span className="block text-[10px] text-gray-400">Households (est.)</span><span className="block text-lg font-extrabold tabular-nums text-gray-900">{fmtNum(radProfile.households)}</span></div>
-                  </div>
-                  <p className="mt-1 text-[10px] leading-snug text-gray-400">Estimated — whole census areas whose centre is inside the circle ({fmtNum(radProfile.outputAreas)} areas). Re-sums as you move the radius. {radProfile.attribution || ''}</p>
-                </>
-              )}
-              {radState === 'unconfigured' && <p className="mt-2 text-[10px] leading-snug text-amber-700">Radius figures need the OA centroid data imported on the server (owner step) — then people/households re-sum as you move the circle.</p>}
-              {radState === 'locked' && <p className="mt-2 text-[10px] leading-snug text-gray-400">People-by-radius is the paid Neighbourhood Insights add-on. The figures below are for your immediate area (LSOA).</p>}
-              {radState === 'error' && <p className="mt-2 text-[10px] leading-snug text-gray-400">Couldn’t load the radius figures right now. The figures below are for your immediate area (LSOA).</p>}
+              <RadiusFigures state={radState} http={radHttp} profile={radProfile} radiusM={radiusM} unit={unit} />
             </section>
           )}
           {(result.figures || []).map((f) => {

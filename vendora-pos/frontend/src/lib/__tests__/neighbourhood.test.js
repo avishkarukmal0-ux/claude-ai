@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getArea, getStored, __setFetch } from '../neighbourhoodClient';
+import { getArea, getStored, getRadiusProfile, __setFetch } from '../neighbourhoodClient';
 import { setActiveWorkspace, LOCAL_WORKSPACE, __resetMemForTest } from '../storage';
 
 // FIXTURE (test-only): a mocked backend response. No sample/mock data exists in any production path.
@@ -11,6 +11,22 @@ beforeEach(() => {
   setActiveWorkspace(LOCAL_WORKSPACE);
 });
 afterEach(() => { __setFetch(null); vi.restoreAllMocks(); });
+
+describe('neighbourhoodClient.getRadiusProfile — radius aggregation request', () => {
+  it('calls /radius with the postcode + radiusM and returns the parsed body', async () => {
+    let seenUrl = null;
+    __setFetch(async (url) => { seenUrl = url; return { ok: true, status: 200, json: async () => ({ success: true, configured: true, profile: { population: 1000, households: 400, outputAreas: 5 } }) }; });
+    const out = await getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1609.3 });
+    expect(seenUrl).toMatch(/\/api\/pwa-neighbourhood\/radius\?postcode=RM108AA&radiusM=1609/);
+    expect(out.configured).toBe(true);
+    expect(out.profile.population).toBe(1000);
+  });
+
+  it('throws with .status on a non-ok response (e.g. 403 locked)', async () => {
+    __setFetch(async () => ({ ok: false, status: 403, json: async () => ({ message: 'paid add-on' }) }));
+    await expect(getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1000 })).rejects.toMatchObject({ status: 403 });
+  });
+});
 
 describe('neighbourhoodClient — online + offline fallback', () => {
   it('online: returns fresh data and stores it for offline', async () => {
