@@ -9,7 +9,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import NichePickerPage from './pages/NichePickerPage';
 import HomePage from './pages/HomePage';
 import AccountPage from './pages/AccountPage';
-import RequireShopLogin from './components/account/RequireShopLogin';
 
 // ── Till / back-office (deferred product) — lazy so NONE of it is in the PWA's ──
 // initial dependency path. Each page is its own chunk; providers are code-split too.
@@ -91,12 +90,11 @@ export default function App() {
         <Suspense fallback={<Spinner />}>
           <Routes>
             {/* ── Standalone PWA (the product) ── */}
-            {/* Isolation starts at login: both the welcome/picker AND the app sit behind RequireShopLogin, so a
-                signed-out visitor is sent to /account (log in / create) FIRST and can never tap through to the
-                app or another shop's data. Only /account stays public (it IS the login/create screen). When
-                accounts are disabled the guard is a no-op, so a deployment with no auth backend isn't locked out. */}
-            <Route path="/" element={<RequireShopLogin><NichePickerPage /></RequireShopLogin>} />
-            <Route path="/home" element={<RequireShopLogin><HomePage /></RequireShopLogin>} />
+            {/* Open welcome: a signed-out visitor can try Vendora, but NEVER on real data — the signed-out
+                experience runs on a SAMPLE/demo dataset (see HomePage's signed-out demo seeding). Real shop
+                data only ever loads after login (its own account workspace). No forced login gate. */}
+            <Route path="/" element={<NichePickerPage />} />
+            <Route path="/home" element={<HomePage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/login" element={<LoginPage />} />
 

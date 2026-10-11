@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   ListChecks, ScanLine, Package2, ShoppingCart, MoreHorizontal,
@@ -15,7 +15,7 @@ import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
 import FirstRunCard from '../components/home/FirstRunCard';
 import InstallCard from '../components/account/InstallCard';
-import { isDemoActive, exitDemo } from '../lib/demo';
+import { isDemoActive, exitDemo, ensureSignedOutSampleMode } from '../lib/demo';
 import { useDialog } from '../lib/useDialog';
 import InventoryView from '../components/inventory/InventoryView';
 import DeliveryReceivingView from '../components/delivery/DeliveryReceivingView';
@@ -74,8 +74,14 @@ function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1
  * stages. The shop type tailors quick tools + the morning glance.
  */
 export default function HomePage() {
+  // Signed-out visitors experience Vendora on SAMPLE data only — never real data. Before reading anything,
+  // switch to the demo (sample) workspace when logged out (and accounts are on), so no real guest/shop data is
+  // ever shown in the open "welcome" space, now or in future. Real data loads only after login, in the account's
+  // own workspace. (Not a hook — safe to run here; becomes a no-op once demo is active / once signed in.)
+  try { ensureSignedOutSampleMode({ loggedIn: isLoggedIn(), accountsEnabled: ACCOUNTS_ENABLED }); } catch { /* ignore */ }
   const saved = getSavedShopType();
-  const { role } = useSession(); // 'owner' for guest/accounts-off; 'manager'/'staff' for signed-in members
+  const navigate = useNavigate();
+  const { role, loggedIn } = useSession(); // 'owner' for guest/accounts-off; 'manager'/'staff' for signed-in members
   const isStaff = role === 'staff';
   const syncState = useSyncStatus();
   const conflicts = syncState.conflicts || 0; // edits replaced by another device, kept for recovery
@@ -160,8 +166,19 @@ export default function HomePage() {
       <a href="#main-content" className="skip-link">Skip to content</a>
       {demo && (
         <div className="flex items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-xs font-medium text-amber-900" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.5rem)' }}>
-          <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Demo data — a pretend shop. Your real data is safe.</span>
-          <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="shrink-0 font-semibold underline">Exit demo</button>
+          {loggedIn ? (
+            <>
+              <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Demo data — a pretend shop. Your real data is safe.</span>
+              <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="shrink-0 font-semibold underline">Exit demo</button>
+            </>
+          ) : (
+            // Signed-out welcome: this is a SAMPLE shop so you can try Vendora. No real data is shown here —
+            // log in or create your shop to use it for real (your data is then private to your account).
+            <>
+              <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> You’re trying Vendora with sample data. Create your shop to use it for real.</span>
+              <button type="button" onClick={() => navigate('/account')} className="shrink-0 rounded-lg bg-amber-900 px-2.5 py-1 font-semibold text-amber-50">Log in / Create shop</button>
+            </>
+          )}
         </div>
       )}
       <header className="sticky top-0 z-10 flex items-center gap-3 bg-white px-4 py-3 shadow-sm" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}>

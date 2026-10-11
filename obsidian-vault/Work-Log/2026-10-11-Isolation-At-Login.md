@@ -67,6 +67,23 @@ issue — the app is usable with no login barrier — is valid.) Confirmed this 
   logged-in user through) to pick a type, then `/home`.
 - SW bumped **v8→v9**. FE **393/393** + build green.
 
+## Update 2 — REVERSED the forced login; signed-out welcome = SAMPLE/demo only
+After seeing the gate, the owner decided: *"remove the login gate, it's fine — but in the welcome space don't keep any real
+data visible, now or in future; let the user experience how Vendora is."* So the barrier moves from "must log in" to "the
+open welcome space only ever shows SAMPLE data":
+- **Removed** `RequireShopLogin` (component + test deleted) and the `/` + `/home` gating in `App.jsx`. The app is open again.
+- `lib/demo.js` — new `ensureSignedOutSampleMode({ loggedIn, accountsEnabled })`: when accounts are enabled and nobody is
+  signed in, switch to the **demo (sample) workspace** so no real guest/shop data is shown in the open welcome space. No-op
+  when signed in, accounts off, or already in demo. (Reuses the existing isolated `demo` workspace + sample catalogue.)
+- `HomePage.jsx` — calls it before reading any data (so there's no flash of real data), and the demo banner now differs:
+  signed-in → "Demo data … Exit demo"; **signed-out → "You're trying Vendora with sample data. Create your shop to use it
+  for real" + Log in / Create shop** (→ `/account`). Real shop data loads only after login, in the account's own workspace
+  (backend already account-scoped).
+- Net effect: anyone can explore Vendora (no login wall), but the welcome space is a sample shop — real data is never shown
+  there, now or in future. SW bumped **v9→v10**.
+- Tests: `demo` suite +4 (signed-out→sample; signed-in→no demo; accounts-off→no-op; idempotent). FE **400/400** + build green.
+
 ## Follow-ups
-- [ ] Owner decision: keep a signed-out **demo** path, or require login for the demo too (demo now sits behind login).
 - [ ] Optional: one-time wipe of any leftover **guest workspace** data from the pre-gate era (local per-device only).
+- [ ] Owner decision: should a signed-out visitor who taps "Change" be able to try different shop *types* on sample data
+      (currently yes — the picker writes the type into the demo workspace).

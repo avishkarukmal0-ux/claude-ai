@@ -43,3 +43,15 @@ export function exitDemo() {
   setActiveWorkspace(LOCAL_WORKSPACE);
   return { ok: true };
 }
+
+/**
+ * Signed-out visitors must experience Vendora on SAMPLE data only — never real data. When accounts are enabled
+ * and nobody is signed in, switch to the demo (sample) workspace so the open "welcome" space shows sample data,
+ * not any real guest/shop data. Real data loads only after login (its own account workspace). No-op when signed
+ * in, when accounts are disabled, or when the demo is already active. Returns true if it switched into demo.
+ */
+export function ensureSignedOutSampleMode({ loggedIn, accountsEnabled } = {}) {
+  if (!accountsEnabled || loggedIn || isDemoActive()) return false;
+  loadDemo();
+  return true;
+}
