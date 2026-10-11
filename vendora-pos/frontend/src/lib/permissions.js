@@ -14,7 +14,7 @@ export const FINANCIAL_STORES = new Set(['takings_v1', 'claims_v1', 'credit_note
 // Workflow screens that deal with money or cost intelligence — hidden from the staff role.
 export const MONEY_SCREENS = new Set([
   'takings', 'overview', 'outcomes', 'weekly-report',
-  'claims', 'credit-notes', 'invoices', 'price-history', 'price-alerts',
+  'claims', 'credit-notes', 'credit-recovery', 'invoices', 'price-history', 'price-alerts',
   'journey', // buying journey surfaces claim/credit figures → owner/manager only
   'supplier-insights', 'payments', // costs, spend, bills → owner/manager only
   'insights', // Neighbourhood Insights (paid add-on, area/market intel) → owner/manager only

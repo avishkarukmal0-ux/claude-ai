@@ -64,6 +64,32 @@ export function suggestClaims(cn, claims = [], now = Date.now()) {
   return out.sort((a, b) => b.score - a.score);
 }
 
+/**
+ * Reconciliation view of a credit note vs the claim credits that reference it (audit V2 recovery screen).
+ * `note` is the stored note (its `allocations` are the source of truth) or a synthetic `{ id, allocations:[] }`
+ * when the note was deleted. Returns one row per claim touched on EITHER side, each with the note-side
+ * `allocated` amount and the claim-side `credited` amount, and whether they match. Pure + testable.
+ * @returns {{ rows: Array<{claimId, claim, allocated, credited, consistent}>, consistent: boolean }}
+ */
+export function creditNoteReconciliation(note, claims = []) {
+  const noteId = note && note.id;
+  const alloc = new Map((note && note.allocations || []).map((a) => [a.claimId, r2(a.amount)]));
+  const credited = new Map();
+  for (const c of (claims || [])) {
+    const sum = sumMoney((c.credits || []).filter((x) => x.creditNoteId === noteId).map((x) => x.amount));
+    if (sum > 0 || alloc.has(c.id)) credited.set(c.id, { claim: c, credited: r2(sum) });
+  }
+  const claimIds = new Set([...alloc.keys(), ...credited.keys()]);
+  const rows = [];
+  for (const cid of claimIds) {
+    const allocated = alloc.get(cid) || 0;
+    const info = credited.get(cid) || null;
+    const cr = info ? info.credited : 0;
+    rows.push({ claimId: cid, claim: info ? info.claim : null, allocated, credited: cr, consistent: Math.abs(allocated - cr) <= 0.005 });
+  }
+  return { rows, consistent: rows.every((r) => r.consistent) };
+}
+
 export function useCreditNotes() {
   const [notes, setNotes] = useState(load);
   useEffect(() => {

@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy,
+  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy, ShieldAlert,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -39,7 +39,9 @@ import ScanIdentifyView from '../components/scan/ScanIdentifyView';
 import CategoryInsightsView from '../components/insights/CategoryInsightsView';
 import InvoiceCaptureView from '../components/invoices/InvoiceCaptureView';
 import CreditNotesView from '../components/invoices/CreditNotesView';
+import CreditNoteRecoveryView from '../components/invoices/CreditNoteRecoveryView';
 import PriceHistoryView from '../components/invoices/PriceHistoryView';
+import { listRecovery, RECOVERY_EVENT } from '../lib/recoveryGuard';
 import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ACCOUNTS_ENABLED, isLoggedIn, useSession } from '../lib/account';
 import { INVOICES_ENABLED, INSIGHTS_ENABLED, NEIGHBOURHOOD_ENABLED } from '../lib/features';
@@ -85,11 +87,12 @@ export default function HomePage() {
   const isStaff = role === 'staff';
   const syncState = useSyncStatus();
   const conflicts = syncState.conflicts || 0; // edits replaced by another device, kept for recovery
-  const [, bumpWs] = useState(0); // re-render on workspace switch (e.g. entering/leaving demo)
+  const [, bumpWs] = useState(0); // re-render on workspace switch (e.g. entering/leaving demo) + recovery changes
   useEffect(() => {
     const h = () => bumpWs((n) => n + 1);
     window.addEventListener('vendora:workspace', h);
-    return () => window.removeEventListener('vendora:workspace', h);
+    window.addEventListener(RECOVERY_EVENT, h); // surface/clear the "Credit note repair" entry live
+    return () => { window.removeEventListener('vendora:workspace', h); window.removeEventListener(RECOVERY_EVENT, h); };
   }, []);
   const demo = isDemoActive();
   const [tab, setTab] = useState('today');
@@ -159,6 +162,9 @@ export default function HomePage() {
   const accent = family.accent;
   const suggestionCount = getOpenSuggestionCount();
   const taskExceptions = getOpenExceptionCount();
+  // Credit notes left in pending-repair (a two-write correction failed + its compensation failed). Surfaced in
+  // More → Data so the owner has an explicit, guided way to reconcile — never a silent clear.
+  const creditRecoveryCount = listRecovery().filter((g) => String(g.opKey).indexOf('creditnote:') === 0).length;
   const ToolComponent = activeTool?.component || null;
 
   return (
@@ -235,6 +241,7 @@ export default function HomePage() {
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
         {screen === 'invoices' && INVOICES_ENABLED && canSeeScreen(role, 'invoices') && <InvoiceCaptureView onBack={() => setScreen(null)} />}
         {screen === 'credit-notes' && INVOICES_ENABLED && canSeeScreen(role, 'credit-notes') && <CreditNotesView onBack={() => setScreen(null)} />}
+        {screen === 'credit-recovery' && INVOICES_ENABLED && canSeeScreen(role, 'credit-recovery') && <CreditNoteRecoveryView onBack={() => setScreen(null)} />}
         {screen === 'price-history' && INVOICES_ENABLED && canSeeScreen(role, 'price-history') && <PriceHistoryView onBack={() => setScreen(null)} />}
         {screen === 'weekly-report' && canSeeScreen(role, 'weekly-report') && <WeeklyReportView onBack={() => setScreen(null)} />}
         {screen === 'staff-admin' && canSeeScreen(role, 'staff-admin') && <StaffView onBack={() => setScreen(null)} />}
@@ -358,6 +365,9 @@ export default function HomePage() {
               )}
               {conflicts > 0 && (
                 <Row icon={GitMerge} label="Recovered changes" sub="Edits replaced by another device — kept safe" onClick={() => setScreen('recovered')} badge={conflicts} />
+              )}
+              {INVOICES_ENABLED && !isStaff && creditRecoveryCount > 0 && (
+                <Row icon={ShieldAlert} label="Credit note repair" sub="A credit note couldn’t finish saving — reconcile it" onClick={() => setScreen('credit-recovery')} badge={creditRecoveryCount} />
               )}
             </MoreGroup>
             <MoreGroup title="Settings">
