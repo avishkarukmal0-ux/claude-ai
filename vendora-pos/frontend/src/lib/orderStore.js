@@ -127,14 +127,21 @@ export function useOrders() {
       const pool = (receipts || []).map((r) => ({ productId: r.productId, barcode: r.barcode, left: num(r.qty) }));
       const matches = (x, l) => (x.productId && x.productId === l.productId) || (x.barcode && x.barcode === l.barcode);
       const lines = o.lines.map((l) => {
-        const r = pool.find((x) => x.left !== 0 && matches(x, l));
-        if (!r) return l;
-        const current = num(l.receivedQty);
         const ordered = num(l.qty);
-        // positive receipt: fill remaining room up to ordered; negative: un-receive, not below 0. Clamp to [0,ordered].
-        const apply = r.left > 0 ? Math.min(r.left, Math.max(0, ordered - current)) : Math.max(r.left, -current);
-        r.left -= apply;
-        return { ...l, receivedQty: Math.max(0, Math.min(ordered, current + apply)) };
+        let qty = num(l.receivedQty);
+        // Audit D5 (round 2): a line can be filled by SEVERAL partial receipts (2 + 3 → 5), so consume from EVERY
+        // matching receipt in the pool until the line is full — not just the first one (which recorded only 2).
+        // The pool is still shared across lines (round 1: a receipt is consumed once, never double-counted).
+        for (const r of pool) {
+          if (r.left === 0 || !matches(r, l)) continue;
+          // positive receipt: fill remaining room up to ordered; negative: un-receive, not below 0.
+          const apply = r.left > 0 ? Math.min(r.left, Math.max(0, ordered - qty)) : Math.max(r.left, -qty);
+          if (apply === 0) continue;
+          r.left -= apply;
+          qty = Math.max(0, Math.min(ordered, qty + apply));
+          if ((r.left > 0 && qty >= ordered) || (r.left < 0 && qty <= 0)) break; // line full/empty — leave the rest for other lines
+        }
+        return { ...l, receivedQty: qty };
       });
       const updated = { ...o, lines, updatedAt: Date.now() };
       const st = statusFor(updated);

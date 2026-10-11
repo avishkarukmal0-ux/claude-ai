@@ -122,4 +122,25 @@ describe('orderStore — D5: duplicate order rows do not double-count one receip
     expect(t.remaining).toBe(5);    // was 0 before the fix
     expect(statusFor(o)).toBe('partially_received');
   });
+
+  it('D5 r2: ONE order row filled by two partial receipts (2 + 3) records 5, not 2', () => {
+    const { result } = renderHook(() => useOrders());
+    let id;
+    act(() => { id = result.current.createOrder({ supplierName: 'Booker', lines: [line({ qty: 5 })] }).id; });
+    act(() => { result.current.receiveAgainst(id, [{ productId: 'p1', qty: 2 }, { productId: 'p1', qty: 3 }]); });
+    const o = result.current.orders.find((x) => x.id === id);
+    const t = orderTotals(o);
+    expect(t.received).toBe(5);      // was 2 before the fix (only the first matching receipt was consumed)
+    expect(t.remaining).toBe(0);
+    expect(statusFor(o)).toBe('received');
+  });
+
+  it('D5 r2: still clamps to the ordered qty when receipts exceed it', () => {
+    const { result } = renderHook(() => useOrders());
+    let id;
+    act(() => { id = result.current.createOrder({ supplierName: 'Booker', lines: [line({ qty: 5 })] }).id; });
+    act(() => { result.current.receiveAgainst(id, [{ productId: 'p1', qty: 4 }, { productId: 'p1', qty: 4 }]); });
+    const o = result.current.orders.find((x) => x.id === id);
+    expect(orderTotals(o).received).toBe(5); // 4 + 1 (capped), not 8
+  });
 });
