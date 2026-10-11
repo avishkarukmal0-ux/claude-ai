@@ -42,6 +42,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
   const prevRadPostcode = useRef(radPostcode); // F8: detect a postcode change so stale figures aren't shown for it
+  const prevWhoKey = useRef(null); // R8/round3 R7: detect an area/radius change so a stale community isn't shown
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
   const whoCache = useRef(new Map()); // `${postcode}:${radiusM}` → full profile (community breakdowns) — revisit = instant
 
@@ -108,10 +109,16 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   useEffect(() => {
     if (!whoOpen || !point || !radPostcode || !radPostcode.trim() || radState === 'locked' || radState === 'idle') return undefined;
     const key = `${radPostcode}:${Math.round(radiusM)}`;
+    const keyChanged = prevWhoKey.current !== key;
+    prevWhoKey.current = key;
     const hit = whoCache.current.get(key);
     if (hit) { setWhoProfile(hit); setWhoState('ok'); return undefined; }
     let live = true;
-    setWhoState((s) => (s === 'ok' ? 'ok' : 'loading'));
+    // Audit R7 (round 3): the round-2 fix cleared the HEADLINE figures on an area change but left the "Who lives
+    // here" community breakdown showing the PREVIOUS area's make-up while the new request loaded. For a new
+    // area/radius, clear it immediately — never show one area's community under another's name.
+    if (keyChanged) { setWhoProfile(null); setWhoState('loading'); }
+    else setWhoState((s) => (s === 'ok' ? 'ok' : 'loading'));
     const id = setTimeout(async () => {
       try {
         const out = await getRadiusProfile({ postcode: radPostcode, radiusM, full: true });
