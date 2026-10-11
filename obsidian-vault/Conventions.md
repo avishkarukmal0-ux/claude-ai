@@ -8,7 +8,15 @@ House style observed across the codebase — follow these when adding code.
 - Active branch: **`claude/vendora-pos-v3-KPnI0`** — all work commits here.
 - Push with `git push -u origin claude/vendora-pos-v3-KPnI0`.
 - Commit messages: conventional prefixes — `feat:`, `fix:`, `chore:`, `docs:`.
-- Keep the working tree clean; don't commit `package-lock.json` churn from incidental `npm install`.
+- Keep the working tree clean; don't commit `package-lock.json` churn from incidental `npm install`. (A lockfile change that *resolves an advisory* is not incidental — commit it.)
+
+## Dependency advisories (2026-10-11, see [[2026-10-11-Deps-Dev-Tooling-Majors]])
+- **Separate prod from dev.** Judge real exposure with `npm audit --omit=dev`. Both apps are at **0 production advisories**; what remains is dev/CI-only tooling (test runner, bundler, linters) that never ships in the bundle.
+- **`range:*` means no fix exists** — every published version is flagged. npm's `fixAvailable` for these is often a *downgrade* (saw `nodemon@1.14.10`, `jest@25`): ignore it. Standing irreducible residuals, both dev-only trusted-input DoS, **accepted**: `braces` (FE+BE, via chokidar/micromatch) and `sprintf-js` (BE, via `@istanbuljs/load-nyc-config`→js-yaml@3). Re-check at each `npm audit` for a future upstream patch.
+- **Never force a transitive major just to silence an advisory** (`npm audit fix --force`, or an `overrides` that crosses a major a parent pins). E.g. forcing `js-yaml@4` would break `load-nyc-config`'s `safeLoad` for a non-exploitable dev DoS.
+- **Prefer the smallest upgrade that keeps the production build engine.** vite 8 moved the bundler to **Rolldown** (breaks the `manualChunks` object form); for a dev-only gain we stayed on **vite 7 (Rollup 4)**. Don't swap the shipped-bundle toolchain for a dev-only advisory.
+- **tailwind 4 is a CSS-first rewrite** — raises the browser floor (Safari 16.4+/Chrome 111+) and risks UI-wide visual regressions. Not worth it for in-store PWA devices unless there's a real benefit (it clears no advisory).
+- Upgrade one major at a time, re-run `npm run build` **and** the full suite, and commit each verified stage separately so rollback stays clean.
 
 ## Backend patterns
 - **Thin routes, fat services.** Routes validate + auth + shape the response; calculations live in [[Services]].
