@@ -48,7 +48,10 @@ describe('durability — write-through to IndexedDB', () => {
     });
     const res = storage.writeJSON('inventory_v1', [{ id: 'new' }]);
     expect(res).toMatchObject({ ok: true, overflow: true });
-    expect(localStorage.getItem(key)).toBeNull();                 // stale 'old' removed (FE3)
+    // F3 commit-before-delete: the stale 'old' is kept until the IndexedDB write COMMITS, THEN removed.
+    expect(localStorage.getItem(key)).not.toBeNull();             // still present right after the sync return
+    await storage.flushDurable();                                 // let the durable commit land
+    expect(localStorage.getItem(key)).toBeNull();                 // now the stale 'old' is dropped
     expect(fake._map.get(key)).toBe(JSON.stringify([{ id: 'new' }])); // durable holds 'new'
     spy.mockRestore();
     // Simulate restart: fresh MEM + init recovers from durable; must read 'new', not 'old'.
@@ -226,6 +229,34 @@ describe('overflow durable write (audit F3/F4) — a failed sole-copy commit is 
 
     expect(res.overflow).toBe(true);         // optimistic sync return (IDB was available)
     expect(errors.length).toBe(1);           // …but the async commit failed, so it's surfaced
+  });
+
+  it('F3: when the IndexedDB commit rejects, the PREVIOUS localStorage copy is NOT deleted (last-good survives)', async () => {
+    const fake = {
+      available: () => true,
+      getAll: async () => [],
+      set: async () => { throw new Error('idb-write-failed'); },
+      del: async () => true,
+    };
+    storage.__setDurableBackend(fake);
+    storage.setActiveWorkspace(`shop:f3keep${wsN++}`);
+    const key = storage.keyFor('inventory_v1', storage.getActiveWorkspace());
+    // Seed a previous value directly into localStorage (the last durable copy on this device).
+    localStorage.setItem(key, JSON.stringify([{ id: 'previous' }]));
+    storage.__resetMemForTest();
+    // Now the replacement write hits quota in localStorage and the durable commit will reject.
+    const orig = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function block(k, v) {
+      if (k === key) throw new Error('QuotaExceededError');
+      return orig.call(this, k, v);
+    });
+    const res = storage.writeJSON('inventory_v1', [{ id: 'new' }]);
+    await storage.flushDurable();
+    spy.mockRestore();
+    storage.__setDurableBackend(null);
+    expect(res.overflow).toBe(true);
+    // The durable write failed → the previous localStorage copy must still be there (not both lost).
+    expect(localStorage.getItem(key)).toBe(JSON.stringify([{ id: 'previous' }]));
   });
 });
 

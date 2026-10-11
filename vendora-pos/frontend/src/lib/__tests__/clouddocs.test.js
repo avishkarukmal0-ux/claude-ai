@@ -55,3 +55,20 @@ describe('cloudDocs — backup state machine', () => {
     expect(set.has('c')).toBe(false);
   });
 });
+
+describe('cloudDocs — F1: session/workspace pinned across the async upload', () => {
+  it('an account/workspace switch mid-upload CANCELS (no upload, nothing written into the other shop)', async () => {
+    let uploads = 0;
+    __setDocTransport({ uploadReq: async () => { uploads += 1; return { ok: true, size: 3 }; }, jsonReq: async () => ({}), downloadReq: async () => null });
+    setActiveWorkspace('shop:A');
+    // Switch to shop B during the first async step (the data-URL → blob read).
+    global.fetch = vi.fn(async () => { setActiveWorkspace('shop:B'); return { blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }) }; });
+    const r = await backupInvoiceFile({ fileId: 'if_switch', dataUrl: DATA_URL });
+    expect(r.ok).toBe(false);
+    expect(r.cancelled).toBe(true);
+    expect(uploads).toBe(0);                                      // never uploaded under the wrong shop
+    expect(getBackupState('shop:B').if_switch).toBeUndefined();   // nothing written into shop B
+    // The pending marker only ever touched the original shop A.
+    expect(getBackupState('shop:A').if_switch?.status).toBe('pending');
+  });
+});

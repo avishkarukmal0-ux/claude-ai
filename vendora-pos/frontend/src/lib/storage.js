@@ -206,20 +206,25 @@ export function write(name, value, ws = getActiveWorkspace()) {
     dispatch(STORAGE_WRITE_EVENT, { name, ws });
     return { ok: true };
   }
-  if (durableOn()) {
-    // localStorage rejected it (usually quota) but IndexedDB can hold it — not a data loss.
-    // IndexedDB is now this value's ONLY durable home, so mark the mirror `critical`: if that commit
-    // fails, surface it (otherwise an over-quota change could be lost silently — audit F3/F4).
+  if (durableOn() && !NEVER_DURABLE.has(fullKey)) {
+    // localStorage rejected it (usually quota) but IndexedDB can hold it — not a data loss. IndexedDB is now
+    // this value's ONLY durable home. COMMIT-BEFORE-DELETE (audit F3): the FAILED setItem left the PREVIOUS value
+    // in localStorage; keep it as the last-good copy and drop it ONLY after the IndexedDB write has COMMITTED, so
+    // that if the durable commit FAILS the previous value survives (restart recovery can still read it) instead
+    // of both copies being lost while we reported success. A failed sole-copy commit is surfaced.
     MEM.set(fullKey, value);
-    durableSet(fullKey, value, { critical: true, name });
-    // Audit FE3: the FAILED setItem left the PREVIOUS value in localStorage. If we leave it, restart recovery
-    // (which only restores from IndexedDB when localStorage is absent) would resurrect that stale value and
-    // silently revert this acknowledged change. Drop the stale key so the newer IndexedDB value is authoritative
-    // on the next boot (also frees the quota the old value held).
-    try { localStorage.removeItem(fullKey); } catch { /* ignore */ }
+    let raw;
+    try { raw = _durable.set(fullKey, value); } catch (e) { raw = Promise.reject(e); }
+    const op = Promise.resolve(raw).then(
+      () => { try { localStorage.removeItem(fullKey); } catch { /* ignore */ } }, // committed → drop stale copy
+      (err) => { dispatch(STORAGE_ERROR_EVENT, { name, error: describeError(err) }); throw err; }, // keep stale copy
+    );
+    trackDurable(op, { name });
     dispatch(STORAGE_WRITE_EVENT, { name, ws });
     return { ok: true, overflow: true };
   }
+  // No durable home (durability off, or a local-only blob) AND localStorage is full → can't store safely. Keep
+  // whatever previous value localStorage holds (don't delete the only copy) and report the failure.
   const error = describeError(lsErr);
   dispatch(STORAGE_ERROR_EVENT, { name, error });
   return { ok: false, error };

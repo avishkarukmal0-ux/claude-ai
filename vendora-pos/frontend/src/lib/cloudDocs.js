@@ -25,20 +25,23 @@ export function backupFlagOn() {
 }
 
 // --- device-local status map { [fileId]: { status:'pending'|'uploaded'|'failed', at, size, error } } ----
-export function getBackupState() { return readJSON(STATE_KEY, {}, getActiveWorkspace()) || {}; }
-function setBackupState(fileId, patch) {
-  const map = getBackupState();
+export function getBackupState(ws = getActiveWorkspace()) { return readJSON(STATE_KEY, {}, ws) || {}; }
+// `ws` pins the workspace so a mid-upload account switch can't write shop A's state into shop B (audit F1).
+function setBackupState(fileId, patch, ws = getActiveWorkspace()) {
+  const map = getBackupState(ws);
   if (patch == null) delete map[fileId]; else map[fileId] = { ...(map[fileId] || {}), ...patch, at: Date.now() };
-  writeJSON(STATE_KEY, map, getActiveWorkspace());
+  writeJSON(STATE_KEY, map, ws);
   try { window.dispatchEvent(new CustomEvent('vendora:doc-backup')); } catch { /* non-browser */ }
   return map;
 }
 export function backupStatusOf(fileId) { return (getBackupState()[fileId] || {}).status || 'none'; }
 
 // --- transport (pluggable for tests) --------------------------------------
-function authHeader() {
-  const s = currentSession();
-  return s && s.token ? { Authorization: `Bearer ${s.token}` } : {};
+// A PINNED token (captured when an async op began) wins over the live session, so a mid-flight account switch
+// can't send one shop's request with another shop's credentials (audit F1).
+function authHeader(token) {
+  const t = token || (currentSession() && currentSession().token);
+  return t ? { Authorization: `Bearer ${t}` } : {};
 }
 async function jsonReq(path, { method = 'GET' } = {}) {
   const res = await fetch(`${BASE}${path}`, { method, headers: { ...authHeader() } });
@@ -46,11 +49,11 @@ async function jsonReq(path, { method = 'GET' } = {}) {
   if (!res.ok) { const e = new Error((data && data.message) || `Request failed (${res.status})`); e.status = res.status; throw e; }
   return data || {};
 }
-async function uploadReq(fileId, blob, invoiceId) {
+async function uploadReq(fileId, blob, invoiceId, token) {
   const form = new FormData();
   form.append('file', blob, fileId);
   if (invoiceId) form.append('invoiceId', invoiceId);
-  const res = await fetch(`${BASE}/invoice/${encodeURIComponent(fileId)}`, { method: 'POST', headers: { ...authHeader() }, body: form });
+  const res = await fetch(`${BASE}/invoice/${encodeURIComponent(fileId)}`, { method: 'POST', headers: { ...authHeader(token) }, body: form });
   let data = null; try { data = await res.json(); } catch { /* non-JSON */ }
   if (!res.ok) { const e = new Error((data && data.message) || `Upload failed (${res.status})`); e.status = res.status; throw e; }
   return data || {};
@@ -86,15 +89,30 @@ export async function serverStatus() { return _t.jsonReq('/status'); }
  */
 export async function backupInvoiceFile({ fileId, dataUrl, type, invoiceId = null }) {
   if (!fileId || !dataUrl) return { ok: false, error: 'Nothing to back up' };
-  setBackupState(fileId, { status: 'pending', error: null });
+  // Audit F1: PIN the account/session + workspace at the start. The upload uses the pinned token, all state is
+  // written to the pinned workspace, and we re-validate the session before/after every async step — so an account
+  // switch mid-upload CANCELS cleanly instead of sending shop A's file with shop B's token or corrupting B's state.
+  const ws0 = getActiveWorkspace();
+  const s0 = currentSession();
+  const token0 = (s0 && s0.token) || null;
+  const shop0 = (s0 && s0.shop && s0.shop.id) || null;
+  const sameSession = () => {
+    const s = currentSession();
+    const curToken = (s && s.token) || null;
+    const curShop = (s && s.shop && s.shop.id) || null;
+    return getActiveWorkspace() === ws0 && curToken === token0 && curShop === shop0;
+  };
+  setBackupState(fileId, { status: 'pending', error: null }, ws0);
   try {
     const blob = await dataUrlToBlob(dataUrl);
     const typed = type && blob.type !== type ? blob.slice(0, blob.size, type) : blob; // keep the real mime
-    const out = await _t.uploadReq(fileId, typed, invoiceId);
-    setBackupState(fileId, { status: 'uploaded', size: out.size, error: null });
+    if (!sameSession()) return { ok: false, cancelled: true, error: 'Account changed — upload cancelled' };
+    const out = await _t.uploadReq(fileId, typed, invoiceId, token0);
+    if (!sameSession()) return { ok: false, cancelled: true, error: 'Account changed — upload cancelled' };
+    setBackupState(fileId, { status: 'uploaded', size: out.size, error: null }, ws0);
     return { ok: true, size: out.size };
   } catch (err) {
-    setBackupState(fileId, { status: 'failed', error: err.message || 'Upload failed' });
+    if (sameSession()) setBackupState(fileId, { status: 'failed', error: err.message || 'Upload failed' }, ws0);
     return { ok: false, error: err.message || 'Upload failed' };
   }
 }
