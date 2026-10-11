@@ -103,7 +103,19 @@ function entitlementPatchFor(event, current = DEFAULT, now = Date.now()) {
   switch (event.type) {
     case 'purchased':
     case 'renewed':
-    case 'resumed':
+    case 'resumed': {
+      // Audit B1 (round 2): Stripe `created` is second-resolution and webhook delivery order is NOT guaranteed,
+      // so a grant (renew/resume) that shares its second with a terminal deny (ended → 'cancelled', or
+      // payment_failed → 'past_due') must not silently reactivate access on ambiguous ordering. Only a grant
+      // STRICTLY newer than the event that denied access may reactivate; a tie (equal timestamp) keeps the
+      // denied state — fail-safe, and a genuinely later renewal (a newer second) still restores access. Events
+      // with no timestamp (the manual webhook) keep prior behaviour.
+      const denied = current.status === 'cancelled' || current.status === 'past_due';
+      const notStrictlyNewer = event.eventCreatedMs != null && current.lastEventAt != null
+        && event.eventCreatedMs <= current.lastEventAt;
+      if (denied && notStrictlyNewer) {
+        return { ...map, status: current.status }; // keep denied; still merge mapping + ordering stamps
+      }
       return {
         ...map,
         status: 'active',
@@ -113,6 +125,7 @@ function entitlementPatchFor(event, current = DEFAULT, now = Date.now()) {
         currentPeriodEnd: event.currentPeriodEnd != null ? event.currentPeriodEnd : current.currentPeriodEnd,
         cancelledAt: null,
       };
+    }
     case 'payment_failed':
       return { ...map, status: 'past_due' };
     case 'cancelled':

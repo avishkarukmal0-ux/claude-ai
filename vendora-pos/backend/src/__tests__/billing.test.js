@@ -193,4 +193,35 @@ describe('entitlementPatchFor — maps identifiers + stamps the ordering guard',
     expect(p.currentPeriodEnd).toBe(2000);
     expect(p.itemId).toBe(null); // add-on removed
   });
+
+  describe('B1 round 2 — a same-second grant must NOT reactivate a terminal deny (ambiguous order = fail-safe)', () => {
+    const endedState = { ...ent.DEFAULT, status: 'cancelled', currentPeriodEnd: 200, lastEventAt: 200, lastEventId: 'e-end' };
+    test('renewed at the SAME second as the ending keeps access DENIED', () => {
+      const p = ent.entitlementPatchFor({ type: 'renewed', currentPeriodEnd: 200, eventId: 'e-renew', eventCreatedMs: 200 }, endedState, 5000);
+      expect(p.status).toBe('cancelled'); // not reactivated
+      expect(p.lastEventId).toBe('e-renew'); // but the mapping/ordering stamp still updates
+    });
+    test('resumed at an EARLIER second than the ending stays DENIED', () => {
+      const p = ent.entitlementPatchFor({ type: 'resumed', eventId: 'e-res', eventCreatedMs: 150 }, endedState, 5000);
+      expect(p.status).toBe('cancelled');
+    });
+    test('a genuinely NEWER renewal (later second) DOES reactivate', () => {
+      const p = ent.entitlementPatchFor({ type: 'renewed', currentPeriodEnd: 999, eventId: 'e-new', eventCreatedMs: 300 }, endedState, 5000);
+      expect(p.status).toBe('active');
+      expect(p.currentPeriodEnd).toBe(999);
+    });
+    test('past_due (payment_failed) is also not reactivated by a same-second grant', () => {
+      const pastDue = { ...ent.DEFAULT, status: 'past_due', lastEventAt: 200, lastEventId: 'e-fail' };
+      const p = ent.entitlementPatchFor({ type: 'renewed', eventId: 'e-r', eventCreatedMs: 200 }, pastDue, 5000);
+      expect(p.status).toBe('past_due');
+    });
+    test('a first purchase (no prior event) still grants', () => {
+      const p = ent.entitlementPatchFor({ type: 'purchased', currentPeriodEnd: 10, eventId: 'e0', eventCreatedMs: 100 }, ent.DEFAULT, 5000);
+      expect(p.status).toBe('active');
+    });
+    test('no-timestamp (manual) grant keeps prior behaviour and reactivates', () => {
+      const p = ent.entitlementPatchFor({ type: 'renewed', currentPeriodEnd: 200 }, endedState, 5000);
+      expect(p.status).toBe('active');
+    });
+  });
 });
