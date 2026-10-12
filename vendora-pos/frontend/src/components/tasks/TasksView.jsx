@@ -58,9 +58,9 @@ export default function TasksView({ onBack }) {
 
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-base font-bold text-gray-900">Team tasks</h2>
-        <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-xs">
+        <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-xs" role="group" aria-label="View as">
           {['owner', 'staff'].map((r) => (
-            <button key={r} type="button" onClick={() => switchRole(r)} className={`px-2.5 py-1 font-semibold capitalize ${role === r ? 'bg-primary text-white' : 'bg-white text-gray-500'}`}>{r}</button>
+            <button key={r} type="button" onClick={() => switchRole(r)} aria-pressed={role === r} className={`inline-flex min-h-[44px] items-center px-4 font-semibold capitalize ${role === r ? 'bg-primary text-white' : 'bg-white text-gray-500'}`}>{r}</button>
           ))}
         </div>
       </div>

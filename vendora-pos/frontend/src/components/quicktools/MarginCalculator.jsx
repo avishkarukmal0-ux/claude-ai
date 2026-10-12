@@ -8,11 +8,17 @@ export default function MarginCalculator() {
 
   const c = parseFloat(cost);
   const p = parseFloat(price);
+  // Margin is a share of the SELL price, so we need a sell price > 0 to compute anything. Flag the
+  // zero/empty case explicitly so we can tell the user what's missing instead of just showing dashes.
+  const needSell = price.trim() === '' || !(p > 0);
   const valid = Number.isFinite(c) && Number.isFinite(p) && p > 0;
 
   const profit = valid ? p - c : null;
   const margin = valid ? ((p - c) / p) * 100 : null;   // % of sell price
   const markup = valid && c > 0 ? ((p - c) / c) * 100 : null; // % of cost
+
+  // £ with the sign OUTSIDE the symbol: a loss reads -£0.20, not £-0.20.
+  const money = (v) => (v < 0 ? `-£${Math.abs(v).toFixed(2)}` : `£${v.toFixed(2)}`);
 
   return (
     <div>
@@ -26,14 +32,18 @@ export default function MarginCalculator() {
       </div>
 
       <div className="mt-5 grid grid-cols-3 gap-2">
-        <Stat label="Profit" value={profit === null ? '—' : `£${profit.toFixed(2)}`} tone={profit !== null && profit < 0 ? 'bad' : 'good'} />
+        <Stat label="Profit" value={profit === null ? '—' : money(profit)} tone={profit !== null && profit < 0 ? 'bad' : 'good'} />
         <Stat label="Margin" value={margin === null ? '—' : `${margin.toFixed(1)}%`} tone={margin !== null && margin < 0 ? 'bad' : 'good'} />
         <Stat label="Markup" value={markup === null ? '—' : `${markup.toFixed(1)}%`} />
       </div>
 
+      {needSell && (
+        <p className="mt-3 text-center text-sm font-medium text-gray-500">Enter a sell price to see the margin.</p>
+      )}
+
       {profit !== null && profit < 0 && (
         <div className="mt-3 rounded-xl bg-danger-light p-3 text-sm font-medium text-danger-dark">
-          You’d be selling below cost — losing £{Math.abs(profit).toFixed(2)} per unit.
+          You’d be selling below cost — losing {money(profit).replace('-', '')} per unit.
         </div>
       )}
 

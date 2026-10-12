@@ -61,7 +61,7 @@ export default function WorkerBoard({ onBack }) {
                   {info.daysLeft < 0 ? `${Math.abs(info.daysLeft)}d over` : `in ${info.daysLeft}d`}{info.mustPull ? ' · pull now' : ''}
                 </span>
               </span>
-              <button type="button" onClick={() => flag('markdown', p.name)} aria-label={`Flag ${p.name} to mark down`} className="shrink-0 rounded-lg bg-warning-light px-2.5 py-1.5 text-xs font-semibold text-warning-dark active:scale-95">
+              <button type="button" onClick={() => flag('markdown', p.name)} aria-label={`Flag ${p.name} to mark down`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-warning-light px-3 text-xs font-semibold text-warning-dark active:scale-95">
                 <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Mark down
               </button>
             </li>
@@ -81,7 +81,7 @@ export default function WorkerBoard({ onBack }) {
                 <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
                 <span className="block text-xs text-gray-500">{Number(p.qty) || 0} left</span>
               </span>
-              <button type="button" onClick={() => flag('stock', p.name)} aria-label={`Flag ${p.name} to restock`} className="shrink-0 rounded-lg bg-primary-50 px-2.5 py-1.5 text-xs font-semibold text-primary active:scale-95">
+              <button type="button" onClick={() => flag('stock', p.name)} aria-label={`Flag ${p.name} to restock`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95">
                 <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Stock this
               </button>
             </li>

@@ -12,6 +12,7 @@ export default function VpdCalculator() {
 
   const v = parseFloat(ml);
   const p = parseFloat(price);
+  const needSize = ml.trim() === '' || !(v > 0);
   const valid = Number.isFinite(v) && v > 0;
   const duty = valid ? DUTY_PER_ML * v : null;
   const dutyIncVat = duty == null ? null : duty * (1 + VAT);
@@ -30,11 +31,15 @@ export default function VpdCalculator() {
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Current price £ (optional)</span>
+          <span className="mb-1 block text-xs font-medium text-gray-500">Current price £ incl. VAT (optional)</span>
           <input type="number" inputMode="decimal" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 3.99"
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
         </label>
       </div>
+
+      {needSize && (
+        <p className="mt-4 text-center text-sm font-medium text-gray-500">Enter the bottle size (ml) to see the duty.</p>
+      )}
 
       {duty != null && (
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -45,6 +50,7 @@ export default function VpdCalculator() {
       {newPrice != null && (
         <div className="mt-3 rounded-xl bg-primary-50 p-3 text-center text-sm font-semibold text-primary-700">
           Suggested new price ≈ £{newPrice.toFixed(2)}
+          <span className="mt-0.5 block text-xs font-normal text-primary-700/80">Your price + duty + VAT only — your margin isn’t added.</span>
         </div>
       )}
 

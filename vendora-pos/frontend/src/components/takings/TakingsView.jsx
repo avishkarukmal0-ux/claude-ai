@@ -70,9 +70,12 @@ export default function TakingsView({ onBack }) {
           </div>
         )}
 
-        <button type="button" disabled={!canSave} onClick={() => saveDay(f)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-3 text-sm font-semibold text-white disabled:opacity-40">
+        <button type="button" disabled={!canSave} onClick={() => saveDay(f)} aria-describedby={!canSave ? 'save-hint' : undefined} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-3 text-sm font-semibold text-white disabled:opacity-40">
           <Check className="h-4 w-4" /> Save today
         </button>
+        {!canSave && (
+          <p id="save-hint" className="mt-2 text-center text-xs text-gray-400">Enter today’s card or cash takings to save.</p>
+        )}
       </div>
 
       {/* History */}

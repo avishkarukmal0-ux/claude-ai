@@ -440,10 +440,32 @@ function _purgedSinceSnapshot(key) {
  *     so this only ever fills gaps — it never overwrites newer on-device data.
  * Non-destructive throughout. Returns { ran, seeded, restored }.
  */
+/**
+ * Ask the browser to make on-device storage PERSISTENT so it is not evicted under storage pressure.
+ * Best-effort and idempotent: if the API is missing, or persistence is already granted, it does nothing.
+ * We call this once on boot (and the UI may call it again right after the first install) because, until the
+ * shop backs up, the data here is their ONLY copy — losing it to transient-storage eviction would be data
+ * loss. On an installed PWA most browsers grant this without a prompt. Returns { ok, already?, reason? }.
+ */
+export async function requestPersistentStorage() {
+  try {
+    const s = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (!s || typeof s.persist !== 'function' || typeof s.persisted !== 'function') {
+      return { ok: false, reason: 'unsupported' };
+    }
+    if (await s.persisted()) return { ok: true, already: true };
+    const granted = await s.persist();
+    return { ok: !!granted };
+  } catch { return { ok: false, reason: 'error' }; }
+}
+
 export function initStorage() {
   if (_initPromise) return _initPromise;
   _initPromise = (async () => {
     if (!durableOn()) return { ran: false, seeded: 0, restored: 0 };
+    // Durable storage is in use → ask the browser to keep it (fire-and-forget; never blocks boot). Data here
+    // is the shop's only copy until they back up, so we don't want it evicted under storage pressure.
+    requestPersistentStorage();
     // Mark the recovery active BEFORE the snapshot read so a purge during the (possibly slow) read is recorded.
     _initActive = true;
     _purgedDuringInit.clear();

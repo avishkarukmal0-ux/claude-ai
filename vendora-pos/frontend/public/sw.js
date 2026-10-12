@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v14';
+const CACHE_VERSION = 'vendora-v15';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -75,6 +75,10 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // Delete every cache that isn't part of THIS version — the previous version's shell AND its runtime cache
+  // (the accumulated stale-while-revalidate bundle of now-dead hashed JS/CSS). Because the runtime cache name
+  // is version-scoped, bumping CACHE_VERSION makes this purge the old runtime bundles instead of letting them
+  // pile up across deploys. Only `${CACHE_VERSION}-shell` and `${CACHE_VERSION}-runtime` survive.
   event.waitUntil(
     caches.keys()
       .then((keys) =>

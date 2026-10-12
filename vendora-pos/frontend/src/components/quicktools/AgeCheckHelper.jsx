@@ -25,10 +25,14 @@ export default function AgeCheckHelper() {
 
   const [dob, setDob] = useState('');
   const dobDate = dob ? new Date(dob) : null;
-  const valid = dobDate && !Number.isNaN(dobDate.getTime());
-  const age = valid ? ageOn(dobDate) : null;
-  const ok = age !== null && age >= MIN_AGE;
-  const challenge = age !== null && age < 25; // Challenge 25: under 25 → ask for ID
+  const parsed = dobDate && !Number.isNaN(dobDate.getTime());
+  // Guard the value here, not just with the picker's `max` — a date can still be typed or pasted.
+  // A future DOB is invalid (never show a negative age); an age over 110 is almost certainly a typo.
+  const future = parsed && dobDate > today;
+  const age = parsed && !future ? ageOn(dobDate) : null;
+  const tooOld = age !== null && age > 110;
+  const ok = age !== null && !tooOld && age >= MIN_AGE;
+  const challenge = ok && age < 25; // Challenge 25: under 25 → ask for ID
 
   return (
     <div>
@@ -55,13 +59,25 @@ export default function AgeCheckHelper() {
         />
       </label>
 
-      {valid && (
+      {future && (
+        <div className="mt-4 rounded-xl bg-danger-light p-4 text-base font-bold text-danger-dark">
+          <span className="flex items-center gap-2"><XCircle className="h-5 w-5" /> Invalid date — that’s in the future.</span>
+        </div>
+      )}
+
+      {tooOld && (
+        <div className="mt-4 rounded-xl bg-warning-light p-4 text-base font-bold text-warning-dark">
+          <span className="flex items-center gap-2"><XCircle className="h-5 w-5" /> Check this date — that’s over 110 years ago.</span>
+        </div>
+      )}
+
+      {age !== null && !tooOld && (
         <div className={`mt-4 rounded-xl p-4 ${ok ? 'bg-success-light' : 'bg-danger-light'}`}>
           <div className={`flex items-center gap-2 text-base font-bold ${ok ? 'text-success-dark' : 'text-danger-dark'}`}>
             {ok ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
             {ok ? `OK — ${age} years old` : `Under age — ${age} years old`}
           </div>
-          {ok && challenge && (
+          {challenge && (
             <div className="mt-1 text-sm font-medium text-warning-dark">
               Under 25 — ask for photo ID (Challenge 25).
             </div>

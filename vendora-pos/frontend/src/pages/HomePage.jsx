@@ -528,7 +528,7 @@ function MoreGroup({ title, children }) {
 
 function Row({ icon: Icon, label, sub, onClick, badge = 0, disabled = false }) {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99] disabled:opacity-60">
+    <button type="button" onClick={onClick} disabled={disabled} className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm active:scale-[0.99] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
       <Icon className="h-5 w-5 text-gray-400" />
       <span className="flex-1">
         <span className="block text-sm font-medium text-gray-900">{label}</span>
