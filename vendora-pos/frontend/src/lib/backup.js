@@ -87,6 +87,7 @@ const STORE_SHAPE = {
   invoices_v1: 'array', credit_notes_v1: 'array', markdowns_v1: 'array', trials_v1: 'array',
   temperature_log_v1: 'array', refusals_log_v1: 'array', business_profile_v1: 'object',
   refusals_signoff_v1: 'array', scale_checks_v1: 'array', food_registration_v1: 'object',
+  licence_log_v1: 'array', trading_permits_v1: 'object', animal_licence_v1: 'object', recall_log_v1: 'array',
 };
 function shapeOk(name, parsed) {
   const kind = STORE_SHAPE[name];

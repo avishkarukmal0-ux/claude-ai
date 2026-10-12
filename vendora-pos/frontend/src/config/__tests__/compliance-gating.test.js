@@ -43,6 +43,21 @@ describe('quick-tool gating — member + business profile', () => {
     expect(idsFor({ familyId: 'world-specialist' }, NOW)).toContain('food-registration');
   });
 
+  it('fresh-weighed gets traceability; world-specialist gets import/health/supplement tools', () => {
+    expect(idsFor({ familyId: 'fresh-weighed' }, NOW)).toContain('traceability');
+    const w = idsFor({ familyId: 'world-specialist' }, NOW);
+    expect(w).toEqual(expect.arrayContaining(['import-label', 'health-claim', 'supplement-check']));
+    expect(idsFor({ familyId: 'grocery-age' }, NOW)).not.toContain('import-label');
+  });
+
+  it('mobile-value gets trading permits + recall log; animal/vet-med only when selling live animals', () => {
+    const base = idsFor({ familyId: 'mobile-value' }, NOW);
+    expect(base).toEqual(expect.arrayContaining(['trading-permits', 'recall-log']));
+    expect(base).not.toContain('animal-licence');
+    const pet = idsFor({ familyId: 'mobile-value', memberId: 'pet-shop', profile: { sellsAnimals: true } }, NOW);
+    expect(pet).toEqual(expect.arrayContaining(['animal-licence', 'vet-meds']));
+  });
+
   it('age-restricted shops get the refusals log and vape product check', () => {
     const g = idsFor({ familyId: 'grocery-age' }, NOW);
     expect(g).toContain('refusals-log');

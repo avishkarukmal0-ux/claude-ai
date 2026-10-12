@@ -60,6 +60,10 @@ export const STORE_NAMES = [
   'refusals_signoff_v1',
   'scale_checks_v1',
   'food_registration_v1',
+  'licence_log_v1',
+  'trading_permits_v1',
+  'animal_licence_v1',
+  'recall_log_v1',
 ];
 // Large binary-ish stores kept on-device only (NOT synced or backed up through STORE_NAMES): raw invoice
 // files (photos/PDFs) can be multi-MB, so only their metadata (in invoices_v1) syncs. See invoiceStore.js.

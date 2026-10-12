@@ -5,7 +5,7 @@
 //   • hideForMembers — hidden for specific shop-type members (e.g. MUP makes no sense for a vape-only shop)
 //   • gate(ctx, now)  — a predicate over { familyId, memberId, profile } for rules that depend on the business
 //                       profile (MTD only for a qualifying sole trader; MUP only in Scotland/Wales).
-import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud, ShieldX, Thermometer, Tags, PackageCheck, Scale, BadgeCheck } from 'lucide-react';
+import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud, ShieldX, Thermometer, Tags, PackageCheck, Scale, BadgeCheck, Beef, Globe2, HeartPulse, Pill, MapPin, PawPrint, Syringe, AlertOctagon } from 'lucide-react';
 import MtdCountdown from '../components/quicktools/MtdCountdown';
 import MarginCalculator from '../components/quicktools/MarginCalculator';
 import AgeCheckHelper from '../components/quicktools/AgeCheckHelper';
@@ -18,8 +18,18 @@ import TemperatureLogTool from '../components/quicktools/TemperatureLogTool';
 import PpdsLabelTool from '../components/quicktools/PpdsLabelTool';
 import WeighLabelTool from '../components/quicktools/WeighLabelTool';
 import FoodRegistrationTool from '../components/quicktools/FoodRegistrationTool';
+import TraceabilityTool from '../components/quicktools/TraceabilityTool';
+import ImportLabelCheck from '../components/quicktools/ImportLabelCheck';
+import HealthClaimCheck from '../components/quicktools/HealthClaimCheck';
+import SupplementCheck from '../components/quicktools/SupplementCheck';
+import TradingPermitsTool from '../components/quicktools/TradingPermitsTool';
+import AnimalLicenceTool from '../components/quicktools/AnimalLicenceTool';
+import VetMedCheck from '../components/quicktools/VetMedCheck';
+import RecallLogTool from '../components/quicktools/RecallLogTool';
 import { getFamily } from './shopTypes';
 import { mtdApplies } from '../lib/businessProfile';
+
+const sellsAnimals = (ctx) => ctx.profile?.sellsAnimals === true;
 
 export const QUICK_TOOLS = {
   'mtd-countdown': {
@@ -126,6 +136,41 @@ export const QUICK_TOOLS = {
     component: FoodRegistrationTool,
     requiresModule: 'allergens', // fresh-weighed + world-specialist
   },
+  // --- Fresh & weighed: traceability ---
+  'traceability': {
+    id: 'traceability', label: 'Traceability', tagline: 'Origin card & licence log',
+    icon: Beef, component: TraceabilityTool, requiresModule: 'scale-labels',
+  },
+  // --- World & specialist ---
+  'import-label': {
+    id: 'import-label', label: 'Import label check', tagline: 'Importer address, origin, allergens',
+    icon: Globe2, component: ImportLabelCheck, families: ['world-specialist'],
+  },
+  'health-claim': {
+    id: 'health-claim', label: 'Health-claim check', tagline: 'Flag unauthorised claims',
+    icon: HeartPulse, component: HealthClaimCheck, families: ['world-specialist'],
+  },
+  'supplement-check': {
+    id: 'supplement-check', label: 'Supplement check', tagline: 'Label + novel-food checklist',
+    icon: Pill, component: SupplementCheck, families: ['world-specialist'],
+  },
+  // --- Mobile & value ---
+  'trading-permits': {
+    id: 'trading-permits', label: 'Trading permits', tagline: 'Consent, pitch & insurance',
+    icon: MapPin, component: TradingPermitsTool, families: ['mobile-value'],
+  },
+  'recall-log': {
+    id: 'recall-log', label: 'Recall log', tagline: 'Safety alerts you acted on',
+    icon: AlertOctagon, component: RecallLogTool, families: ['mobile-value'],
+  },
+  'animal-licence': {
+    id: 'animal-licence', label: 'Animal licence', tagline: 'Pet-selling licence & rules',
+    icon: PawPrint, component: AnimalLicenceTool, families: ['mobile-value'], gate: sellsAnimals,
+  },
+  'vet-meds': {
+    id: 'vet-meds', label: 'Vet medicines', tagline: 'AVM-GSL / NFA-VPS / POM-VPS',
+    icon: Syringe, component: VetMedCheck, families: ['mobile-value'], gate: sellsAnimals,
+  },
 };
 
 /**
@@ -138,9 +183,14 @@ export function getQuickToolsForShop(shop = {}, now = new Date()) {
   const famModules = fam?.moduleIds || [];
   const ctx = { familyId, memberId, profile };
   return Object.values(QUICK_TOOLS).filter((t) => {
-    // Eligible by module: universal, no module requirement (a gate decides instead), or the family has it.
-    const moduleOk = t.universal || !t.requiresModule || famModules.includes(t.requiresModule);
-    if (!moduleOk) return false;
+    // Eligible by: universal; an explicit family list; a required module the family has; or no constraint at
+    // all (a `gate` decides, e.g. the MTD tool).
+    let eligible;
+    if (t.universal) eligible = true;
+    else if (t.families) eligible = t.families.includes(familyId);
+    else if (t.requiresModule) eligible = famModules.includes(t.requiresModule);
+    else eligible = true;
+    if (!eligible) return false;
     if (memberId && t.hideForMembers && t.hideForMembers.includes(memberId)) return false;
     if (t.gate && !t.gate(ctx, now)) return false;
     return true;
