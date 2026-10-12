@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   ListChecks, ScanLine, Package2, ShoppingCart, MoreHorizontal,
@@ -83,6 +83,7 @@ export default function HomePage() {
   try { ensureSignedOutSampleMode({ loggedIn: isLoggedIn(), accountsEnabled: ACCOUNTS_ENABLED }); } catch { /* ignore */ }
   const saved = getSavedShopType();
   const navigate = useNavigate();
+  const location = useLocation();
   const { role, loggedIn } = useSession(); // 'owner' for guest/accounts-off; 'manager'/'staff' for signed-in members
   const isStaff = role === 'staff';
   const syncState = useSyncStatus();
@@ -103,8 +104,16 @@ export default function HomePage() {
     } catch { return 'today'; }
   });
   const [screen, setScreen] = useState(null); // full-page workflow screen
+  // Tabs are driven by the URL (?tab=) so the browser Back button moves between tabs and each tab is a real
+  // history entry + a bookmarkable/shortcutable link. The bottom nav uses <Link> (anchors) with aria-current;
+  // this effect syncs the active tab when the URL changes (Back/Forward, a shortcut, or a programmatic go()).
+  useEffect(() => {
+    const t = new URLSearchParams(location.search).get('tab');
+    if (['today', 'scan', 'stock', 'buy', 'more'].includes(t)) { setTab(t); setScreen(null); }
+  }, [location.search]);
   const [activeTool, setActiveTool] = useState(null);
   const [toolsExpanded, setToolsExpanded] = useState(false); // Quick tools: carousel ⇄ full grid ("See all")
+  const [buyExpanded, setBuyExpanded] = useState(false); // Buy hub: top destinations vs "All buying tools"
   // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.
   const toolDialogRef = useDialog(!!activeTool, () => setActiveTool(null));
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
@@ -114,7 +123,9 @@ export default function HomePage() {
 
   function go(target) {
     if (!target) return;
-    if (target.tab) { setScreen(null); setTab(target.tab); }
+    // A tab change becomes a real history entry (Back returns to the previous tab); the location effect then
+    // syncs `tab` + clears any open screen. A screen is a sub-state of the current tab (no URL change).
+    if (target.tab) { setScreen(null); navigate(`/home?tab=${target.tab}`); }
     else if (target.screen) setScreen(target.screen);
   }
   function dismissPromises() { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* ignore */ } setShowPromises(false); }
@@ -178,6 +189,9 @@ export default function HomePage() {
   // More → Data so the owner has an explicit, guided way to reconcile — never a silent clear.
   const creditRecoveryCount = listRecovery().filter((g) => String(g.opKey).indexOf('creditnote:') === 0).length;
   const ToolComponent = activeTool?.component || null;
+  // One sr-only <h1> per view, reflecting the open screen or the active tab (a11y — the page was heading-less).
+  const TAB_TITLES = { today: 'Today', scan: 'Scan & check', stock: 'Stock', buy: 'Buy & suppliers', more: 'More' };
+  const pageTitle = screen ? screen.replace(/-/g, ' ') : (TAB_TITLES[tab] || 'Home');
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -206,7 +220,7 @@ export default function HomePage() {
             <circle cx="24" cy="15" r="4.5" fill="white" />
           </svg>
         </span>
-        <h1 className="sr-only">Vendora — {shopLabel} home</h1>
+        <h1 className="sr-only">Vendora — {pageTitle} — {shopLabel}</h1>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-gray-900">{shopLabel}</div>
           <div className="text-xs text-gray-400">Your Vendora</div>
@@ -253,7 +267,7 @@ export default function HomePage() {
         {screen === 'suggestions' && <SuggestionsInbox onBack={() => setScreen(null)} />}
         {screen === 'suppliers' && <SuppliersView onBack={() => setScreen(null)} familyId={saved.familyId} />}
         {screen === 'takings' && canSeeScreen(role, 'takings') && <TakingsView onBack={() => setScreen(null)} />}
-        {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => { setScreen(null); setTab('stock'); }} />}
+        {screen === 'import' && <ImportView onBack={() => setScreen(null)} onDone={() => go({ tab: 'stock' })} />}
         {screen === 'requests' && <RequestsView onBack={() => setScreen(null)} />}
         {screen === 'outcomes' && canSeeScreen(role, 'outcomes') && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
@@ -270,7 +284,7 @@ export default function HomePage() {
         {screen === 'cloud-backups' && !isStaff && <CloudBackups onBack={() => setScreen(null)} />}
         {screen === 'support' && <SupportView onBack={() => setScreen(null)} />}
         {screen === 'overview' && canSeeScreen(role, 'overview') && (
-          <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') { setScreen(null); setTab('stock'); } else setScreen(t); }} />
+          <OverviewView onBack={() => setScreen(null)} onOpen={(t) => { if (t === 'stock') go({ tab: 'stock' }); else setScreen(t); }} />
         )}
 
         {/* ── TODAY ── */}
@@ -279,6 +293,23 @@ export default function HomePage() {
             <FirstRunCard onGo={go} />
             <TodayActions onGo={go} />
             <TodayAtShop familyId={saved.familyId} />
+
+            {/* Backup nudge: shop data is on THIS device only until exported. Surface "No backup yet" on Today
+                until the first export (then lastBackupAt is set and this disappears). Not shown in demo/sample. */}
+            {!demo && !lastBackupAt && (
+              <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><Download className="h-5 w-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-amber-900">No backup yet</p>
+                    <p className="mt-0.5 text-xs text-amber-800">Your shop data is saved on this device only. Export a backup you can restore if you lose or change your phone.</p>
+                    <button type="button" disabled={exporting} onClick={onExport} className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-amber-900 px-3 text-sm font-semibold text-amber-50 active:scale-[0.99] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 focus-visible:ring-offset-2">
+                      <Download className="h-4 w-4" /> {exporting ? 'Saving…' : 'Back up now'}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {showPromises && family.promises?.length > 0 && (
               <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -346,23 +377,39 @@ export default function HomePage() {
           </>
         )}
 
-        {/* ── BUY (hub) ── */}
+        {/* ── BUY (hub) — top destinations up front; the long tail collapses under "All buying tools" so the
+               routine jobs (what to order, track orders, suppliers) aren't buried in a 14-tile wall. ── */}
         {!screen && tab === 'buy' && (
           <Hub title="Buy & suppliers" subtitle="What to order, track orders, and recover credit.">
             {!isStaff && <HubTile icon={Route} accent={accent} label="Buying journey" desc="Order → delivery → invoice → claim → credit" onClick={() => setScreen('journey')} />}
             <HubTile icon={ShoppingCart} accent={accent} label="Buy list" desc="Low stock → cash-&-carry list" onClick={() => setScreen('reorder')} />
             <HubTile icon={Truck} accent={accent} label="Orders" desc="Track what you’ve ordered" onClick={() => setScreen('orders')} />
             <HubTile icon={Building2} accent={accent} label="Suppliers" desc="Your regular buying places" onClick={() => setScreen('suppliers')} />
-            {INVOICES_ENABLED && !isStaff && <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />}
-            {!isStaff && <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />}
-            {INVOICES_ENABLED && !isStaff && <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />}
-            {!isStaff && <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />}
-            {INVOICES_ENABLED && !isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
-            {!isStaff && <HubTile icon={Scale} accent={accent} label="Compare suppliers" desc="Unit costs & reliability" onClick={() => setScreen('supplier-insights')} />}
-            {!isStaff && <HubTile icon={CalClock} accent={accent} label="Payments due" desc="Bills, due dates & expected credits" onClick={() => setScreen('payments')} />}
-            {INSIGHTS_ENABLED && !isStaff && <HubTile icon={Globe2} accent={accent} label="Neighbourhood Insights" desc="Area profile & product trials (add-on)" onClick={() => setScreen('insights')} />}
-            {NEIGHBOURHOOD_ENABLED && !isStaff && <HubTile icon={Globe2} accent={accent} label="Your area" desc="Official neighbourhood figures" onClick={() => setScreen('area')} />}
-            <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
+
+            {buyExpanded && (
+              <>
+                {INVOICES_ENABLED && !isStaff && <HubTile icon={FileSpreadsheet} accent={accent} label="Supplier invoices" desc="Capture & check vs delivery" onClick={() => setScreen('invoices')} />}
+                {!isStaff && <HubTile icon={Receipt} accent={accent} label="Supplier claims" desc="Recover credit for bad goods" onClick={() => setScreen('claims')} />}
+                {INVOICES_ENABLED && !isStaff && <HubTile icon={Coins} accent={accent} label="Credit notes" desc="Match supplier credits to claims" onClick={() => setScreen('credit-notes')} />}
+                {!isStaff && <HubTile icon={BadgePercent} accent={accent} label="Price changes" desc="Cost moved? Review the margin" onClick={() => setScreen('price-alerts')} />}
+                {INVOICES_ENABLED && !isStaff && <HubTile icon={TrendingUp} accent={accent} label="Price history" desc="Confirmed costs from invoices" onClick={() => setScreen('price-history')} />}
+                {!isStaff && <HubTile icon={Scale} accent={accent} label="Compare suppliers" desc="Unit costs & reliability" onClick={() => setScreen('supplier-insights')} />}
+                {!isStaff && <HubTile icon={CalClock} accent={accent} label="Payments due" desc="Bills, due dates & expected credits" onClick={() => setScreen('payments')} />}
+                {INSIGHTS_ENABLED && !isStaff && <HubTile icon={Globe2} accent={accent} label="Neighbourhood Insights" desc="Area profile & product trials (add-on)" onClick={() => setScreen('insights')} />}
+                {NEIGHBOURHOOD_ENABLED && !isStaff && <HubTile icon={Globe2} accent={accent} label="Your area" desc="Official neighbourhood figures" onClick={() => setScreen('area')} />}
+                <HubTile icon={MessageSquarePlus} accent={accent} label="Customer requests" desc="What shoppers ask for" onClick={() => setScreen('requests')} />
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setBuyExpanded((v) => !v)}
+              aria-expanded={buyExpanded}
+              className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-2xl border border-dashed border-gray-300 bg-white px-4 text-sm font-semibold text-primary active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              {buyExpanded ? 'Show fewer' : 'All buying tools'}
+              <ChevronRight className={`h-4 w-4 transition-transform ${buyExpanded ? 'rotate-90' : ''}`} />
+            </button>
           </Hub>
         )}
 
@@ -414,12 +461,12 @@ export default function HomePage() {
         </ErrorBoundary>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <NavTab label="Today" icon={ListChecks} active={!screen && tab === 'today'} onClick={() => go({ tab: 'today' })} accent={accent} />
-        <NavTab label="Scan" icon={ScanLine} active={!screen && tab === 'scan'} onClick={() => go({ tab: 'scan' })} accent={accent} />
-        <NavTab label="Stock" icon={Package2} active={!screen && tab === 'stock'} onClick={() => go({ tab: 'stock' })} accent={accent} />
-        <NavTab label="Buy" icon={ShoppingCart} active={!screen && tab === 'buy'} onClick={() => go({ tab: 'buy' })} accent={accent} />
-        <NavTab label="More" icon={MoreHorizontal} active={!screen && tab === 'more'} onClick={() => go({ tab: 'more' })} accent={accent} badge={taskExceptions + suggestionCount} />
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <NavTab label="Today" icon={ListChecks} to="/home?tab=today" active={!screen && tab === 'today'} onSelect={() => setScreen(null)} accent={accent} />
+        <NavTab label="Scan" icon={ScanLine} to="/home?tab=scan" active={!screen && tab === 'scan'} onSelect={() => setScreen(null)} accent={accent} />
+        <NavTab label="Stock" icon={Package2} to="/home?tab=stock" active={!screen && tab === 'stock'} onSelect={() => setScreen(null)} accent={accent} />
+        <NavTab label="Buy" icon={ShoppingCart} to="/home?tab=buy" active={!screen && tab === 'buy'} onSelect={() => setScreen(null)} accent={accent} />
+        <NavTab label="More" icon={MoreHorizontal} to="/home?tab=more" active={!screen && tab === 'more'} onSelect={() => setScreen(null)} accent={accent} badge={taskExceptions + suggestionCount} />
       </nav>
 
       {activeTool && (
@@ -464,8 +511,8 @@ function HubTile({ icon: Icon, label, desc, onClick, accent }) {
 
 function Chip({ icon: Icon, label, onClick }) {
   return (
-    <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 active:scale-95">
-      <Icon className="h-3.5 w-3.5 text-gray-400" /> {label}
+    <button type="button" onClick={onClick} className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3.5 text-xs font-semibold text-gray-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+      <Icon className="h-4 w-4 text-gray-400" /> {label}
     </button>
   );
 }
@@ -503,12 +550,14 @@ function RowLink({ to, icon: Icon, label }) {
   );
 }
 
-function NavTab({ label, icon: Icon, active, onClick, accent, badge = 0 }) {
+// Bottom-nav item: a real anchor (<Link>) so it's a navigable link with history, not a button. aria-current
+// marks the active tab for assistive tech. onSelect clears any open workflow screen on tap (incl. same-tab).
+function NavTab({ label, icon: Icon, to, active, onSelect, accent, badge = 0 }) {
   return (
-    <button type="button" onClick={onClick} className="relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium" style={{ color: active ? accent : '#4b5563' }} aria-current={active ? 'page' : undefined}>
+    <Link to={to} onClick={onSelect} aria-current={active ? 'page' : undefined} className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset" style={{ color: active ? accent : '#4b5563' }}>
       {badge > 0 && <span className="absolute right-1/2 top-1 translate-x-3 rounded-full bg-danger px-1 text-[9px] font-bold text-white">{badge > 9 ? '9+' : badge}</span>}
       <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} />
       {label}
-    </button>
+    </Link>
   );
 }

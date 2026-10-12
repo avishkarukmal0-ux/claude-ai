@@ -76,24 +76,24 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
         </div>
         <div className="flex items-center gap-2">
           {dupCount > 0 && (
-            <button type="button" onClick={() => setMerging(true)} className="flex h-9 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2 text-xs font-semibold text-amber-700 active:scale-95" aria-label="Merge duplicate products">
+            <button type="button" onClick={() => setMerging(true)} className="flex h-11 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Merge duplicate products">
               <Merge className="h-4 w-4" /> {dupCount}
             </button>
           )}
           {onOpenImport && (
-            <button type="button" onClick={onOpenImport} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95" aria-label="Import products">
-              <Upload className="h-4 w-4" />
+            <button type="button" onClick={onOpenImport} className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Import products">
+              <Upload className="h-5 w-5" />
             </button>
           )}
           {onOpenSuppliers && (
-            <button type="button" onClick={onOpenSuppliers} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95" aria-label="Suppliers">
-              <Truck className="h-4 w-4" />
+            <button type="button" onClick={onOpenSuppliers} className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Suppliers">
+              <Truck className="h-5 w-5" />
             </button>
           )}
           <button
             type="button"
             onClick={() => setAdding((v) => !v)}
-            className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm active:scale-95"
+            className="flex min-h-[44px] items-center gap-1 rounded-xl bg-primary px-3 text-sm font-semibold text-white shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             <Plus className="h-4 w-4" /> Add
           </button>
@@ -131,8 +131,8 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
           {grouped.map(([cat, items]) => (
             <div key={cat}>
               <div className="mb-1.5 flex items-center gap-2 px-1">
-                <h3 className="text-[11px] font-bold uppercase tracking-wide text-gray-400">{cat}</h3>
-                <span className="text-[11px] text-gray-300">{items.length}</span>
+                <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">{cat}</h3>
+                <span className="text-xs text-gray-300">{items.length}</span>
               </div>
               <ul className="space-y-2">
                 {items.map((p) => (
@@ -159,12 +159,12 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
           <ProductThumb product={p} />
           <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
             {p.barcode && <span className="font-mono">{p.barcode}</span>}
             {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
-            {m != null && <span className={m < 0 ? 'text-danger' : 'text-success'}>{(m * 100).toFixed(0)}% margin</span>}
+            {m != null && <span className={m < 0 ? 'text-danger' : 'text-success-dark'}>{(m * 100).toFixed(0)}% margin</span>}
             {p.packSize > 1 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-1.5 py-0.5 text-xs font-semibold text-primary">
                 <Package2 className="h-3 w-3" /> Case of {p.packSize}
               </span>
             )}
@@ -175,37 +175,38 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
               <span className="text-gray-400">not counted</span>
             )}
           </div>
+          {/* Inline edits — each control is >= 44px tall and wraps to its own row on narrow phones (375px). */}
           {suppliers.length > 0 && (
             <select
               value={p.supplierId || ''}
               onChange={(e) => updateProduct(p.id, { supplierId: e.target.value || null })}
-              className="mt-1 max-w-[12rem] truncate rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+              className="mt-1.5 min-h-[44px] w-full max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary focus:outline-none"
               aria-label="Supplier"
             >
               <option value="">— supplier —</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           )}
-          <div className="mt-1 flex items-center gap-1">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={p.expiry || ''}
               onChange={(e) => updateProduct(p.id, { expiry: e.target.value || null })}
-              className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+              className="min-h-[44px] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary focus:outline-none"
               aria-label="Expiry date"
             />
             {p.expiry && (
               <select
                 value={p.dateType || 'best-before'}
                 onChange={(e) => updateProduct(p.id, { dateType: e.target.value })}
-                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600 focus:border-primary focus:outline-none"
+                className="min-h-[44px] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary focus:outline-none"
                 aria-label="Date type"
               >
                 {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             )}
             {(() => { const ei = expiryInfo(p); if (!ei || ei.status === 'ok') return null; return (
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ei.mustPull ? 'bg-danger text-white' : 'bg-warning-light text-warning-dark'}`}>
+              <span className={`rounded-full px-2 py-1 text-xs font-semibold ${ei.mustPull ? 'bg-danger text-white' : 'bg-warning-light text-warning-dark'}`}>
                 {ei.daysLeft < 0 ? (ei.mustPull ? 'PULL' : 'expired') : `${ei.daysLeft}d`}
               </span>
             ); })()}
@@ -213,28 +214,36 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button type="button" onClick={onHistory} className="p-2 text-gray-500 hover:text-primary" aria-label="Stock history">
-            <History className="h-4 w-4" />
+          <button type="button" onClick={onHistory} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Stock history">
+            <History className="h-5 w-5" />
           </button>
-          <button type="button" onClick={onEdit} className="p-2 text-gray-500 hover:text-primary" aria-label="Edit product">
-            <Pencil className="h-4 w-4" />
+          <button type="button" onClick={onEdit} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Edit product">
+            <Pencil className="h-5 w-5" />
           </button>
-          <button type="button" onClick={() => removeProduct(p.id)} className="p-2 text-gray-500 hover:text-danger" aria-label="Delete">
-            <Trash2 className="h-4 w-4" />
+          {/* Delete is separated from Edit (divider + extra gap) and CONFIRMS — it deletes the product and
+              can't be undone here, so it must not sit flush against Edit where a mis-tap is easy. */}
+          <span className="mx-1 h-6 w-px bg-gray-200" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => { if (window.confirm(`Delete “${p.name}”? This removes the product and its stock number. This can’t be undone here.`)) removeProduct(p.id); }}
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-danger-light hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+            aria-label={`Delete ${p.name}`}
+          >
+            <Trash2 className="h-5 w-5" />
           </button>
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
+        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
           {low ? 'Low stock' : 'In stock'}
         </span>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => updateProduct(p.id, { qty: Math.max(0, (Number(p.qty) || 0) - 1) })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
-            <Minus className="h-4 w-4" />
+          <button type="button" onClick={() => updateProduct(p.id, { qty: Math.max(0, (Number(p.qty) || 0) - 1) })} className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Decrease ${p.name}`}>
+            <Minus className="h-5 w-5" />
           </button>
           <span className="w-8 text-center text-base font-bold tabular-nums text-gray-900">{Number(p.qty) || 0}</span>
-          <button type="button" onClick={() => updateProduct(p.id, { qty: (Number(p.qty) || 0) + 1 })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label="Increase">
-            <Plus className="h-4 w-4" />
+          <button type="button" onClick={() => updateProduct(p.id, { qty: (Number(p.qty) || 0) + 1 })} className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Increase ${p.name}`}>
+            <Plus className="h-5 w-5" />
           </button>
         </div>
       </div>
