@@ -262,6 +262,11 @@ export default function WasteView({ onBack }) {
         <div className="mb-4 rounded-2xl border border-primary/20 bg-white p-3 shadow-sm">
           <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400"><BadgePercent className="h-3.5 w-3.5" /> Mark down</h3>
           <p className="mb-2 text-sm font-semibold text-gray-900">{md.row.product.name}</p>
+          {/* Tobacco & Vapes Act: a ban on discounting/free distribution of nicotine products is reported from
+              29 Oct 2026, but what "discounting" covers is unconfirmed — warn, don't block (ground rule 1). */}
+          {/\b(tobacco|vape|e-?liquid|e-?cig|nicotine|cigarette)\b/i.test(md.row.product.category || '') && (
+            <p className="mb-2 rounded-xl bg-warning-light p-2 text-xs text-warning-dark">Heads up: from 29 Oct 2026 discounting/free distribution of nicotine products may be restricted (reported — the detail is unconfirmed). Check before promoting tobacco/vape lines.</p>
+          )}
           <div className="mb-2 grid grid-cols-2 gap-2">
             <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">Qty
               <input value={md.qty} onChange={(e) => setMd((m) => ({ ...m, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-gray-900 focus:outline-none" />

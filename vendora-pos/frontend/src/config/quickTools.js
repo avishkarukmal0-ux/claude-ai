@@ -5,7 +5,7 @@
 //   • hideForMembers — hidden for specific shop-type members (e.g. MUP makes no sense for a vape-only shop)
 //   • gate(ctx, now)  — a predicate over { familyId, memberId, profile } for rules that depend on the business
 //                       profile (MTD only for a qualifying sole trader; MUP only in Scotland/Wales).
-import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud, ShieldX, Thermometer, Tags } from 'lucide-react';
+import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud, ShieldX, Thermometer, Tags, PackageCheck } from 'lucide-react';
 import MtdCountdown from '../components/quicktools/MtdCountdown';
 import MarginCalculator from '../components/quicktools/MarginCalculator';
 import AgeCheckHelper from '../components/quicktools/AgeCheckHelper';
@@ -13,6 +13,7 @@ import ComplianceRadar from '../components/quicktools/ComplianceRadar';
 import MupCalculator from '../components/quicktools/MupCalculator';
 import VpdCalculator from '../components/quicktools/VpdCalculator';
 import RefusalsLogTool from '../components/quicktools/RefusalsLogTool';
+import VapeProductCheck from '../components/quicktools/VapeProductCheck';
 import TemperatureLogTool from '../components/quicktools/TemperatureLogTool';
 import PpdsLabelTool from '../components/quicktools/PpdsLabelTool';
 import { getFamily } from './shopTypes';
@@ -60,6 +61,14 @@ export const QUICK_TOOLS = {
     tagline: 'Record a refused sale',
     icon: ShieldX,
     component: RefusalsLogTool,
+    requiresModule: 'age-check',
+  },
+  'vape-check': {
+    id: 'vape-check',
+    label: 'Vape product check',
+    tagline: 'Nicotine, bottle, tank & MHRA list',
+    icon: PackageCheck,
+    component: VapeProductCheck,
     requiresModule: 'age-check',
   },
   'mup': {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { setActiveWorkspace, __resetMemForTest } from '../storage';
 import { useTemperatureLog, readingSafe } from '../temperatureLog';
-import { useRefusalsLog } from '../refusalsLog';
+import { useRefusalsLog, refusalsCsv } from '../refusalsLog';
 
 beforeEach(() => {
   try { localStorage.clear(); } catch { /* ignore */ }
@@ -37,5 +37,16 @@ describe('refusalsLog — record a refused sale', () => {
     let bad;
     act(() => { bad = result.current.addRefusal({ reason: 'nope' }); });
     expect(bad.ok).toBe(false);
+  });
+
+  it('records a manager sign-off and exports CSV with a header + a row', () => {
+    const { result } = renderHook(() => useRefusalsLog());
+    act(() => { result.current.addRefusal({ reason: 'no-id', product: 'Cider', initials: 'js' }); });
+    act(() => { result.current.signOff('MG'); });
+    expect(result.current.signoffs[0].initials).toBe('MG');
+    expect(result.current.refusals[0].initials).toBe('JS'); // upper-cased
+    const csv = refusalsCsv(result.current.refusals);
+    expect(csv.split('\n')[0]).toMatch(/Date.*Reason.*Staff/);
+    expect(csv).toMatch(/Cider/);
   });
 });

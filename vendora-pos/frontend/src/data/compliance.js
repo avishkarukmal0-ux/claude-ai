@@ -15,6 +15,18 @@
 export const COMPLIANCE_VERIFIED = '2026-10-12';
 export const NATIONS = ['england', 'scotland', 'wales', 'ni'];
 
+// Vape product limits (Tobacco and Related Products Regulations 2016) — verified. Used by the Vape product
+// check tool. Editable here so a change needs no code release.
+export const VAPE_LIMITS = {
+  nicotineMaxMgMl: 20,   // nicotine strength max 20 mg/ml
+  refillMaxMl: 10,       // refill container max 10 ml
+  tankMaxMl: 2,          // refillable tank max 2 ml
+  confidence: 'verified',
+  lastVerified: COMPLIANCE_VERIFIED,
+  mhraUrl: 'https://www.gov.uk/government/collections/mhra-e-cigarette-and-vape-products-guidance-hub',
+  sourceUrl: 'https://www.businesscompanion.info/focus/vaping-products/manufacturing-importing-or-selling-vapes',
+};
+
 // Age-of-sale rules used by the Age check helper. The tobacco dates are REPORTED (confirm commencement per
 // nation) so they live as editable data, never hard-coded logic.
 export const AGE_RULES = {
@@ -102,6 +114,27 @@ export const COMPLIANCE_ITEMS = [
     note: 'Born on/after 1 Jan 2009 — confirm England commencement',
     text: 'Reported start 1 Jan 2027 (per a Northern Ireland commencement summary): no tobacco sales to anyone born on or after 1 Jan 2009, plus required signage. The gov.uk announcement gives no date and England commencement regulations were not found — confirm before relying on it.',
     sourceUrl: 'https://www.gov.uk/government/news/tobacco-and-vapes-bill-becomes-law',
+  },
+  {
+    id: 'tva-ads', name: 'Vape advertising/sponsorship ban', confidence: 'reported', lastVerified: COMPLIANCE_VERIFIED,
+    nations: [], families: ['grocery-age'], date: '2027-06-01',
+    note: 'Provisional — depends on regulations naming a date',
+    text: 'Reported provisional date 1 Jun 2027 for a ban on advertising and sponsorship of vapes and nicotine products. Depends on regulations naming a commencement date — confirm before relying on it.',
+    sourceUrl: 'https://www.gov.uk/government/news/tobacco-and-vapes-bill-becomes-law',
+  },
+  {
+    id: 'tva-tbc', name: 'Vape flavour / display / licensing rules', confidence: 'reported', lastVerified: COMPLIANCE_VERIFIED,
+    nations: [], families: ['grocery-age'], ongoing: true,
+    note: 'Date TBC — flavour descriptors, display limits, retail licensing',
+    text: 'No fixed date yet for flavour-descriptor limits, retail display restrictions and a retail licensing/registration scheme under the Tobacco and Vapes Act. Dates to be set by regulations — do not assume a deadline.',
+    sourceUrl: 'https://www.gov.uk/government/news/tobacco-and-vapes-bill-becomes-law',
+  },
+  {
+    id: 'cbd', name: 'CBD novel-food authorisation', confidence: 'reported', lastVerified: COMPLIANCE_VERIFIED,
+    nations: [], families: ['grocery-age'], ongoing: true,
+    note: 'Check the FSA public list — authorisation decision pending',
+    text: 'CBD is a novel food. The FSA keeps a public list of products allowed to remain on sale; a Sept 2026 FSA board paper recommended authorising three products (adult limit 10mg/day, with warnings) but ministers had not decided as of 12 Oct 2026. Check each product is on the FSA public list; limits are not confirmed — do not assume them.',
+    sourceUrl: 'https://www.food.gov.uk/business-guidance/cannabidiol-cbd',
   },
   {
     id: 'tobacco', name: 'Tobacco track & trace', confidence: 'verified', lastVerified: COMPLIANCE_VERIFIED,

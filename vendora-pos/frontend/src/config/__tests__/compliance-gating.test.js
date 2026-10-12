@@ -37,8 +37,10 @@ describe('quick-tool gating — member + business profile', () => {
     expect(grocery).not.toContain('temp-log');
   });
 
-  it('age-restricted shops get the refusals log', () => {
-    expect(idsFor({ familyId: 'grocery-age' }, NOW)).toContain('refusals-log');
+  it('age-restricted shops get the refusals log and vape product check', () => {
+    const g = idsFor({ familyId: 'grocery-age' }, NOW);
+    expect(g).toContain('refusals-log');
+    expect(g).toContain('vape-check');
   });
 });
 

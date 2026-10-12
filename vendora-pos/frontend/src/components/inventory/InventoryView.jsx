@@ -263,8 +263,14 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
   // Draft-backed so a half-typed product survives a tab switch (Phase 3.9f).
   const [f, setF, clearDraft] = useFormDraft('add-product', { name: '', barcode: '', category: '', cost: '', price: '', qty: '', supplierId: '', packSize: '', caseBarcode: '' });
   const [showPack, setShowPack] = useState(false);
+  // Disposable-vape ban (since 1 Jun 2025): if the product is a vape, the owner must confirm it's reusable
+  // (rechargeable AND refillable with a replaceable coil). A single-use device can't legally be stocked.
+  const [reusable, setReusable] = useState(null); // tri-state: null unanswered / true / false
+  const isVape = /\bvape|e-?liquid|e-?cig|e-?cigarette|nicotine\b/i.test(f.category || '');
+  const vapeBlocked = isVape && reusable === false;
+  const vapeUnanswered = isVape && reusable == null;
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
-  const canSave = f.name.trim().length > 0;
+  const canSave = f.name.trim().length > 0 && !vapeBlocked && !vapeUnanswered;
   const save = () => { clearDraft(); onAdd(f); };
   const cancel = () => { clearDraft(); onCancel(); };
   return (
@@ -278,6 +284,23 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
       <datalist id="vendora-category-list">
         {categorySuggestions.map((c) => <option key={c} value={c} />)}
       </datalist>
+      {isVape && (
+        <div className="mb-2 rounded-xl border border-warning/40 bg-warning-light/50 p-3">
+          <p className="mb-2 text-xs font-medium text-warning-dark">Rechargeable AND refillable, with a replaceable coil?</p>
+          <div className="flex gap-2">
+            {[['true', 'Yes'], ['false', 'No']].map(([v, label]) => {
+              const on = String(reusable) === v;
+              return (
+                <button key={v} type="button" onClick={() => setReusable(v === 'true')} aria-pressed={on}
+                  className={`inline-flex min-h-[44px] min-w-[72px] items-center justify-center rounded-xl border px-3 text-sm font-semibold ${on ? 'border-primary bg-primary-50 text-primary' : 'border-gray-200 bg-white text-gray-600'}`}>{label}</button>
+              );
+            })}
+          </div>
+          {vapeBlocked && (
+            <p className="mt-2 text-xs font-semibold text-danger-dark">Single-use (disposable) vapes cannot be sold — illegal since 1 June 2025. Don’t stock this.</p>
+          )}
+        </div>
+      )}
       {suppliers.length > 0 && (
         <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
           <option value="">Supplier (optional)</option>
