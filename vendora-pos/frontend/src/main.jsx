@@ -5,6 +5,14 @@ import App from './App.jsx';
 import { registerServiceWorker } from './pwa.js';
 import { migrateLegacyToLocalOnce, initStorage, hasAnyLocalData } from './lib/storage.js';
 import { startSync } from './lib/sync.js';
+// Self-hosted fonts (latin subset) — no runtime dependency on fonts.googleapis.com; bundled + offline-cacheable.
+import '@fontsource/poppins/latin-400.css';
+import '@fontsource/poppins/latin-500.css';
+import '@fontsource/poppins/latin-600.css';
+import '@fontsource/poppins/latin-700.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';
 import './index.css';
 
 function renderApp() {

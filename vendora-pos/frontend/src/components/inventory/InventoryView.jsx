@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical } from 'lucide-react';
 import ConfirmDialog from '../common/ConfirmDialog';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
 import ProductHistory from './ProductHistory';
 import MergeView from './MergeView';
@@ -17,6 +18,12 @@ import { ALLERGENS } from '../../data/allergens';
 function isFoodShop() {
   const fam = getSavedShopType()?.familyId;
   return fam === 'fresh-weighed' || fam === 'world-specialist';
+}
+
+// A barcode is optional, but if present it must be a real EAN/UPC length (8–14 digits).
+export function validBarcode(code) {
+  const v = String(code || '').trim();
+  return v === '' || /^\d{8,14}$/.test(v);
 }
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
@@ -171,7 +178,7 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
     removeProduct(p.id);
     toast((t) => (
       <span className="flex items-center gap-3 text-sm">Deleted “{snapshot.name}”.
-        <button type="button" onClick={() => { restoreProduct?.(snapshot); toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>
+        <button type="button" onClick={() => { restoreProduct?.(snapshot); toast.dismiss(t.id); }} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-primary underline">Undo</button>
       </span>
     ), { duration: 6000 });
   }
@@ -303,16 +310,20 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
   const vapeBlocked = isVape && reusable === false;
   const vapeUnanswered = isVape && reusable == null;
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
-  const canSave = f.name.trim().length > 0 && !vapeBlocked && !vapeUnanswered;
+  const barcodeOk = validBarcode(f.barcode);
+  const canSave = f.name.trim().length > 0 && !vapeBlocked && !vapeUnanswered && barcodeOk;
   const save = () => { clearDraft(); onAdd(f); };
   const cancel = () => { clearDraft(); onCancel(); };
+  const inputCls = 'mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none';
   return (
     <div className="mb-3 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
-      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" aria-label="Barcode" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <ScreenBack onBack={cancel} label="Back" />
+      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className={inputCls} />
+      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" aria-label="Barcode" className={`${inputCls.replace('mb-2', barcodeOk ? 'mb-2' : 'mb-1')}`} />
+      {!barcodeOk && <p className="mb-2 text-xs font-medium text-danger-dark">A barcode should be 8–14 digits.</p>}
       <input
         value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category (e.g. Confectionery)" aria-label="Category"
-        className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none"
+        className={inputCls}
       />
       <datalist id="vendora-category-list">
         {categorySuggestions.map((c) => <option key={c} value={c} />)}
@@ -335,32 +346,32 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
         </div>
       )}
       {suppliers.length > 0 && (
-        <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
+        <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base text-gray-700 focus:border-primary focus:outline-none">
           <option value="">Supplier (optional)</option>
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
       <div className="mb-2 grid grid-cols-3 gap-2">
-        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+        <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
       </div>
 
       {!showPack ? (
-        <button type="button" onClick={() => setShowPack(true)} className="mb-2 text-xs font-medium text-primary">+ Comes in a case? Add pack size</button>
+        <button type="button" onClick={() => setShowPack(true)} className="mb-2 inline-flex min-h-[44px] items-center text-sm font-medium text-primary">+ Comes in a case? Add pack size</button>
       ) : (
         <div className="mb-2 rounded-xl border border-gray-200 bg-white p-2">
           <p className="mb-1.5 text-xs text-gray-500">If you buy this by the case, set how many singles are in a case. Scanning the case barcode then books in a whole case.</p>
           <div className="grid grid-cols-2 gap-2">
-            <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case (e.g. 24)" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-            <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode (optional)" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+            <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case (e.g. 24)" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+            <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode (optional)" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
           </div>
         </div>
       )}
 
       <div className="flex gap-2">
-        <button type="button" disabled={!canSave} onClick={save} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save item</button>
-        <button type="button" onClick={cancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
+        <button type="button" disabled={!canSave} onClick={save} className="min-h-[44px] flex-1 rounded-xl bg-primary px-3 text-sm font-semibold text-white disabled:opacity-40">Save item</button>
+        <button type="button" onClick={cancel} className="min-h-[44px] rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-600">Cancel</button>
       </div>
     </div>
   );
@@ -376,7 +387,7 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
     packSize: toStr(product.packSize), caseBarcode: toStr(product.caseBarcode),
   });
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
-  const canSave = f.name.trim().length > 0;
+  const canSave = f.name.trim().length > 0 && validBarcode(f.barcode);
 
   // Allergens + ingredients (PPDS / Natasha's Law) — food shops only.
   const foodShop = isFoodShop();

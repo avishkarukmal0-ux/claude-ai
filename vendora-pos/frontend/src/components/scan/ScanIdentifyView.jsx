@@ -4,6 +4,7 @@ import {
   ArrowLeft, ScanLine, Keyboard, PackageCheck, Package2, Minus, Plus, Check, PackagePlus, Sparkles, Loader2,
 } from 'lucide-react';
 import BarcodeScanner, { barcodeScanSupported } from './BarcodeScanner';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory, margin, worstExpiry } from '../../lib/inventoryStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse } from '../../config/categories';
@@ -59,9 +60,7 @@ export default function ScanIdentifyView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} label="Back" />
 
       {mode === 'camera' && (
         <BarcodeScanner onScan={(code) => resolve(code)} onClose={() => setMode('idle')} />

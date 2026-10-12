@@ -1,12 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, CameraOff, X, Flashlight, FlashlightOff } from 'lucide-react';
 
-// Camera barcode scanner using the native BarcodeDetector API (Chrome/Android/Edge).
-// Progressive enhancement: if unsupported (e.g. iOS Safari today), the caller still has manual entry.
+// Camera barcode scanner. Uses the native BarcodeDetector API (Chrome/Android/Edge) where present, and
+// otherwise LAZY-loads a WASM ponyfill so iPhone Safari and Firefox can scan too — the decoder is only
+// fetched on those browsers when scanning starts, so it never bloats the main bundle (manual entry still
+// works if that fetch fails offline).
 // - one-shot (default): calls onScan(code) once, then stops.
 // - continuous: calls onScan(code) for each scan and keeps going (for rapid delivery book-in), ignoring
 //   the same code if re-read within a short window so one barcode isn't counted twice.
-const supported = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+const hasNative = typeof window !== 'undefined' && 'BarcodeDetector' in window;
+const supported = true; // native or lazy ponyfill — scanning is offered everywhere now
+
+// Resolve a BarcodeDetector constructor: the native one, or the ponyfill loaded on demand.
+async function loadDetectorCtor() {
+  if (hasNative) return window.BarcodeDetector;
+  const mod = await import('barcode-detector/pure');
+  return mod.BarcodeDetector;
+}
 
 // A short confirmation beep (WebAudio) + vibrate, so staff know a scan registered without looking.
 function feedback() {
@@ -41,17 +51,16 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
     if (!primed) return undefined; // wait for the primer; don't request the camera yet
     let cancelled = false;
     let detector;
-    try {
-      // eslint-disable-next-line no-undef
-      detector = new BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
-      });
-    } catch {
-      setError('unsupported');
-      return undefined;
-    }
 
     (async () => {
+      try {
+        const Ctor = await loadDetectorCtor(); // native, or lazy-loaded ponyfill
+        if (cancelled) return;
+        detector = new Ctor({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] });
+      } catch {
+        if (!cancelled) setError('unsupported');
+        return;
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }

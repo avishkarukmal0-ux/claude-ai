@@ -1,6 +1,8 @@
 {
   "name": "Vendora — Shop management",
   "short_name": "Vendora",
+  "lang": "en-GB",
+  "dir": "ltr",
   "description": "Vendora — inventory, goods-in scanning, deliveries, waste and supplier claims for UK shops. Runs on your phone, alongside your existing till.",
   "id": "/",
   "start_url": "/?source=pwa",
