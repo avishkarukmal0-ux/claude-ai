@@ -275,6 +275,11 @@ function normaliseNew(p) {
     supplierId: p.supplierId || null,
     expiry: p.expiry || null,
     dateType: p.dateType || 'best-before',
+    // Allergens (14 regulated) + ingredients for PPDS/Natasha's Law; pack size for unit pricing.
+    allergens: Array.isArray(p.allergens) ? p.allergens.filter((a) => typeof a === 'string') : [],
+    ingredients: (p.ingredients || '').trim() || null,
+    size: p.size === '' || p.size == null ? null : (Number(p.size) || null),
+    sizeUnit: p.sizeUnit || null,
     shelfQty: p.shelfQty == null ? null : Math.max(0, Number(p.shelfQty) || 0),
     countedAt: null,
     createdAt: Date.now(),

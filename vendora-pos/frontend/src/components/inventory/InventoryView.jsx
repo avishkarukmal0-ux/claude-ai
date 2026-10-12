@@ -9,6 +9,13 @@ import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
 import { unitPrice } from '../../lib/priceMarking';
+import { ALLERGENS } from '../../data/allergens';
+
+// Food shops (Fresh & weighed, World & specialist) need allergen/ingredient capture for PPDS.
+function isFoodShop() {
+  const fam = getSavedShopType()?.familyId;
+  return fam === 'fresh-weighed' || fam === 'world-specialist';
+}
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
@@ -166,6 +173,9 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
             {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)} incl. VAT</span>}
             {unitPrice(p) && <span className="text-gray-400">{unitPrice(p).text}</span>}
             {m != null && <span className={m < 0 ? 'text-danger' : 'text-success-dark'}>{(m * 100).toFixed(0)}% margin</span>}
+            {isFoodShop() && (!Array.isArray(p.allergens) || p.allergens.length === 0) && !p.ingredients && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning-light px-1.5 py-0.5 text-xs font-semibold text-warning-dark">⚠ no allergens</span>
+            )}
             {p.packSize > 1 && (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-1.5 py-0.5 text-xs font-semibold text-primary">
                 <Package2 className="h-3 w-3" /> Case of {p.packSize}
@@ -345,6 +355,12 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   const canSave = f.name.trim().length > 0;
 
+  // Allergens + ingredients (PPDS / Natasha's Law) — food shops only.
+  const foodShop = isFoodShop();
+  const [allergens, setAllergens] = useState(() => (Array.isArray(product.allergens) ? product.allergens : []));
+  const [ingredients, setIngredients] = useState(toStr(product.ingredients));
+  const toggleAllergen = (a) => setAllergens((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
+
   // Extra barcodes (Phase 2.7a): a product can answer to several codes. Kept out of the main/case slots.
   const [extra, setExtra] = useState(() => (Array.isArray(product.extraBarcodes) ? product.extraBarcodes : []));
   const [newBc, setNewBc] = useState('');
@@ -381,6 +397,7 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
       caseBarcode: f.caseBarcode.trim() || null,
       extraBarcodes: extra.map((c) => String(c).trim()).filter((c) => c && c !== f.barcode.trim() && c !== f.caseBarcode.trim()),
       supplierAliases: aliases,
+      ...(foodShop ? { allergens, ingredients: ingredients.trim() || null } : {}),
     });
   }
 
@@ -405,6 +422,24 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
         <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       </div>
+
+      {/* Allergens + ingredients (PPDS / Natasha's Law) — food shops only. */}
+      {foodShop && (
+        <div className="mb-2 rounded-xl border border-gray-200 bg-gray-50 p-2.5">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Allergens &amp; ingredients (PPDS)</p>
+          <textarea value={ingredients} onChange={(e) => setIngredients(e.target.value)} rows={2} placeholder="Full ingredients (in weight order)" aria-label="Ingredients"
+            className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+          <div className="flex flex-wrap gap-1.5">
+            {ALLERGENS.map((a) => {
+              const on = allergens.includes(a);
+              return (
+                <button key={a} type="button" onClick={() => toggleAllergen(a)} aria-pressed={on}
+                  className={`inline-flex min-h-[44px] items-center rounded-full border px-3 text-xs font-semibold ${on ? 'border-warning bg-warning-light text-warning-dark' : 'border-gray-200 bg-white text-gray-600'}`}>{a}</button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Extra barcodes (Phase 2.7a) — the same product can scan under several codes. */}
       <div className="mb-2">

@@ -1,20 +1,35 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Tags, Printer, Share2 } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
+import { ALLERGENS } from '../../data/allergens';
+import { useInventory } from '../../lib/inventoryStore';
 
 // PPDS (Prepacked for Direct Sale) label helper — Natasha's Law. Food packed on the premises for direct sale
 // must carry the product name AND a full ingredients list with the 14 regulated allergens emphasised. This is
-// a label GENERATOR only (it prints/shares text); it keeps no record and makes no legal guarantee.
-const ALLERGENS = [
-  'Celery', 'Cereals containing gluten', 'Crustaceans', 'Eggs', 'Fish', 'Lupin', 'Milk',
-  'Molluscs', 'Mustard', 'Nuts (tree nuts)', 'Peanuts', 'Sesame', 'Soya', 'Sulphur dioxide / sulphites',
-];
+// a label GENERATOR only (it prints/shares text); it keeps no record and makes no legal guarantee. It can
+// prefill from a product's saved allergens/ingredients, and show a non-prepacked allergen matrix (sign).
 
 export default function PpdsLabelTool() {
+  const { products } = useInventory();
+  const [mode, setMode] = useState('label'); // 'label' | 'matrix'
   const [name, setName] = useState('');
   const [ingredients, setIngredients] = useState('');
   const [picked, setPicked] = useState(() => new Set());
+
+  // Products that carry recorded allergen info — for the prefill picker and the non-prepacked matrix/sign.
+  const withAllergens = useMemo(
+    () => products.filter((p) => (Array.isArray(p.allergens) && p.allergens.length) || p.ingredients),
+    [products],
+  );
+
+  function prefill(id) {
+    const p = products.find((x) => x.id === id);
+    if (!p) return;
+    setName(p.name || '');
+    setIngredients(p.ingredients || '');
+    setPicked(new Set(Array.isArray(p.allergens) ? p.allergens : []));
+  }
 
   const toggle = (a) => setPicked((prev) => { const n = new Set(prev); n.has(a) ? n.delete(a) : n.add(a); return n; });
   const allergenList = ALLERGENS.filter((a) => picked.has(a));
@@ -50,6 +65,23 @@ export default function PpdsLabelTool() {
         <Tags className="h-7 w-7" strokeWidth={1.75} />
       </div>
 
+      <div className="mb-3 flex rounded-xl bg-gray-100 p-1 text-sm font-semibold">
+        {[['label', 'PPDS label'], ['matrix', 'Allergen sign']].map(([id, lbl]) => (
+          <button key={id} type="button" onClick={() => setMode(id)} aria-pressed={mode === id}
+            className={`flex-1 rounded-lg py-2 ${mode === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{lbl}</button>
+        ))}
+      </div>
+
+      {mode === 'label' && (
+      <>
+      {withAllergens.length > 0 && (
+        <select defaultValue="" onChange={(e) => { prefill(e.target.value); e.target.value = ''; }} aria-label="Prefill from a product"
+          className="mb-3 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
+          <option value="">Prefill from a saved product…</option>
+          {withAllergens.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      )}
+
       <div className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-gray-500">Product name</span>
@@ -84,6 +116,26 @@ export default function PpdsLabelTool() {
             <button type="button" onClick={share} className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700"><Share2 className="h-4 w-4" /> Share</button>
           </div>
         </>
+      )}
+      </>
+      )}
+
+      {mode === 'matrix' && (
+        <div>
+          <p className="mb-2 text-xs text-gray-500">For food packed after the customer chooses it, allergen info must be available — show or print this sign.</p>
+          {withAllergens.length === 0 ? (
+            <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-500">No products have allergens recorded yet. Add them on a product in Stock.</p>
+          ) : (
+            <ul className="space-y-2">
+              {withAllergens.map((p) => (
+                <li key={p.id} className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+                  <span className="block text-sm font-semibold text-gray-900">{p.name}</span>
+                  <span className="mt-0.5 block text-xs font-semibold uppercase text-warning-dark">{(p.allergens || []).join(', ') || 'None recorded'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <ComplianceNote verified="2026-10-12" href="https://www.food.gov.uk/business-guidance/packaging-and-labelling" label="FSA labelling guidance">

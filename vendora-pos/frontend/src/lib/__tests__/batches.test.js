@@ -69,6 +69,21 @@ describe('batches — residual undated units keep the product-level date (milk-b
   });
 });
 
+describe('products — allergens & ingredients persist (PPDS)', () => {
+  it('stores allergens/ingredients on add and merges them on update', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    act(() => { id = result.current.addProduct({ name: 'Deli Sandwich', allergens: ['Milk', 'Eggs'], ingredients: 'bread, cheese, egg' }).id; });
+    let p = result.current.products.find((x) => x.id === id);
+    expect(p.allergens).toEqual(['Milk', 'Eggs']);
+    expect(p.ingredients).toBe('bread, cheese, egg');
+    act(() => { result.current.updateProduct(id, { allergens: ['Milk', 'Eggs', 'Mustard'] }); });
+    p = result.current.products.find((x) => x.id === id);
+    expect(p.allergens).toContain('Mustard');
+    expect(p.ingredients).toBe('bread, cheese, egg'); // untouched
+  });
+});
+
 describe('batches — binning the correct batch once', () => {
   it('wasteBatch reduces the right batch and the total exactly once; undo restores both', () => {
     const { result } = renderHook(() => useInventory());
