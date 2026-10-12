@@ -66,6 +66,6 @@ describe('VpdCalculator — audit: VAT-inclusive label + size hint + margin cave
     fireEvent.change(getByPlaceholderText('e.g. 10'), { target: { value: '10' } });
     fireEvent.change(getByPlaceholderText('e.g. 3.99'), { target: { value: '3.99' } });
     expect(getByText(/Suggested new price/i)).toBeTruthy();
-    expect(getByText(/your margin isn’t added/i)).toBeTruthy();
+    expect(getByText(/no margin added/i)).toBeTruthy();
   });
 });

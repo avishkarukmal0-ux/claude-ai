@@ -1,0 +1,62 @@
+import { describe, it, expect } from 'vitest';
+import { getQuickToolsForShop } from '../quickTools';
+import { complianceForFamily, COMPLIANCE_ITEMS } from '../compliance';
+
+const idsFor = (shop, now) => getQuickToolsForShop(shop, now).map((t) => t.id);
+const NOW = new Date('2026-10-12');
+
+describe('quick-tool gating — member + business profile', () => {
+  it('off-licence hides Vape duty; vape & CBD hides MUP', () => {
+    const off = idsFor({ familyId: 'grocery-age', memberId: 'off-licence' }, NOW);
+    expect(off).not.toContain('vpd');
+    expect(off).toContain('mup'); // off-licence still gets MUP (region unknown → shown)
+
+    const vape = idsFor({ familyId: 'grocery-age', memberId: 'vape-cbd' }, NOW);
+    expect(vape).not.toContain('mup');
+    expect(vape).toContain('vpd');
+  });
+
+  it('MUP is hidden in England/NI and shown in Scotland/Wales', () => {
+    const eng = idsFor({ familyId: 'grocery-age', memberId: 'off-licence', profile: { region: 'england' } }, NOW);
+    expect(eng).not.toContain('mup');
+    const sco = idsFor({ familyId: 'grocery-age', memberId: 'off-licence', profile: { region: 'scotland' } }, NOW);
+    expect(sco).toContain('mup');
+  });
+
+  it('MTD countdown only shows for a qualifying sole trader', () => {
+    expect(idsFor({ familyId: 'grocery-age' }, NOW)).not.toContain('mtd-countdown'); // no profile
+    expect(idsFor({ familyId: 'grocery-age', profile: { entity: 'ltd', turnoverBand: 'over-50k' } }, NOW)).not.toContain('mtd-countdown');
+    expect(idsFor({ familyId: 'grocery-age', profile: { entity: 'sole-trader', turnoverBand: 'over-50k' } }, NOW)).toContain('mtd-countdown');
+  });
+
+  it('Fresh group gets PPDS label + temperature log; grocery does not', () => {
+    const fresh = idsFor({ familyId: 'fresh-weighed' }, NOW);
+    expect(fresh).toEqual(expect.arrayContaining(['ppds-label', 'temp-log']));
+    const grocery = idsFor({ familyId: 'grocery-age' }, NOW);
+    expect(grocery).not.toContain('ppds-label');
+    expect(grocery).not.toContain('temp-log');
+  });
+
+  it('age-restricted shops get the refusals log', () => {
+    expect(idsFor({ familyId: 'grocery-age' }, NOW)).toContain('refusals-log');
+  });
+});
+
+describe('complianceForFamily — MTD gating + new vape items + sources', () => {
+  it('hides MTD quarterly update unless MTD applies', () => {
+    const none = complianceForFamily('grocery-age', NOW, null);
+    expect(none.upcoming.find((c) => c.id === 'mtd-q')).toBeUndefined();
+    const on = complianceForFamily('grocery-age', NOW, { entity: 'sole-trader', turnoverBand: 'over-50k' });
+    expect(on.upcoming.find((c) => c.id === 'mtd-q')).toBeTruthy();
+  });
+
+  it('includes the disposable-vape ban (ongoing) and the duty-stamp date for grocery-age', () => {
+    const g = complianceForFamily('grocery-age', NOW, null);
+    expect(g.ongoing.find((c) => c.id === 'disposable-ban')).toBeTruthy();
+    expect(g.upcoming.find((c) => c.id === 'vape-stamp')).toBeTruthy();
+  });
+
+  it('every compliance item carries an official source link', () => {
+    for (const c of COMPLIANCE_ITEMS) expect(typeof c.source).toBe('string');
+  });
+});

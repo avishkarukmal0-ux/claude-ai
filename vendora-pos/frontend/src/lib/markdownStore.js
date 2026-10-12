@@ -12,6 +12,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { round2, mul } from './money';
 import { actorName } from './actor';
+import { DATE_TYPES } from './inventoryStore';
+
+/** A LEGAL hard stop that is already past: use-by / medicine with an expiry date before now. It is a criminal
+ *  offence to sell such stock, so a markdown must be refused even if the caller forgets to pass `mustPull`. */
+function pastHardStop({ expiry, dateType }, now = Date.now()) {
+  if (!DATE_TYPES[dateType] || !DATE_TYPES[dateType].hard || !expiry) return false;
+  const d = new Date(expiry).getTime();
+  return Number.isFinite(d) && d < new Date(now).setHours(0, 0, 0, 0);
+}
 
 const NAME = 'markdowns_v1';
 export const MARKDOWN_STATUSES = ['active', 'closed'];
@@ -25,9 +34,11 @@ function newId(p = 'md') {
 const num = (v) => (v === '' || v == null ? 0 : Number(v) || 0);
 
 // ---- pure helpers (unit-tested) -------------------------------------------
-/** Validate a proposed markdown. Returns { ok } or { ok:false, error }. Hard-stop stock is refused. */
-export function validateMarkdown({ qty, originalPrice, reducedPrice, mustPull }) {
-  if (mustPull) return { ok: false, error: 'Past its use-by — pull it, don’t sell it.' };
+/** Validate a proposed markdown. Returns { ok } or { ok:false, error }. Hard-stop stock is refused — both
+ *  when the caller flags it (`mustPull`) AND independently from expiry + dateType, so a past use-by / medicine
+ *  item can never be marked down (and so sold) even if the caller forgot the flag. */
+export function validateMarkdown({ qty, originalPrice, reducedPrice, mustPull, expiry = null, dateType = null }) {
+  if (mustPull || pastHardStop({ expiry, dateType })) return { ok: false, error: 'Past its use-by — pull it, don’t sell it.' };
   if (!(num(qty) > 0)) return { ok: false, error: 'Enter how many units.' };
   const reduced = num(reducedPrice);
   if (!(reduced > 0)) return { ok: false, error: 'Enter the reduced price.' };
@@ -76,7 +87,7 @@ export function useMarkdowns() {
 
   /** Create a markdown. Does NOT change stock. Refuses hard-stop (mustPull) stock. @returns {ok, markdown?} */
   const createMarkdown = useCallback(({ productId = null, batchId = null, name = 'Item', qty, originalPrice, reducedPrice, expiry = null, dateType = null, mustPull = false }) => {
-    const check = validateMarkdown({ qty, originalPrice, reducedPrice, mustPull });
+    const check = validateMarkdown({ qty, originalPrice, reducedPrice, mustPull, expiry, dateType });
     if (!check.ok) return { ok: false, error: check.error };
     const m = {
       id: newId(), productId, batchId, name,

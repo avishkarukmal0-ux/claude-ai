@@ -18,6 +18,12 @@ describe('markdownStore — validation (never sell past a hard stop)', () => {
     expect(validateMarkdown({ qty: 1, originalPrice: 2, reducedPrice: 2 }).ok).toBe(false); // not a reduction
     expect(validateMarkdown({ qty: 1, originalPrice: 2, reducedPrice: 1.2 }).ok).toBe(true);
   });
+  it('refuses a PAST use-by from expiry+dateType even when mustPull is not passed (Fresh-group safety)', () => {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    expect(validateMarkdown({ qty: 1, originalPrice: 2, reducedPrice: 1, expiry: yesterday, dateType: 'use-by' }).ok).toBe(false);
+    // best-before past date is still sellable (soft stop) — not blocked here.
+    expect(validateMarkdown({ qty: 1, originalPrice: 2, reducedPrice: 1, expiry: yesterday, dateType: 'best-before' }).ok).toBe(true);
+  });
 });
 
 describe('markdownStore — create does not change stock, records a price action', () => {

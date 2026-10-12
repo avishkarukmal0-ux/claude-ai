@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
+import ComplianceNote from './ComplianceNote';
 
 // Age-check HELPER (not a POS). Shows the Challenge-25 cut-off date and checks a DOB.
 // Nothing is sold, logged, or transacted here — it's a counter reference only.
@@ -85,10 +86,10 @@ export default function AgeCheckHelper() {
         </div>
       )}
 
-      <p className="mt-4 text-xs leading-snug text-gray-400">
-        A helper only — it doesn’t record or approve a sale. Always check valid photo ID. The till
-        handles the actual refusal log at checkout.
-      </p>
+      <ComplianceNote verified="2026-10-12" href="https://www.gov.uk/government/publications/age-verification-challenge-25-and-challenge-21" label="Challenge 25 (GOV.UK)">
+        A helper only — it doesn’t record or approve a sale. Always check valid photo ID. Record refused sales
+        in the Refusals log.
+      </ComplianceNote>
     </div>
   );
 }

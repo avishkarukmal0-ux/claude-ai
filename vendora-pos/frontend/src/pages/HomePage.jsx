@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
-import { getQuickToolsForFamily } from '../config/quickTools';
+import { getQuickToolsForShop } from '../config/quickTools';
+import { getBusinessProfile } from '../lib/businessProfile';
 import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
 import FirstRunCard from '../components/home/FirstRunCard';
@@ -181,7 +182,7 @@ export default function HomePage() {
   const family = getFamily(saved.familyId);
   const member = saved.memberId ? getMember(saved.familyId, saved.memberId) : null;
   const shopLabel = member?.label || family.label;
-  const tools = getQuickToolsForFamily(saved.familyId);
+  const tools = getQuickToolsForShop({ familyId: saved.familyId, memberId: saved.memberId, profile: getBusinessProfile() });
   const accent = family.accent;
   const suggestionCount = getOpenSuggestionCount();
   const taskExceptions = getOpenExceptionCount();

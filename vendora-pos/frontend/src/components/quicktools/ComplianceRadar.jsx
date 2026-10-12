@@ -1,14 +1,26 @@
 import React from 'react';
-import { ShieldAlert, AlertCircle } from 'lucide-react';
-import { complianceForFamily } from '../../config/compliance';
+import { ShieldAlert, AlertCircle, ExternalLink } from 'lucide-react';
+import { complianceForFamily, COMPLIANCE_VERIFIED } from '../../config/compliance';
 import { getSavedShopType } from '../../config/shopTypes';
+import { getBusinessProfile } from '../../lib/businessProfile';
 import { formatUK } from '../../lib/dateUtils';
 
+function OfficialLink({ href }) {
+  if (!href) return null;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+      className="mt-0.5 inline-flex items-center gap-0.5 text-xs font-medium text-primary underline">
+      Official guidance<ExternalLink className="h-3 w-3" aria-hidden="true" />
+    </a>
+  );
+}
+
 // Compliance Radar — the UK-shop deadlines this shop type can get caught out by.
-// Read-only reference; tailored to the saved family. No backend.
+// Read-only reference; tailored to the saved family + business profile. No backend.
 export default function ComplianceRadar() {
   const saved = getSavedShopType();
-  const { upcoming, ongoing } = complianceForFamily(saved?.familyId);
+  const { upcoming, ongoing } = complianceForFamily(saved?.familyId, new Date(), getBusinessProfile());
+  const verifiedStr = new Date(COMPLIANCE_VERIFIED).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <div>
@@ -33,6 +45,7 @@ export default function ComplianceRadar() {
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-gray-900">{c.name}</span>
                   <span className="block text-xs text-gray-500">{formatUK(c.date)} · {c.note}</span>
+                  <OfficialLink href={c.source} />
                 </span>
               </li>
             ))}
@@ -49,6 +62,7 @@ export default function ComplianceRadar() {
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
                 <span className="text-sm text-gray-700">
                   <span className="font-semibold text-gray-900">{c.name}</span> — {c.note}
+                  <OfficialLink href={c.source} />
                 </span>
               </li>
             ))}
@@ -57,8 +71,8 @@ export default function ComplianceRadar() {
       )}
 
       <p className="mt-4 text-xs leading-snug text-gray-400">
-        Indicative dates for planning — always confirm your exact obligations with HMRC, your local
-        authority, or your accountant. Vendora keeps the records that make these easy.
+        Indicative dates for planning — always confirm your exact obligations with HMRC, your local authority,
+        or your accountant. Last verified {verifiedStr}.
       </p>
     </div>
   );

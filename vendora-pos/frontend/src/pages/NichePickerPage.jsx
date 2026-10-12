@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Check, ChevronLeft, ArrowRight } from 'lucide-react';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
+import { useBusinessProfile, ENTITIES, TURNOVER_BANDS, REGIONS } from '../lib/businessProfile';
 
 /**
  * NichePickerPage — the public front door (replaces login as the entry for now).
@@ -13,6 +14,7 @@ export default function NichePickerPage() {
   const saved = getSavedShopType();
   const [familyId, setFamilyId] = useState(saved?.familyId || null);
   const [memberId, setMemberId] = useState(saved?.memberId || null);
+  const { profile, update } = useBusinessProfile();
 
   const family = familyId ? getFamily(familyId) : null;
 
@@ -52,7 +54,7 @@ export default function NichePickerPage() {
           </p>
           {!family && (
             <p className="mt-2 text-xs font-medium text-gray-400">
-              Built for UK shops · MTD-ready · Works alongside your till
+              Built for UK shops · Tracks your key deadlines · Works alongside your till
             </p>
           )}
         </header>
@@ -168,6 +170,30 @@ export default function NichePickerPage() {
                 );
               })}
             </div>
+
+            {/* A few tax/region details (optional) — they decide which compliance tools actually apply to this
+                shop (MTD for Income Tax, Minimum Unit Pricing), so we don't show deadlines that aren't yours. */}
+            <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="mb-1 text-sm font-semibold text-gray-900">A few tax details <span className="font-normal text-gray-400">(optional)</span></p>
+              <p className="mb-3 text-xs text-gray-500">So we only show the deadlines that apply to you.</p>
+
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">Business type</p>
+              <Segment options={ENTITIES} value={profile.entity} onChange={(v) => update({ entity: v })} />
+
+              {profile.entity === 'sole-trader' && (
+                <>
+                  <p className="mb-1.5 mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">Yearly turnover</p>
+                  <Segment options={TURNOVER_BANDS} value={profile.turnoverBand} onChange={(v) => update({ turnoverBand: v })} />
+                </>
+              )}
+
+              {familyId === 'grocery-age' && (
+                <>
+                  <p className="mb-1.5 mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">Nation (for alcohol pricing)</p>
+                  <Segment options={REGIONS} value={profile.region} onChange={(v) => update({ region: v })} />
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -203,6 +229,29 @@ export default function NichePickerPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// A small segmented control: wraps to multiple rows on narrow screens; each option is a ≥44px tap target.
+// Tapping the selected option again clears it (optional fields).
+function Segment({ options, value, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => {
+        const on = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(on ? null : o.id)}
+            aria-pressed={on}
+            className={`inline-flex min-h-[44px] items-center rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${on ? 'border-primary bg-primary-50 text-primary' : 'border-gray-200 bg-white text-gray-600'}`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
