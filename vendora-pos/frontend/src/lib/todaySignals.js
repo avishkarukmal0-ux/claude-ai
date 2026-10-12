@@ -34,12 +34,19 @@ const FAMILY_NUDGES = {
   ],
 };
 
-export function buildTodaySignals(familyId, from = new Date()) {
+/** Should cultural-festival nudges show? Owner choice wins (profile.festivalsOn true/false); when unset, only
+ *  world-specialist shops get them by default — so Health-food, Off-licence etc. don't get Diwali unasked. */
+export function festivalsEnabled(familyId, profile) {
+  if (profile && typeof profile.festivalsOn === 'boolean') return profile.festivalsOn;
+  return familyId === 'world-specialist';
+}
+
+export function buildTodaySignals(familyId, from = new Date(), { memberId = null, profile = null } = {}) {
   const signals = [];
   const day = from.getDay(); // 0 Sun … 6 Sat
 
-  // 1) Nearest compliance deadline, if it's close.
-  const { upcoming } = complianceForFamily(familyId, from);
+  // 1) Nearest compliance deadline, if it's close (nation/MTD-gated via the profile).
+  const { upcoming } = complianceForFamily(familyId, from, profile);
   if (upcoming.length && upcoming[0].days <= 45) {
     const c = upcoming[0];
     signals.push({
@@ -49,16 +56,18 @@ export function buildTodaySignals(familyId, from = new Date()) {
     });
   }
 
-  // 2) Nearest seasonal/demand event.
-  const events = upcomingEvents(familyId, 60, from);
-  if (events.length) {
-    const e = events[0];
-    const d = daysUntil(e.when, from);
-    signals.push({
-      kind: 'event',
-      tone: 'event',
-      text: d === 0 ? `${e.name} today — ${e.note}.` : `${e.name} in ${d} days — ${e.note}.`,
-    });
+  // 2) Nearest seasonal/demand event — cultural festivals only when the shop opted in.
+  if (festivalsEnabled(familyId, profile)) {
+    const events = upcomingEvents(familyId, 60, from);
+    if (events.length) {
+      const e = events[0];
+      const d = daysUntil(e.when, from);
+      signals.push({
+        kind: 'event',
+        tone: 'event',
+        text: d === 0 ? `${e.name} today — ${e.note}.` : `${e.name} in ${d} days — ${e.note}.`,
+      });
+    }
   }
 
   // 3) Weekend / payday demand nudge.
@@ -69,8 +78,10 @@ export function buildTodaySignals(familyId, from = new Date()) {
     signals.push({ kind: 'money', tone: 'tip', text: 'Payday Friday — expect bigger baskets.' });
   }
 
-  // 4) A family-specific daily nudge (rotates by weekday).
-  const nudges = FAMILY_NUDGES[familyId] || [];
+  // 4) A family-specific daily nudge (rotates by weekday). Drop the "date-code the milk & chilled" nudge for
+  //    a vape & CBD shop — it doesn't sell chilled, so that prompt is noise.
+  let nudges = FAMILY_NUDGES[familyId] || [];
+  if (memberId === 'vape-cbd') nudges = nudges.filter((n) => !/milk|chilled/i.test(n));
   if (nudges.length) {
     signals.push({ kind: 'tip', tone: 'neutral', text: nudges[day % nudges.length] });
   }

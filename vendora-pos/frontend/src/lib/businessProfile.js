@@ -54,13 +54,20 @@ export function mtdReason(profile, now = new Date()) {
   return null;
 }
 
+// Yes/No/unknown — a tri-state so we can tell "said no" from "hasn't answered".
+function bool3(v) { return v === true || v === false ? v : null; }
+
 function normalise(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const pick = (v, allow) => (allow.some((a) => a.id === v) ? v : null);
   return {
     entity: pick(p.entity, ENTITIES),
     turnoverBand: pick(p.turnoverBand, TURNOVER_BANDS),
-    region: pick(p.region, REGIONS),
+    region: pick(p.region, REGIONS), // the shop's UK nation
+    employees50: bool3(p.employees50), // 50+ employees incl. any group (HFSS volume promos)
+    sellsAnimals: bool3(p.sellsAnimals), // sells live animals as pets
+    importsFood: bool3(p.importsFood), // imports food directly (legally responsible party)
+    festivalsOn: bool3(p.festivalsOn), // owner opted into cultural-festival nudges (null = family default)
   };
 }
 

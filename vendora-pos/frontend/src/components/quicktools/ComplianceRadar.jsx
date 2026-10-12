@@ -45,7 +45,7 @@ export default function ComplianceRadar() {
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-gray-900">{c.name}</span>
                   <span className="block text-xs text-gray-500">{formatUK(c.date)} · {c.note}</span>
-                  <OfficialLink href={c.source} />
+                  <OfficialLink href={c.sourceUrl} />
                 </span>
               </li>
             ))}
@@ -62,7 +62,7 @@ export default function ComplianceRadar() {
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
                 <span className="text-sm text-gray-700">
                   <span className="font-semibold text-gray-900">{c.name}</span> — {c.note}
-                  <OfficialLink href={c.source} />
+                  <OfficialLink href={c.sourceUrl} />
                 </span>
               </li>
             ))}

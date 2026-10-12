@@ -56,7 +56,21 @@ describe('complianceForFamily — MTD gating + new vape items + sources', () => 
     expect(g.upcoming.find((c) => c.id === 'vape-stamp')).toBeTruthy();
   });
 
-  it('every compliance item carries an official source link', () => {
-    for (const c of COMPLIANCE_ITEMS) expect(typeof c.source).toBe('string');
+  it('every compliance item carries the required data fields (ground rule 2)', () => {
+    for (const c of COMPLIANCE_ITEMS) {
+      expect(typeof c.sourceUrl).toBe('string');
+      expect(c.sourceUrl).toMatch(/^https?:\/\//);
+      expect(['verified', 'reported']).toContain(c.confidence);
+      expect(c.lastVerified).toBe('2026-10-12');
+      expect(Array.isArray(c.nations)).toBe(true);
+      expect(typeof c.text).toBe('string');
+    }
+  });
+
+  it('nation-gates MUP: hidden in England, shown in Scotland', () => {
+    const eng = complianceForFamily('grocery-age', NOW, { region: 'england' });
+    expect([...eng.upcoming, ...eng.ongoing].find((c) => c.id === 'mup')).toBeUndefined();
+    const sco = complianceForFamily('grocery-age', NOW, { region: 'scotland' });
+    expect(sco.ongoing.find((c) => c.id === 'mup')).toBeTruthy();
   });
 });

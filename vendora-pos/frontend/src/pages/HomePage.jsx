@@ -182,7 +182,8 @@ export default function HomePage() {
   const family = getFamily(saved.familyId);
   const member = saved.memberId ? getMember(saved.familyId, saved.memberId) : null;
   const shopLabel = member?.label || family.label;
-  const tools = getQuickToolsForShop({ familyId: saved.familyId, memberId: saved.memberId, profile: getBusinessProfile() });
+  const profile = getBusinessProfile();
+  const tools = getQuickToolsForShop({ familyId: saved.familyId, memberId: saved.memberId, profile });
   const accent = family.accent;
   const suggestionCount = getOpenSuggestionCount();
   const taskExceptions = getOpenExceptionCount();
@@ -293,7 +294,7 @@ export default function HomePage() {
           <>
             <FirstRunCard onGo={go} />
             <TodayActions onGo={go} />
-            <TodayAtShop familyId={saved.familyId} />
+            <TodayAtShop familyId={saved.familyId} memberId={saved.memberId} profile={profile} />
 
             {/* Backup nudge: shop data is on THIS device only until exported. Surface "No backup yet" on Today
                 until the first export (then lastBackupAt is set and this disappears). Not shown in demo/sample. */}

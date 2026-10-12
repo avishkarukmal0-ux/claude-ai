@@ -187,11 +187,19 @@ export default function NichePickerPage() {
                 </>
               )}
 
-              {familyId === 'grocery-age' && (
-                <>
-                  <p className="mb-1.5 mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">Nation (for alcohol pricing)</p>
-                  <Segment options={REGIONS} value={profile.region} onChange={(v) => update({ region: v })} />
-                </>
+              <p className="mb-1.5 mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">Your nation</p>
+              <Segment options={REGIONS} value={profile.region} onChange={(v) => update({ region: v })} />
+
+              <YesNo label="50+ employees (including any group)?" value={profile.employees50} onChange={(v) => update({ employees50: v })} />
+
+              {familyId === 'mobile-value' && (
+                <YesNo label="Do you sell live animals as pets?" value={profile.sellsAnimals} onChange={(v) => update({ sellsAnimals: v })} />
+              )}
+              {(familyId === 'world-specialist' || familyId === 'fresh-weighed') && (
+                <YesNo label="Do you import food directly?" value={profile.importsFood} onChange={(v) => update({ importsFood: v })} />
+              )}
+              {(familyId === 'world-specialist' || familyId === 'grocery-age') && (
+                <YesNo label="Show cultural-festival reminders (Diwali, Eid…)?" value={profile.festivalsOn} onChange={(v) => update({ festivalsOn: v })} />
               )}
             </div>
           </div>
@@ -230,6 +238,27 @@ export default function NichePickerPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// A Yes/No question stored as a tri-state boolean (null = unanswered). Tapping the chosen answer again clears.
+function YesNo({ label, value, onChange }) {
+  const opts = [{ id: true, label: 'Yes' }, { id: false, label: 'No' }];
+  return (
+    <>
+      <p className="mb-1.5 mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
+      <div className="flex gap-2">
+        {opts.map((o) => {
+          const on = value === o.id;
+          return (
+            <button key={String(o.id)} type="button" onClick={() => onChange(on ? null : o.id)} aria-pressed={on}
+              className={`inline-flex min-h-[44px] min-w-[72px] items-center justify-center rounded-xl border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${on ? 'border-primary bg-primary-50 text-primary' : 'border-gray-200 bg-white text-gray-600'}`}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

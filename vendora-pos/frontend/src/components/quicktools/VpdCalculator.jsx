@@ -68,10 +68,13 @@ export default function VpdCalculator() {
       )}
 
       {duty != null && (
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Stat label="Duty per bottle" value={`£${duty.toFixed(2)}`} />
-          <Stat label="Est. pass-through (inc VAT)" value={`£${dutyIncVat.toFixed(2)}`} />
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Stat label="Duty per bottle" value={`£${duty.toFixed(2)}`} />
+            <Stat label="Duty + VAT" value={`£${dutyIncVat.toFixed(2)}`} />
+          </div>
+          <p className="mt-1 text-center text-xs text-gray-400">Estimated pass-through, not a duty you owe.</p>
+        </>
       )}
       {newPrice != null && (
         <div className="mt-3 rounded-xl bg-primary-50 p-3 text-center text-sm font-semibold text-primary-700">

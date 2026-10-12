@@ -11,7 +11,9 @@ export default function MarginCalculator() {
   // Margin is a share of the SELL price, so we need a sell price > 0 to compute anything. Flag the
   // zero/empty case explicitly so we can tell the user what's missing instead of just showing dashes.
   const needSell = price.trim() === '' || !(p > 0);
-  const valid = Number.isFinite(c) && Number.isFinite(p) && p > 0;
+  // A negative cost is nonsense (it used to give a 150%+ margin). Guard it even though the input has min=0.
+  const badCost = cost.trim() !== '' && (!Number.isFinite(c) || c < 0);
+  const valid = Number.isFinite(c) && c >= 0 && Number.isFinite(p) && p > 0;
 
   const profit = valid ? p - c : null;
   const margin = valid ? ((p - c) / p) * 100 : null;   // % of sell price
@@ -37,7 +39,10 @@ export default function MarginCalculator() {
         <Stat label="Markup" value={markup === null ? '—' : `${markup.toFixed(1)}%`} />
       </div>
 
-      {needSell && (
+      {badCost && (
+        <p className="mt-3 text-center text-sm font-medium text-danger-dark">Cost can’t be negative.</p>
+      )}
+      {!badCost && needSell && (
         <p className="mt-3 text-center text-sm font-medium text-gray-500">Enter a sell price to see the margin.</p>
       )}
 

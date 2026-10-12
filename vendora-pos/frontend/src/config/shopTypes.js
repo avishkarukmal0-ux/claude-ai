@@ -26,9 +26,9 @@ export const SHOP_FAMILIES = [
     // Shared: barcode grocery + goods-in + margins + age-verification + PMP.
     // Burden-first value promises shown when this family is picked.
     promises: [
-      'Never miss an MTD or licence deadline',
-      'Scan the cash-&-carry trolley — stock’s done',
-      'Age-check & minimum-price tools at a tap',
+      'Key MTD, licence & duty dates kept in view',
+      'Scan the cash-&-carry trolley to update stock',
+      'Age-check & minimum-price helpers at a tap',
     ],
     moduleIds: ['age-check'],
     supplierIdeas: ['Cash & carry (Booker / Bestway)', 'Soft-drinks wholesaler', 'Tobacco / vape supplier', 'Newspaper distributor', 'Bread & milk roundsman'],
@@ -38,7 +38,7 @@ export const SHOP_FAMILIES = [
       // and obsidian-vault/Niche-Market-Assessment-2026-09: shrinking category, claims already served
       // free by SNapp, so no dedicated roadmap.
       { id: 'convenience', label: 'Convenience / Newsagent', icon: ShoppingBasket, extra: 'Everyday grocery, chilled, news & tobacco' },
-      { id: 'off-licence', label: 'Off-licence', icon: Wine, extra: 'Alcohol duty & MUP' },
+      { id: 'off-licence', label: 'Off-licence', icon: Wine, extra: 'Minimum unit price' },
       { id: 'vape-cbd', label: 'Vape & CBD', icon: Cloud, extra: 'Nicotine strength & compliance' },
     ],
   },
@@ -50,9 +50,9 @@ export const SHOP_FAMILIES = [
     accent: '#16A34A', // green
     // Shared: scale/loose-weight + expiry/use-by + markdown + traceability/PPDS + production.
     promises: [
-      'Stop paying twice for waste',
-      'Weigh, price & label in one tap',
-      'Use-by dates & traceability handled',
+      'Catch waste before it costs you twice',
+      'Allergen & PPDS label helpers',
+      'Use-by & date-code reminders built in',
     ],
     moduleIds: ['scale-labels', 'allergens'],
     supplierIdeas: ['Fruit & veg market', 'Meat / fish supplier', 'Bakery ingredients wholesaler', 'Packaging supplier'],
@@ -70,8 +70,8 @@ export const SHOP_FAMILIES = [
     accent: '#EA580C', // orange
     // Shared: perishables + suppliers + allergen/compliance + cultural-calendar demand.
     promises: [
-      'Order ahead for Eid, Diwali & peak weeks',
-      'Allergens & labels done right',
+      'Festival reminders for peak weeks (opt-in)',
+      'Allergen & label checklists',
       'Every supplier’s prices in one place',
     ],
     moduleIds: ['festival', 'allergens'],
@@ -89,8 +89,8 @@ export const SHOP_FAMILIES = [
     accent: '#7C3AED', // violet
     // Shared: ad-hoc/no-barcode pricing + phone-first + dead-stock reporting.
     promises: [
-      'Price anything in seconds — no barcode needed',
-      'Cash & card totals reconciled on your phone',
+      'Price & track stock from your phone',
+      'Day takings & drawer cash-up',
       'See what’s not selling',
     ],
     moduleIds: ['reconcile'],

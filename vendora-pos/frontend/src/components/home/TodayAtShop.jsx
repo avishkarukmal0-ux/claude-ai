@@ -26,8 +26,8 @@ function greeting(d = new Date()) {
 }
 
 /** "Today at the shop" — the morning glance, tailored to the shop's family. */
-export default function TodayAtShop({ familyId }) {
-  const signals = buildTodaySignals(familyId);
+export default function TodayAtShop({ familyId, memberId = null, profile = null }) {
+  const signals = buildTodaySignals(familyId, new Date(), { memberId, profile });
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (

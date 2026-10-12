@@ -109,7 +109,7 @@ export default function TakingsView({ onBack }) {
 
 function MoneyField({ icon: Icon, label, value, onChange }) {
   return (
-    <label className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">
+    <label className="flex min-h-[44px] items-center gap-2 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">
       <Icon className="h-4 w-4 shrink-0 text-gray-400" />
       <span className="sr-only">{label}</span>
       <input value={value} onChange={onChange} inputMode="decimal" placeholder={label} className="w-full border-none p-0 text-gray-900 placeholder-gray-400 focus:outline-none" />

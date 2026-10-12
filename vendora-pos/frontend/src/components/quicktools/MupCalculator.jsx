@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Wine, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Wine, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
+import { getBusinessProfile } from '../../lib/businessProfile';
 
 // Minimum Unit Pricing guardrail. Floor = rate × units; units = ABV% × litres.
 // MUP applies in Scotland and Wales only (not England). Rates are jurisdiction- AND date-specific:
@@ -15,8 +16,24 @@ function rateFor(jurisdiction, now = new Date()) {
 }
 
 export default function MupCalculator() {
-  const [jurisdiction, setJurisdiction] = useState('scotland');
+  const nation = getBusinessProfile().region;
+  const noMup = nation === 'england' || nation === 'ni';
+  const [jurisdiction, setJurisdiction] = useState(nation === 'wales' ? 'wales' : 'scotland');
   const [f, setF] = useState({ abv: '', ml: '', packQty: '1', price: '' });
+
+  // MUP is law in Scotland and Wales only. If the shop told us it's in England or NI, say so plainly.
+  if (noMup) {
+    return (
+      <div className="text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
+          <Info className="h-7 w-7" strokeWidth={1.75} />
+        </div>
+        <p className="text-sm font-semibold text-gray-900">No MUP in your nation</p>
+        <p className="mx-auto mt-1 max-w-xs text-sm text-gray-500">Minimum Unit Pricing applies in Scotland and Wales, not in {nation === 'ni' ? 'Northern Ireland' : 'England'}.</p>
+        <ComplianceNote verified="2026-10-12" href="https://www.gov.wales/minimum-pricing-alcohol-guidance-retailers" label="MUP guidance (gov.wales)" />
+      </div>
+    );
+  }
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   const rate = rateFor(jurisdiction);

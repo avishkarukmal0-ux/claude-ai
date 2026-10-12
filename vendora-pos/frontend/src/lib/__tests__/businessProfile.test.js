@@ -14,7 +14,7 @@ beforeEach(() => {
 describe('businessProfile — persistence + normalisation', () => {
   it('round-trips a valid profile and drops unknown values', () => {
     saveBusinessProfile({ entity: 'sole-trader', turnoverBand: 'over-50k', region: 'scotland' });
-    expect(getBusinessProfile()).toEqual({ entity: 'sole-trader', turnoverBand: 'over-50k', region: 'scotland' });
+    expect(getBusinessProfile()).toMatchObject({ entity: 'sole-trader', turnoverBand: 'over-50k', region: 'scotland' });
     saveBusinessProfile({ entity: 'nonsense', region: 'mars' });
     const p = getBusinessProfile();
     expect(p.entity).toBeNull();        // invalid cleared
