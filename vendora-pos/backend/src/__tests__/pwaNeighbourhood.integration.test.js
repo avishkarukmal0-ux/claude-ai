@@ -63,9 +63,9 @@ describe('pwa-neighbourhood — real area figure, cached, with provenance', () =
     expect(res.body.datasetConfigured).toBe(true);
   });
 
-  dbTest('GET /area returns a real figure with full provenance + OGL attribution', async () => {
+  dbTest('POST /area returns a real figure with full provenance + OGL attribution', async () => {
     const t = await owner();
-    const res = await request(app).get('/api/pwa-neighbourhood/area?postcode=RM10%208AA').set('Authorization', `Bearer ${t}`);
+    const res = await request(app).post('/api/pwa-neighbourhood/area').set('Authorization', `Bearer ${t}`).send({ postcode: 'RM10 8AA' });
     expect(res.status).toBe(200);
     expect(res.body.available).toBe(true);
     const pop = res.body.figures.find((f) => f.key === 'population');
@@ -80,7 +80,7 @@ describe('pwa-neighbourhood — real area figure, cached, with provenance', () =
 
   dbTest('the figure is cached server-side (stored in Mongo)', async () => {
     const t = await owner();
-    await request(app).get('/api/pwa-neighbourhood/area?postcode=RM10%208AA').set('Authorization', `Bearer ${t}`);
+    await request(app).post('/api/pwa-neighbourhood/area').set('Authorization', `Bearer ${t}`).send({ postcode: 'RM10 8AA' });
     const doc = await NeighbourhoodArea.findOne({ postcode: 'RM108AA' }).lean();
     expect(doc).toBeTruthy();
     expect(doc.figures[0].value).toBe(1500);
@@ -88,13 +88,19 @@ describe('pwa-neighbourhood — real area figure, cached, with provenance', () =
   });
 
   dbTest('requires a token', async () => {
-    const res = await request(app).get('/api/pwa-neighbourhood/area?postcode=RM10%208AA');
+    const res = await request(app).post('/api/pwa-neighbourhood/area').send({ postcode: 'RM10 8AA' });
     expect(res.status).toBe(401);
   });
 
   dbTest('an invalid postcode is rejected (400), never fabricated', async () => {
     const t = await owner();
-    const res = await request(app).get('/api/pwa-neighbourhood/area?postcode=NOPE').set('Authorization', `Bearer ${t}`);
+    const res = await request(app).post('/api/pwa-neighbourhood/area').set('Authorization', `Bearer ${t}`).send({ postcode: 'NOPE' });
+    expect(res.status).toBe(400);
+  });
+
+  dbTest('a missing postcode in the body is rejected (400)', async () => {
+    const t = await owner();
+    const res = await request(app).post('/api/pwa-neighbourhood/area').set('Authorization', `Bearer ${t}`).send({});
     expect(res.status).toBe(400);
   });
 });

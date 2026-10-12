@@ -38,6 +38,17 @@ describe('neighbourhoodClient — online + offline fallback', () => {
     expect(getStored('RM10 8AA')).toBeTruthy(); // cached in the durable store
   });
 
+  it('sends the postcode in the POST body, never in the URL (keeps it out of logs/history)', async () => {
+    let seenUrl = null; let seenOpts = null;
+    __setFetch(async (url, opts) => { seenUrl = url; seenOpts = opts; return { ok: true, status: 200, json: async () => SAMPLE }; });
+    await getArea('RM10 8AA', { force: true });
+    expect(seenUrl).toBe('/api/pwa-neighbourhood/area');  // no query string
+    expect(seenUrl).not.toMatch(/postcode=/);
+    expect(seenOpts.method).toBe('POST');
+    expect(seenOpts.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(seenOpts.body)).toEqual({ postcode: 'RM108AA', force: true });
+  });
+
   it('offline/error after a prior success: returns the stored copy flagged offline', async () => {
     __setFetch(async () => ({ ok: true, status: 200, json: async () => SAMPLE }));
     await getArea('RM10 8AA'); // prime the cache

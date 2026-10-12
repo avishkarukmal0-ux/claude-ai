@@ -39,12 +39,16 @@ router.get('/status', ownerOrManager, (req, res) => {
   });
 });
 
-// GET /area?postcode=SW1A1AA[&force=1] → one real figure for the store's area + full provenance + freshness.
-router.get('/area', ownerOrManager, async (req, res, next) => {
+// POST /area { postcode: "SW1A1AA", force?: true } → one real figure for the store's area + full provenance +
+// freshness. POST (not GET) so the store's postcode travels in the request BODY, never in the URL — keeping it
+// out of access logs, proxy logs and browser history. `force` bypasses the server cache (owner/manager only).
+router.post('/area', ownerOrManager, async (req, res, next) => {
   try {
-    const postcode = (req.query.postcode || '').toString();
+    const body = req.body || {};
+    const postcode = (body.postcode || '').toString();
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
-    const out = await neighbourhood.getAreaProfile(postcode, { force: req.query.force === '1' || req.query.force === 'true' });
+    const force = body.force === true || body.force === 1 || body.force === '1' || body.force === 'true';
+    const out = await neighbourhood.getAreaProfile(postcode, { force });
     res.json({ success: true, ...out });
   } catch (err) {
     if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, 'NEIGHBOURHOOD'));

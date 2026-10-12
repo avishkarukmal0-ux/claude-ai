@@ -53,10 +53,15 @@ export async function getArea(postcode, { timeoutMs = COLD_START_MS, force = fal
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    // force=1 asks the backend to bypass its cache and re-fetch now (owner/manager only; the route enforces the
-    // role). Used by the card's "Refresh" action so an owner needn't wait for the TTL.
-    const qs = `postcode=${encodeURIComponent(pc)}${force ? '&force=1' : ''}`;
-    const res = await _fetch(`${BASE}/area?${qs}`, { headers: authHeader(), signal: controller.signal });
+    // POST with the postcode in the BODY (never the URL) so the store's postcode stays out of access/proxy logs
+    // and browser history. `force` asks the backend to bypass its cache and re-fetch now (owner/manager only; the
+    // route enforces the role) — used by the card's "Refresh" action so an owner needn't wait for the TTL.
+    const res = await _fetch(`${BASE}/area`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ postcode: pc, force: !!force }),
+      signal: controller.signal,
+    });
     let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
     if (!res.ok) throw Object.assign(new Error((body && body.message) || `Request failed (${res.status})`), { status: res.status });
     putStored(pc, body);
