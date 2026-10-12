@@ -32,7 +32,7 @@ export default function SupplementCheck() {
       <ul className="space-y-2">
         {ITEMS.map(([k, lbl]) => (
           <li key={k}>
-            <label className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+            <label className="flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
               <span className="text-sm text-gray-700">{lbl}</span>
               <input type="checkbox" checked={!!checked[k]} onChange={() => toggle(k)} className="h-5 w-5" />
             </label>
@@ -47,18 +47,18 @@ export default function SupplementCheck() {
       )}
 
       <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-[44px] items-center justify-between gap-2">
           <span className="text-sm text-gray-700">Novel food? Checked on the FSA register?</span>
-          <select value={novel} onChange={(e) => setNovel(e.target.value)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm">
+          <select value={novel} onChange={(e) => setNovel(e.target.value)} className="min-h-[44px] rounded-lg border border-gray-200 px-2 text-sm">
             <option value="">—</option>
             <option value="not-novel">Not novel</option>
             <option value="authorised">Novel &amp; authorised</option>
             <option value="unknown">Not checked</option>
           </select>
         </label>
-        <label className="mt-2 flex items-center justify-between gap-2">
+        <label className="mt-2 flex min-h-[44px] items-center justify-between gap-2">
           <span className="text-xs text-gray-500">Date checked</span>
-          <input type="date" value={novelDate} onChange={(e) => setNovelDate(e.target.value)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+          <input type="date" value={novelDate} onChange={(e) => setNovelDate(e.target.value)} className="min-h-[44px] rounded-lg border border-gray-200 px-2 text-sm" />
         </label>
       </div>
 

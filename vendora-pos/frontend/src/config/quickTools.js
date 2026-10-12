@@ -158,6 +158,7 @@ export const QUICK_TOOLS = {
   'trading-permits': {
     id: 'trading-permits', label: 'Trading permits', tagline: 'Consent, pitch & insurance',
     icon: MapPin, component: TradingPermitsTool, families: ['mobile-value'],
+    hideForMembers: ['discount-pound', 'pet-shop'], // street-trading consent is a market-trader thing
   },
   'recall-log': {
     id: 'recall-log', label: 'Recall log', tagline: 'Safety alerts you acted on',

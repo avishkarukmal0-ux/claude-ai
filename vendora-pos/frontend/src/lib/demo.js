@@ -85,6 +85,30 @@ export function loadDemo() {
   return { ok: true };
 }
 
+/** Reload the demo catalogue for the CURRENT shop type (used when the type changed while in demo, so a Pet
+ *  shop stops showing the grocery sample). No-op outside demo. Replaces the sample inventory + supplier only. */
+export function reloadDemoData() {
+  if (!isDemoActive()) return { ok: false };
+  const shopType = read('shop_type', 'grocery-age', DEMO_WORKSPACE) || 'grocery-age';
+  const [familyId, memberId = null] = String(shopType).split(':');
+  const { products, supplier } = demoCatalogue(familyId, memberId);
+  writeJSON('inventory_v1', products, DEMO_WORKSPACE);
+  writeJSON('suppliers_v1', [{ id: 'demo-sup', name: supplier, createdAt: Date.now() }], DEMO_WORKSPACE);
+  return { ok: true };
+}
+
+/** Does the demo's loaded sample no longer fit the saved shop type? (e.g. type switched to Pet shop but the
+ *  inventory is still the grocery sample.) Cheap heuristic: compare the first demo product id's prefix. */
+export function demoDataStale() {
+  if (!isDemoActive()) return false;
+  const shopType = read('shop_type', 'grocery-age', DEMO_WORKSPACE) || 'grocery-age';
+  const [familyId, memberId = null] = String(shopType).split(':');
+  const want = demoCatalogue(familyId, memberId).products.map((p) => p.id).sort();
+  let have = [];
+  try { const inv = JSON.parse(read('inventory_v1', '[]', DEMO_WORKSPACE) || '[]'); have = (Array.isArray(inv) ? inv : []).map((p) => p.id).sort(); } catch { /* ignore */ }
+  return want.join(',') !== have.join(',');
+}
+
 /** Leave the demo: wipe the demo workspace and return to the real on-device (guest) workspace. */
 export function exitDemo() {
   purgeWorkspace(DEMO_WORKSPACE);

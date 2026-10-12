@@ -4,6 +4,7 @@ import { Sparkles, Check, ChevronLeft, ArrowRight } from 'lucide-react';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
 import { useBusinessProfile, ENTITIES, TURNOVER_BANDS, REGIONS } from '../lib/businessProfile';
 import { onboardingQuestionsFor } from '../config/niche';
+import { reloadDemoData } from '../lib/demo';
 
 /**
  * NichePickerPage — the public front door (replaces login as the entry for now).
@@ -24,11 +25,13 @@ export default function NichePickerPage() {
     setFamilyId(id);
     setMemberId(null);
     saveShopType(id); // a family on its own is a valid choice
+    reloadDemoData();  // in demo, refresh the sample so it fits the new type (no-op otherwise)
   }
 
   function pickMember(id) {
     setMemberId(id);
     saveShopType(familyId, id);
+    reloadDemoData();
   }
 
   function back() {

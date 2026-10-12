@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { setActiveWorkspace, __resetMemForTest, read, readJSON, write } from '../storage';
-import { loadDemo, exitDemo } from '../demo';
+import { loadDemo, exitDemo, reloadDemoData, demoDataStale } from '../demo';
 import { festivalsEnabled } from '../todaySignals';
 import { unitPrice, priceLabel } from '../priceMarking';
 import { getBusinessProfile, saveBusinessProfile } from '../businessProfile';
@@ -33,6 +33,17 @@ describe('demo catalogue — each group gets its own stock (Phase 0)', () => {
     write('shop_type', 'world-specialist:ethnic-grocer');
     loadDemo();
     expect(readJSON('suppliers_v1', [])[0].name).toMatch(/Import Wholesale/);
+    exitDemo();
+  });
+
+  it('flags stale sample data after a type change and reloads it (Pet shop ≠ bread/milk)', () => {
+    write('shop_type', 'grocery-age'); // local ws type before loading demo
+    loadDemo(); // demo now holds the grocery sample
+    write('shop_type', 'mobile-value:pet-shop'); // active ws is demo → changes demo's type
+    expect(demoDataStale()).toBe(true);
+    reloadDemoData();
+    expect(demoDataStale()).toBe(false);
+    expect(readJSON('inventory_v1', []).map((p) => p.name).join(' ')).not.toMatch(/Bread|Milk|Cola/);
     exitDemo();
   });
 });

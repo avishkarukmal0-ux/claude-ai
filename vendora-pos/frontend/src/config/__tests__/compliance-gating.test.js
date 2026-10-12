@@ -58,6 +58,12 @@ describe('quick-tool gating — member + business profile', () => {
     expect(pet).toEqual(expect.arrayContaining(['animal-licence', 'vet-meds']));
   });
 
+  it('trading permits show for the market trader, not Discount or Pet shop', () => {
+    expect(idsFor({ familyId: 'mobile-value', memberId: 'market-trader' }, NOW)).toContain('trading-permits');
+    expect(idsFor({ familyId: 'mobile-value', memberId: 'discount-pound' }, NOW)).not.toContain('trading-permits');
+    expect(idsFor({ familyId: 'mobile-value', memberId: 'pet-shop' }, NOW)).not.toContain('trading-permits');
+  });
+
   it('age-restricted shops get the refusals log and vape product check', () => {
     const g = idsFor({ familyId: 'grocery-age' }, NOW);
     expect(g).toContain('refusals-log');

@@ -84,7 +84,7 @@ export default function TemperatureLogTool() {
                   <span className="block text-sm font-semibold text-gray-900">{r.unit} · <span className={r.safe ? '' : 'text-danger'}>{r.tempC}°C</span></span>
                   <span className="block text-xs text-gray-500">{UNIT_KINDS[r.kind]?.label} · {new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{r.by ? ` · ${r.by}` : ''}{r.action ? ` · ${r.action}` : ''}</span>
                 </span>
-                <button type="button" onClick={() => removeReading(r.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete reading"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => removeReading(r.id)} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-gray-300 hover:text-danger" aria-label="Delete reading"><Trash2 className="h-4 w-4" /></button>
               </li>
             ))}
           </ul>

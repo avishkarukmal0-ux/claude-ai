@@ -17,7 +17,7 @@ import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
 import FirstRunCard from '../components/home/FirstRunCard';
 import InstallCard from '../components/account/InstallCard';
-import { isDemoActive, exitDemo, ensureSignedOutSampleMode } from '../lib/demo';
+import { isDemoActive, exitDemo, ensureSignedOutSampleMode, reloadDemoData, demoDataStale } from '../lib/demo';
 import { useDialog } from '../lib/useDialog';
 import InventoryView from '../components/inventory/InventoryView';
 import DeliveryReceivingView from '../components/delivery/DeliveryReceivingView';
@@ -205,14 +205,20 @@ export default function HomePage() {
           {loggedIn ? (
             <>
               <span className="flex min-w-0 items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Demo data — your real shop is safe.</span></span>
-              <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="-my-1.5 inline-flex min-h-[44px] shrink-0 items-center px-2 font-semibold underline">Exit demo</button>
+              <span className="flex shrink-0 items-center gap-1">
+                {demoDataStale() && <button type="button" onClick={() => { reloadDemoData(); window.location.reload(); }} className="-my-1.5 inline-flex min-h-[44px] items-center rounded-lg bg-amber-900 px-2.5 font-semibold text-amber-50">Reset sample data</button>}
+                <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="-my-1.5 inline-flex min-h-[44px] items-center px-2 font-semibold underline">Exit demo</button>
+              </span>
             </>
           ) : (
             // Signed-out welcome: this is a SAMPLE shop so you can try Vendora. No real data is shown here —
             // log in or create your shop to use it for real (your data is then private to your account).
             <>
               <span className="flex min-w-0 items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Sample data — try Vendora.</span></span>
-              <button type="button" onClick={() => navigate('/account')} className="-my-1.5 inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-amber-900 px-3 font-semibold text-amber-50">Create shop</button>
+              <span className="flex shrink-0 items-center gap-1">
+                {demoDataStale() && <button type="button" onClick={() => { reloadDemoData(); window.location.reload(); }} className="-my-1.5 inline-flex min-h-[44px] items-center rounded-lg border border-amber-900/40 px-2.5 font-semibold">Reset sample</button>}
+                <button type="button" onClick={() => navigate('/account')} className="-my-1.5 inline-flex min-h-[44px] items-center rounded-lg bg-amber-900 px-3 font-semibold text-amber-50">Create shop</button>
+              </span>
             </>
           )}
         </div>
