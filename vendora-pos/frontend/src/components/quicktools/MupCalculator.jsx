@@ -96,10 +96,10 @@ export default function MupCalculator() {
         </div>
       )}
 
-      <ComplianceNote verified="2026-10-12" href="https://www.gov.scot/policies/alcohol-and-drugs/minimum-unit-pricing/" label="Minimum Unit Pricing (gov.scot)">
-        MUP applies in Scotland (65p/unit) and Wales (50p until 1 Oct 2026, then 65p) — not England or Northern
-        Ireland. Units = ABV% × litres. A guide — confirm the current rate for your nation; selling below the
-        floor is a criminal offence.
+      <ComplianceNote verified="2026-10-12" href="https://www.gov.wales/minimum-pricing-alcohol-guidance-retailers" label="Minimum Unit Pricing (gov.wales)">
+        MUP is 65p/unit in Scotland and, in Wales, 65p/unit since 1 Oct 2026 — not England or Northern Ireland.
+        Units = ABV% × litres. A guide — confirm the current rate for your nation; selling below the floor is a
+        criminal offence.
       </ComplianceNote>
     </div>
   );

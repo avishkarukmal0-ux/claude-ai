@@ -4,6 +4,7 @@ import {
   ArrowLeft, ClipboardCheck, Camera, Search, Check, Play, X,
   AlertTriangle, TrendingDown, TrendingUp, History, ChevronRight,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory } from '../../lib/inventoryStore';
 import { useStocktake, buildSummary } from '../../lib/stocktakeStore';
 import { useRecoveryGuard } from '../../lib/recoveryGuard';
@@ -341,8 +342,6 @@ function CatChip({ label, active, onClick }) {
 
 function BackLink({ onBack }) {
   return (
-    <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-      <ArrowLeft className="h-4 w-4" /> Home
-    </button>
+    <ScreenBack onBack={onBack} label="Home" />
   );
 }

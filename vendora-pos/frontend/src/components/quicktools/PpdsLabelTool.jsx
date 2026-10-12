@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Tags, Printer, Share2 } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
-import { ALLERGENS } from '../../data/allergens';
+import { ALLERGENS, detectAllergens, emphasiseIngredients } from '../../data/allergens';
 import { useInventory } from '../../lib/inventoryStore';
 
 // PPDS (Prepacked for Direct Sale) label helper — Natasha's Law. Food packed on the premises for direct sale
@@ -35,8 +35,16 @@ export default function PpdsLabelTool() {
   const allergenList = ALLERGENS.filter((a) => picked.has(a));
   const ready = name.trim() && ingredients.trim();
 
+  // Likely allergens detected in the ingredients text, that haven't been ticked yet — a prompt, not a decision.
+  const suggested = detectAllergens(ingredients).filter((a) => !picked.has(a));
+
+  // Ingredients with allergen keywords EMPHASISED (UPPERCASED) inline, as the law requires on the pack.
+  function emphasisedPlain() {
+    return emphasiseIngredients(ingredients).map((s) => (s.hit ? s.text.toUpperCase() : s.text)).join('');
+  }
+
   function labelText() {
-    const lines = [name.trim().toUpperCase(), '', 'INGREDIENTS:', ingredients.trim()];
+    const lines = [name.trim().toUpperCase(), '', 'INGREDIENTS:', emphasisedPlain()];
     if (allergenList.length) lines.push('', `ALLERGENS: ${allergenList.join(', ').toUpperCase()}`);
     lines.push('', 'Prepacked for direct sale (PPDS).');
     return lines.join('\n');
@@ -53,7 +61,7 @@ export default function PpdsLabelTool() {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>PPDS label</title>
       <style>body{font:14px/1.4 system-ui,sans-serif;padding:16px;max-width:420px}h1{font-size:18px;margin:0 0 8px}
       .al{font-weight:700;text-transform:uppercase}</style></head><body>
-      <h1>${esc(name.trim())}</h1><p><b>Ingredients:</b> ${esc(ingredients.trim())}</p>
+      <h1>${esc(name.trim())}</h1><p><b>Ingredients:</b> ${emphasiseIngredients(ingredients).map((s) => (s.hit ? `<b>${esc(s.text.toUpperCase())}</b>` : esc(s.text))).join('')}</p>
       ${allergenList.length ? `<p class="al">Allergens: ${esc(allergenList.join(', '))}</p>` : ''}
       <p>Prepacked for direct sale (PPDS).</p></body></html>`;
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); w.print(); }
@@ -107,6 +115,13 @@ export default function PpdsLabelTool() {
           );
         })}
       </div>
+
+      {suggested.length > 0 && (
+        <div className="mt-3 rounded-xl bg-warning-light/60 p-3 text-xs text-warning-dark">
+          Ingredients look like they contain: <b>{suggested.join(', ')}</b>.
+          <button type="button" onClick={() => setPicked((prev) => new Set([...prev, ...suggested]))} className="ml-1 font-semibold underline">Add these</button>
+        </div>
+      )}
 
       {ready && (
         <>

@@ -84,6 +84,21 @@ describe('products — allergens & ingredients persist (PPDS)', () => {
   });
 });
 
+describe('products — delete is undoable (restoreProduct keeps the id)', () => {
+  it('removes then restores the exact product, preserving its id', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    act(() => { id = result.current.addProduct({ name: 'Cola', qty: 5 }).id; });
+    const snap = result.current.products.find((p) => p.id === id);
+    act(() => { result.current.removeProduct(id); });
+    expect(result.current.products.find((p) => p.id === id)).toBeUndefined();
+    act(() => { result.current.restoreProduct(snap); });
+    const back = result.current.products.find((p) => p.id === id);
+    expect(back).toBeTruthy();
+    expect(back.qty).toBe(5); // same id + data → history stays linked
+  });
+});
+
 describe('batches — binning the correct batch once', () => {
   it('wasteBatch reduces the right batch and the total exactly once; undo restores both', () => {
     const { result } = renderHook(() => useInventory());

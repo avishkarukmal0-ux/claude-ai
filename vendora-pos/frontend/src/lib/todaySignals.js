@@ -34,11 +34,10 @@ const FAMILY_NUDGES = {
   ],
 };
 
-/** Should cultural-festival nudges show? Owner choice wins (profile.festivalsOn true/false); when unset, only
- *  world-specialist shops get them by default — so Health-food, Off-licence etc. don't get Diwali unasked. */
+/** Should cultural-festival nudges show? OFF by default for everyone — they appear only once the owner opts in
+ *  (profile.festivalsOn === true). No shop is shown Diwali/Eid unasked, regardless of family. */
 export function festivalsEnabled(familyId, profile) {
-  if (profile && typeof profile.festivalsOn === 'boolean') return profile.festivalsOn;
-  return familyId === 'world-specialist';
+  return profile?.festivalsOn === true;
 }
 
 export function buildTodaySignals(familyId, from = new Date(), { memberId = null, profile = null } = {}) {

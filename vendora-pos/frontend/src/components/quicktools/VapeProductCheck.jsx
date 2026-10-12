@@ -9,7 +9,9 @@ export default function VapeProductCheck() {
   const [f, setF] = useState({ nicotine: '', bottle: '', tank: '' });
   const [onMhra, setOnMhra] = useState(false);
   const [evidence, setEvidence] = useState(false);
+  const [reusable, setReusable] = useState(null); // rechargeable AND refillable with replaceable coil?
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const singleUse = reusable === false;
 
   const n = parseFloat(f.nicotine);
   const b = parseFloat(f.bottle);
@@ -40,6 +42,21 @@ export default function VapeProductCheck() {
           </li>
         ))}
       </ul>
+
+      {/* Disposable-vape ban (since 1 Jun 2025) — a single-use device can't be sold. */}
+      <div className="mt-3 rounded-xl border border-warning/40 bg-warning-light/50 p-3">
+        <p className="mb-2 text-sm font-medium text-warning-dark">Rechargeable AND refillable, with a replaceable coil?</p>
+        <div className="flex gap-2">
+          {[['true', 'Yes'], ['false', 'No']].map(([v, lbl]) => {
+            const on = String(reusable) === v;
+            return (
+              <button key={v} type="button" onClick={() => setReusable(v === 'true')} aria-pressed={on}
+                className={`inline-flex min-h-[44px] min-w-[72px] items-center justify-center rounded-xl border px-3 text-sm font-semibold ${on ? 'border-primary bg-primary-50 text-primary' : 'border-gray-200 bg-white text-gray-600'}`}>{lbl}</button>
+            );
+          })}
+        </div>
+        {singleUse && <p className="mt-2 text-xs font-semibold text-danger-dark">Single-use (disposable) vapes cannot be sold — illegal since 1 June 2025. Don’t stock this.</p>}
+      </div>
 
       <label className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
         <span className="text-sm text-gray-700">On the MHRA notified-products list? <a href={VAPE_LIMITS.mhraUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">check</a></span>

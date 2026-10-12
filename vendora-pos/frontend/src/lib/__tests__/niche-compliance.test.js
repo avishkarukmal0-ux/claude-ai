@@ -37,9 +37,9 @@ describe('demo catalogue — each group gets its own stock (Phase 0)', () => {
   });
 });
 
-describe('festivalsEnabled — owner choice wins, else world-specialist only (Phase 0)', () => {
-  it('defaults on for world-specialist, off for others, and honours an explicit choice', () => {
-    expect(festivalsEnabled('world-specialist', null)).toBe(true);
+describe('festivalsEnabled — OFF until the owner opts in (re-audit v19)', () => {
+  it('is off by default for every family and only true when opted in', () => {
+    expect(festivalsEnabled('world-specialist', null)).toBe(false);
     expect(festivalsEnabled('grocery-age', null)).toBe(false);
     expect(festivalsEnabled('grocery-age', { festivalsOn: true })).toBe(true);
     expect(festivalsEnabled('world-specialist', { festivalsOn: false })).toBe(false);

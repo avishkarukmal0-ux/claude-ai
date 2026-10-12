@@ -222,6 +222,7 @@ export function write(name, value, ws = getActiveWorkspace()) {
   if (lsOk) {
     MEM.set(fullKey, value);
     durableSet(fullKey, value);
+    ensurePersistOnce(); // first real save → make sure we've asked the browser to keep the data
     dispatch(STORAGE_WRITE_EVENT, { name, ws });
     return { ok: true };
   }
@@ -457,17 +458,31 @@ function _purgedSinceSnapshot(key) {
  * shop backs up, the data here is their ONLY copy — losing it to transient-storage eviction would be data
  * loss. On an installed PWA most browsers grant this without a prompt. Returns { ok, already?, reason? }.
  */
+// Persistence state for the UI: 'unknown' | 'granted' | 'denied' | 'unsupported'. A 'denied' state means the
+// browser may evict the shop's data, so the UI shows a "export a backup" warning.
+export const PERSIST_EVENT = 'vendora:persist';
+let _persistState = 'unknown';
+let _persistAsked = false;
+export function getPersistState() { return _persistState; }
+function setPersistState(s) { if (s !== _persistState) { _persistState = s; dispatch(PERSIST_EVENT, { state: s }); } }
+
 export async function requestPersistentStorage() {
   try {
     const s = typeof navigator !== 'undefined' ? navigator.storage : null;
     if (!s || typeof s.persist !== 'function' || typeof s.persisted !== 'function') {
+      setPersistState('unsupported');
       return { ok: false, reason: 'unsupported' };
     }
-    if (await s.persisted()) return { ok: true, already: true };
+    if (await s.persisted()) { setPersistState('granted'); return { ok: true, already: true }; }
     const granted = await s.persist();
+    setPersistState(granted ? 'granted' : 'denied');
     return { ok: !!granted };
   } catch { return { ok: false, reason: 'error' }; }
 }
+
+/** Ask for persistence the first time the shop actually saves something (in addition to the boot attempt), so
+ *  a denial surfaces even if persistence wasn't resolvable at boot. Runs at most once. */
+function ensurePersistOnce() { if (_persistAsked) return; _persistAsked = true; try { requestPersistentStorage(); } catch { /* ignore */ } }
 
 export function initStorage() {
   if (_initPromise) return _initPromise;

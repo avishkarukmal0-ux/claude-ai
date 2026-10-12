@@ -424,6 +424,18 @@ export function useInventory() {
     setProducts(next);
   }, []);
 
+  /** Re-insert a previously-removed product exactly as it was (for Undo) — keeps its id so stock history
+   *  (movements, claims, …) stays linked. No-op if a product with that id already exists. */
+  const restoreProduct = useCallback((product) => {
+    if (!product || !product.id) return { ok: false };
+    const cur = load();
+    if (cur.some((p) => p.id === product.id)) return { ok: true, already: true };
+    const next = [product, ...cur];
+    persist(next);
+    setProducts(next);
+    return { ok: true };
+  }, []);
+
   /**
    * Merge a duplicate product into the one being kept (Phase 2.7e/f). Unions barcodes + supplier aliases,
    * sums stock + shelf + batches, fills blank fields from the dropped one, then re-points ALL history
@@ -948,7 +960,7 @@ export function useInventory() {
   return {
     products,
     workspace: getActiveWorkspace(),
-    addProduct, updateProduct, removeProduct, mergeProducts,
+    addProduct, updateProduct, removeProduct, restoreProduct, mergeProducts,
     addBarcode, removeBarcode,
     sellUnits, recordWaste, reverseWaste,
     addBatch, wasteBatch, reverseBatchWaste,

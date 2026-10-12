@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Banknote, CreditCard, Coins, Wallet, Trash2, Check } from 'lucide-react';
+import { Banknote, CreditCard, Coins, Wallet, Trash2, Check } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useTakings, entryTotals } from '../../lib/takingsStore';
 
 // Takings & cash-up — enter the day's card + cash takings and count the drawer.
@@ -29,9 +30,7 @@ export default function TakingsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Takings &amp; cash-up</h2>
       <p className="mb-4 text-xs text-gray-400">Log the day’s takings and count the drawer. No till needed.</p>

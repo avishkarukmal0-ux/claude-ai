@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ShoppingCart, Plus, Minus, Check, X, Share2, Building2, Truck, Send } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Check, X, Share2, Building2, Truck, Send } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useOrders, orderTotals, statusFor, OPEN_STATUSES } from '../../lib/orderStore';
 
 const STATUS_LABEL = {
@@ -82,9 +83,7 @@ export default function OrdersView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Orders</h2>
       <p className="mb-4 text-xs text-gray-400">Recording an order just tracks it here — it does <strong>not</strong> message the supplier. Use “Mark as sent” / “Share” when you’ve actually placed it. Receiving stock happens on the Scan tab.</p>
 

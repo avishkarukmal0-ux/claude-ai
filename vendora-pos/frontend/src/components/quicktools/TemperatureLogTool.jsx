@@ -92,8 +92,9 @@ export default function TemperatureLogTool() {
       )}
 
       <ComplianceNote verified="2026-10-12" href="https://www.food.gov.uk/business-guidance/safer-food-better-business-sfbb" label="FSA Safer Food Better Business">
-        Chilled ≤ 8°C (aim 0–5°C), frozen ≤ −18°C, hot-hold ≥ 63°C. This supports your documented food-safety
-        procedures (HACCP) — it isn’t the only legal format.
+        Chilled ≤ 8°C (aim 0–5°C) and hot-hold ≥ 63°C are the legal figures; the frozen −18°C target is reported
+        — confirm it for your business. This supports your documented food-safety procedures (HACCP) — it isn’t
+        the only legal format.
       </ComplianceNote>
     </div>
   );

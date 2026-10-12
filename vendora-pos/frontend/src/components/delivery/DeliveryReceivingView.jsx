@@ -4,6 +4,7 @@ import {
   Camera, Plus, Minus, Trash2, PackageCheck, Keyboard, Building2, Repeat,
   ChevronLeft, ImagePlus, AlertTriangle, FileText, Check, ShoppingCart,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory } from '../../lib/inventoryStore';
 import { hasOperation } from '../../lib/movementStore';
 import { useSuppliers } from '../../lib/supplierStore';
@@ -37,7 +38,7 @@ const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
 
 // Stage 2 — receive & check a delivery. Cases/packs with conversion, ordered vs delivered vs
 // accepted, discrepancies, notes/photos, drafts (autosaved), duplicate protection, repeat-last.
-export default function DeliveryReceivingView() {
+export default function DeliveryReceivingView({ onBack }) {
   const { findByBarcode, applyDelivery } = useInventory();
   const { suppliers } = useSuppliers();
   const { orders, receiveAgainst } = useOrders();
@@ -156,6 +157,7 @@ export default function DeliveryReceivingView() {
   if (!draft) {
     return (
       <div>
+        {onBack && <ScreenBack onBack={onBack} label="Home" />}
         <h2 className="mb-1 text-base font-bold text-gray-900">Receive a delivery</h2>
         <p className="mb-4 text-xs text-gray-400">Book in what actually arrived — cases or units, with any shortages or damage.</p>
 

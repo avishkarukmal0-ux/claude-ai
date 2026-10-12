@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Flag, Send, AlertTriangle } from 'lucide-react';
+import { Flag, Send, AlertTriangle } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory, isLowStock, worstExpiry } from '../../lib/inventoryStore';
 import { useSuggestions } from '../../lib/suggestionsStore';
 
@@ -30,9 +31,7 @@ export default function WorkerBoard({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Staff view</h2>
       <p className="mb-4 text-xs text-gray-400">What needs doing on shift — and flag anything to the owner.</p>
@@ -42,7 +41,7 @@ export default function WorkerBoard({ onBack }) {
         <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendNote(); }}
           aria-label="Note to the owner"
           placeholder="Tell the owner something…" className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <button type="button" onClick={sendNote} aria-label="Send note to owner" className="flex items-center gap-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white active:scale-95">
+        <button type="button" onClick={sendNote} aria-label="Send note to owner" className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:scale-95">
           <Send className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>

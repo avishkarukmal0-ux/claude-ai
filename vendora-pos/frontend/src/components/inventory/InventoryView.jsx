@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical } from 'lucide-react';
+import ConfirmDialog from '../common/ConfirmDialog';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
 import ProductHistory from './ProductHistory';
 import MergeView from './MergeView';
@@ -20,7 +22,7 @@ function isFoodShop() {
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
 export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
-  const { products, addProduct, updateProduct, removeProduct } = useInventory();
+  const { products, addProduct, updateProduct, removeProduct, restoreProduct } = useInventory();
   const { suppliers } = useSuppliers();
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
@@ -127,7 +129,8 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or barcode"
-            className="w-full rounded-xl border border-gray-200 py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            aria-label="Search products"
+            className="min-h-[44px] w-full rounded-xl border border-gray-200 py-2.5 pl-9 pr-3 text-base focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
       )}
@@ -144,7 +147,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
               </div>
               <ul className="space-y-2">
                 {items.map((p) => (
-                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} onEdit={() => setEditing(p)} onHistory={() => setViewingId(p.id)} />
+                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} restoreProduct={restoreProduct} onEdit={() => setEditing(p)} onHistory={() => setViewingId(p.id)} />
                 ))}
               </ul>
             </div>
@@ -157,10 +160,21 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
 // One product row. Shows category + pack ("Case of N") alongside the existing barcode/price/margin so
 // the shopkeeper can see at a glance what the item is and how it's bought.
-function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHistory }) {
+function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct, onEdit, onHistory }) {
   const m = margin(p);
   const low = isLowStock(p);
   const [menuOpen, setMenuOpen] = useState(false); // kebab menu: History / Edit / Delete (declutters the row)
+  const [confirmDel, setConfirmDel] = useState(false);
+  function doDelete() {
+    setConfirmDel(false);
+    const snapshot = p; // keep the exact product so Undo can restore it (id + history links intact)
+    removeProduct(p.id);
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Deleted “{snapshot.name}”.
+        <button type="button" onClick={() => { restoreProduct?.(snapshot); toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>
+      </span>
+    ), { duration: 6000 });
+  }
   return (
     <li className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
@@ -243,7 +257,7 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
                   <Pencil className="h-4 w-4 text-gray-400" /> Edit product
                 </button>
                 <div className="my-1 border-t border-gray-100" />
-                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm(`Delete “${p.name}”? This removes the product and its stock number. This can’t be undone here.`)) removeProduct(p.id); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm font-medium text-danger hover:bg-danger-light">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setConfirmDel(true); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm font-medium text-danger hover:bg-danger-light">
                   <Trash2 className="h-4 w-4" /> Delete product
                 </button>
               </div>
@@ -265,6 +279,15 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmDel}
+        title={`Delete “${p.name}”?`}
+        message="This removes the product and its stock number. You can undo straight after."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDel(false)}
+      />
     </li>
   );
 }

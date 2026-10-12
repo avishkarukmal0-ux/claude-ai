@@ -12,6 +12,7 @@ import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
 import { resolveNiche } from '../config/niche';
 import { getBusinessProfile } from '../lib/businessProfile';
+import { getPersistState, PERSIST_EVENT } from '../lib/storage';
 import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
 import FirstRunCard from '../components/home/FirstRunCard';
@@ -251,7 +252,7 @@ export default function HomePage() {
             <button type="button" onClick={() => setScreen(null)} className="mt-3 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white">Back</button>
           </div>
         )}
-        {screen === 'receive' && <DeliveryReceivingView />}
+        {screen === 'receive' && <DeliveryReceivingView onBack={() => setScreen(null)} />}
         {screen === 'waste' && <WasteView onBack={() => setScreen(null)} />}
         {screen === 'reorder' && <ReorderView onBack={() => setScreen(null)} />}
         {screen === 'deadstock' && <DeadStockView onBack={() => setScreen(null)} />}
@@ -295,6 +296,7 @@ export default function HomePage() {
           <>
             <FirstRunCard onGo={go} />
             <TodayActions onGo={go} />
+            <PersistWarning onExport={onExport} />
             <TodayAtShop signals={niche.nudges} />
 
             {/* Backup nudge: shop data is on THIS device only until exported. Surface "No backup yet" on Today
@@ -495,6 +497,28 @@ function Hub({ title, subtitle, children }) {
       <h2 className="mb-1 text-base font-bold text-gray-900">{title}</h2>
       <p className="mb-4 text-xs text-gray-400">{subtitle}</p>
       <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+// Warns the owner when the browser did NOT grant persistent storage (data can be evicted) so they back up.
+function PersistWarning({ onExport }) {
+  const [denied, setDenied] = useState(() => getPersistState() === 'denied');
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    const on = () => setDenied(getPersistState() === 'denied');
+    window.addEventListener(PERSIST_EVENT, on);
+    return () => window.removeEventListener(PERSIST_EVENT, on);
+  }, []);
+  if (!denied || dismissed) return null;
+  return (
+    <div role="alert" className="mb-4 rounded-2xl border border-warning/40 bg-warning-light p-3 text-warning-dark">
+      <p className="text-sm font-semibold">Your data could be cleared by the browser</p>
+      <p className="mt-0.5 text-xs">This device didn’t grant persistent storage, so your data could be evicted under storage pressure. Export a backup to be safe.</p>
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={onExport} className="inline-flex min-h-[44px] items-center rounded-lg bg-amber-900 px-3 text-xs font-semibold text-amber-50">Export backup</button>
+        <button type="button" onClick={() => setDismissed(true)} className="inline-flex min-h-[44px] items-center rounded-lg px-3 text-xs font-semibold text-warning-dark">Dismiss</button>
+      </div>
     </div>
   );
 }

@@ -11,7 +11,7 @@ const NAME = 'temperature_log_v1';
 export const UNIT_KINDS = {
   chilled: { label: 'Fridge / chilled', max: 8, min: null, hint: 'At or below 8°C (aim 0–5°C)' },
   display: { label: 'Chilled display', max: 8, min: null, hint: 'At or below 8°C' },
-  frozen: { label: 'Freezer / frozen', max: -18, min: null, hint: 'At or below −18°C' },
+  frozen: { label: 'Freezer / frozen', max: -18, min: null, hint: 'At or below −18°C (reported — confirm)' },
   hothold: { label: 'Hot-hold', max: null, min: 63, hint: 'At or above 63°C' },
 };
 
