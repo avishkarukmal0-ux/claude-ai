@@ -95,7 +95,13 @@ export default function HomePage() {
     return () => { window.removeEventListener('vendora:workspace', h); window.removeEventListener(RECOVERY_EVENT, h); };
   }, []);
   const demo = isDemoActive();
-  const [tab, setTab] = useState('today');
+  // Open on the tab a PWA shortcut asked for (manifest `shortcuts`), else Today. Read once; no-op without it.
+  const [tab, setTab] = useState(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get('tab');
+      return ['today', 'scan', 'stock', 'buy', 'more'].includes(t) ? t : 'today';
+    } catch { return 'today'; }
+  });
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
   // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.

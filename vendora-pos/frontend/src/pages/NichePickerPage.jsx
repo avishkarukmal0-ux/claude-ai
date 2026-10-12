@@ -57,9 +57,11 @@ export default function NichePickerPage() {
           )}
         </header>
 
-        {/* STEP 1 — the 4 families */}
+        {/* STEP 1 — the 4 families. Centre vertically so a short list doesn't leave a big gap above the footer
+            on tall phones (welcome-audit fix 4); the footer stays pinned to the bottom. */}
         {!family && (
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex flex-1 flex-col justify-center py-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {SHOP_FAMILIES.map((f) => {
               const Icon = f.icon;
               return (
@@ -68,8 +70,8 @@ export default function NichePickerPage() {
                   type="button"
                   onClick={() => pickFamily(f.id)}
                   className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm
-                    transition hover:border-primary/40 hover:shadow-md active:scale-[0.99]
-                    focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    transition hover:border-primary/40 hover:shadow-md active:scale-[0.99] active:border-primary/60
+                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
                   <span
                     className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
@@ -80,13 +82,14 @@ export default function NichePickerPage() {
                   <span className="min-w-0">
                     <span className="block text-base font-semibold leading-tight text-gray-900">{f.label}</span>
                     <span className="mt-0.5 block text-xs leading-snug text-gray-500">{f.tagline}</span>
-                    <span className="mt-1 block truncate text-[11px] text-gray-400">
-                      {f.members.map((m) => m.label).join(' · ')}
+                    <span className="mt-1 block text-xs leading-snug text-gray-500">
+                      {f.members.slice(0, 2).map((m) => m.label).join(' · ')}{f.members.length > 2 ? ` +${f.members.length - 2} more` : ''}
                     </span>
                   </span>
                 </button>
               );
             })}
+          </div>
           </div>
         )}
 
@@ -144,9 +147,9 @@ export default function NichePickerPage() {
                     type="button"
                     onClick={() => pickMember(m.id)}
                     aria-pressed={isSelected}
-                    className={`relative flex flex-col items-center rounded-2xl border bg-white p-4 text-center transition
-                      focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2
-                      ${isSelected ? 'border-primary shadow-md ring-1 ring-primary' : 'border-gray-200 shadow-sm hover:border-primary/40 hover:shadow-md active:scale-[0.98]'}`}
+                    className={`relative flex flex-col items-center rounded-2xl border bg-white p-4 text-center transition active:scale-[0.98]
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
+                      ${isSelected ? 'border-primary shadow-md ring-1 ring-primary' : 'border-gray-200 shadow-sm hover:border-primary/40 hover:shadow-md'}`}
                   >
                     {isSelected && (
                       <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
@@ -160,7 +163,7 @@ export default function NichePickerPage() {
                       <Icon className="h-6 w-6" strokeWidth={1.75} />
                     </span>
                     <span className="text-sm font-semibold leading-tight text-gray-900">{m.label}</span>
-                    <span className="mt-1 text-[11px] leading-snug text-gray-500">{m.extra}</span>
+                    <span className="mt-1 text-xs leading-snug text-gray-500">{m.extra}</span>
                   </button>
                 );
               })}
@@ -179,21 +182,25 @@ export default function NichePickerPage() {
               <button
                 type="button"
                 onClick={() => navigate('/home')}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-primary-600 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 transition hover:bg-primary-600 active:scale-[0.99] active:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 Continue <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           ) : (
-            <p className="text-center text-xs text-gray-400">Tap the category that fits your shop.</p>
+            <p className="text-center text-sm text-gray-500">Tap the category that fits your shop.</p>
           )}
 
-          <p className="mt-4 text-center text-sm text-gray-500">
-            Already using Vendora?{' '}
-            <Link to="/login" className="font-semibold text-primary hover:underline">
+          {/* Welcome-audit fix 1: "Log in" is a full-width secondary BUTTON (>= 44px tap target), not a tiny link. */}
+          <div className="mt-4 text-center">
+            <p className="mb-2 text-sm text-gray-500">Already using Vendora?</p>
+            <Link
+              to="/login"
+              className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-primary transition hover:bg-gray-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
               Log in
             </Link>
-          </p>
+          </div>
         </div>
       </div>
     </div>

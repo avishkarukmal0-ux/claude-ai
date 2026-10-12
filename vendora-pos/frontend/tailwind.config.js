@@ -12,20 +12,27 @@ export default {
           600: '#1D4ED8',
           700: '#1E40AF',
         },
+        // Re-skin (2026-10-12): semantic colours split FILL vs TEXT for AA. DEFAULT = fills/icons; `dark` = the
+        // text shade (used via text-*-dark across the app) chosen to meet >= 4.5:1 on white; `light` = tint bg.
         success: {
-          DEFAULT: '#16A34A',
+          DEFAULT: '#16A34A', // fills / icons
           light:   '#DCFCE7',
-          dark:    '#14532D',
+          dark:    '#15803D', // text on white (>= 4.5:1)
         },
         warning: {
-          DEFAULT: '#D97706',
+          DEFAULT: '#D97706', // fills / icons
           light:   '#FEF3C7',
-          dark:    '#78350F',
+          dark:    '#B45309', // text on white (>= 4.5:1)
         },
         danger: {
-          DEFAULT: '#DC2626',
+          DEFAULT: '#DC2626', // AA on white for text + fills
           light:   '#FEE2E2',
-          dark:    '#7F1D1D',
+          dark:    '#B91C1C',
+        },
+        // Promo/offer highlight ONLY (badges/chips with #000 text) — never text on white.
+        highlight: {
+          DEFAULT: '#FECE14',
+          dark:    '#111827',
         },
         'pos-bg':     '#0F172A',
         'pos-panel':  '#1E293B',
@@ -41,8 +48,10 @@ export default {
         'border-v2': 'var(--border)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+        // Re-skin (2026-10-12): Poppins display/UI, IBM Plex Mono for labels/SKUs/prices. System fallbacks keep
+        // text readable offline / before the webfont swaps in (display=swap).
+        sans: ['Poppins', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'Consolas', 'monospace'],
       },
     },
   },
