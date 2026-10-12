@@ -4,7 +4,7 @@
  * Unit tests for utility functions — no DB required
  */
 
-const { formatCurrency, generateReceiptNumber, extractVat, addVat, round2 } = require('../utils/formatters');
+const { formatCurrency, generateReceiptNumber, extractVat, addVat, round2, UK_TZ } = require('../utils/formatters');
 const { generateGiftCardCode, generateCustomerCode, generateParkId, generatePONumber, todayStart, todayEnd, paginate } = require('../utils/helpers');
 const AppError = require('../utils/AppError');
 
@@ -38,11 +38,14 @@ describe('formatters.js', () => {
     });
 
     it('should contain today\'s date', () => {
-      const today = new Date();
-      const dd = String(today.getDate()).padStart(2, '0');
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const yyyy = today.getFullYear();
-      const expected = `${yyyy}${mm}${dd}`;
+      // The receipt date is UK-local (Europe/London), so compute "today" in the SAME timezone —
+      // not the runner's local clock, which breaks around the UK midnight boundary (CI flake).
+      const dayjs = require('dayjs');
+      const utc = require('dayjs/plugin/utc');
+      const timezone = require('dayjs/plugin/timezone');
+      dayjs.extend(utc);
+      dayjs.extend(timezone);
+      const expected = dayjs().tz(UK_TZ).format('YYYYMMDD');
       const rn = generateReceiptNumber(1);
       expect(rn.startsWith(expected)).toBe(true);
     });
