@@ -95,6 +95,24 @@ The recurring round-3 lesson: *a passing helper test does not prove the whole us
   default only catches `undefined`, not an explicit `null` passed from a hook.
 - Screens under `HomePage` render inside a per-screen `<ErrorBoundary key={screen} onReset={…}>` — a crash in
   one screen must never blank the whole app.
+- **A store hook must `setState` on its own writes.** The `storage` event only fires in OTHER tabs, so a
+  same-tab write won't refresh the hook unless it does so itself: wrap writes in
+  `persistAll(next) { const res = persist(next); if (res.ok) setX(next); return res; }` (see `markdownStore`,
+  `temperatureLog`, `refusalsLog`). New local-first stores also go in `storage.STORE_NAMES` (to sync/back up)
+  and `backup.STORE_SHAPE` (so restore validates the kind).
+- **`Number('')` is `0`, not `NaN`.** A blank numeric field validated with `Number.isFinite` passes as 0 — map
+  `'' | null → NaN` first (e.g. a blank fridge temperature must be rejected, not logged as 0°C).
+
+## Compliance tools (2026-10-12, see [[2026-10-12-Compliance-Fixes]])
+- **Only show what applies.** A tool/deadline that depends on the shop's circumstances is gated, never shown
+  universally: MTD via `businessProfile.mtdApplies` (sole traders only, income thresholds by date — Ltd files
+  Corporation Tax); MUP by nation (Scotland/Wales only); member-specific tools via `hideForMembers`.
+  `getQuickToolsForShop({ familyId, memberId, profile })` is the one gate; a tool with a `gate` but no
+  `requiresModule` still passes the module check (the gate decides).
+- **Every compliance figure carries its receipt:** a `<ComplianceNote>` (or `compliance.js` `source` +
+  `COMPLIANCE_VERIFIED`) with an official GOV.UK/FSA link and a "last verified" date. Re-confirm quarterly.
+- **Never help sell past a legal hard stop.** `validateMarkdown` refuses a past use-by / medicine item from
+  `expiry` + `dateType` itself, not just the caller's `mustPull` flag.
 
 ## Frontend patterns
 - One `services/*.js` module per API domain, each a thin axios wrapper.
