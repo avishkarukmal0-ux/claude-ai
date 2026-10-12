@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft, Globe2, ChevronDown } from 'lucide-react';
 import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbourhoodClient';
+import { currentSession } from '../../lib/account';
+import ScreenBack from '../common/ScreenBack';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
 import RadiusControl from './RadiusControl';
 import RadiusMap from './RadiusMap';
@@ -139,6 +141,9 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
 
   async function load(force = false) {
     if (!postcode.trim()) { toast.error('Enter your shop postcode'); return; }
+    // The area API needs a signed-in account; in demo/sample mode there's no token, so calling it just 401s
+    // after a long cold start. Short-circuit with a clear prompt instead of making the owner wait.
+    if (!currentSession()?.token) { setResult({ available: false, needSignIn: true }); return; }
     setBusy(true);
     try {
       const res = await getArea(postcode.trim(), { force });
@@ -156,11 +161,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
 
   return (
     <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-      {onBack && (
-        <button type="button" onClick={onBack} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Home
-        </button>
-      )}
+      {onBack && <ScreenBack onBack={onBack} label="Home" />}
       <h3 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-900"><MapPin className="h-4 w-4 text-primary" /> Your area — official figures</h3>
       <p className="mb-3 text-xs text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
 
@@ -172,7 +173,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       </div>
       {busy && <p className="mb-2 text-xs text-gray-400">First load can take up to a minute while the server wakes…</p>}
 
-      {result && !result.available && (
+      {result && result.needSignIn && (
+        <div className="rounded-xl border border-primary/20 bg-primary-50 p-3 text-[12px] text-gray-700">
+          <Info className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-primary" />
+          Sign in to see local figures — official area data is tied to your shop account.
+        </div>
+      )}
+
+      {result && !result.available && !result.needSignIn && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-600">
           <AlertTriangle className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
           {result.unavailable ? (result.offline ? 'You’re offline and there’s no saved copy for this postcode yet.' : (result.reason || 'Area data is unavailable right now.')) : (result.reason || 'No figure for this area yet.')}

@@ -6,11 +6,12 @@ import { round2 as r2 } from '../../lib/money';
 import { useClaims } from '../../lib/claimStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useRecoveryGuard } from '../../lib/recoveryGuard';
+import ScreenBack from '../common/ScreenBack';
 
 // Supplier credit notes (Phase 2). Enter a credit note, see which claims it likely covers, and ALLOCATE
 // it (partial, or across several claims) with explicit confirmation — each allocation records money as
 // actually received on that claim (via claimStore.applyCredit, idempotent per note). Full audit trail.
-const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const gbp = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
 
 export default function CreditNotesView({ onBack }) {
@@ -78,9 +79,7 @@ export default function CreditNotesView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Credit notes</h2>
       <p className="mb-4 text-xs text-gray-400">Record a supplier credit and match it to your claims. Money shows as received only once you allocate it here.</p>
 

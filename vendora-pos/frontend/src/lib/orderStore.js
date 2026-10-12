@@ -116,6 +116,18 @@ export function useOrders() {
 
   const removeOrder = useCallback((id) => { persistAll(load().filter((o) => o.id !== id)); }, []);
 
+  /** Restore an order to exactly how it was (Undo for cancel/delete): re-inserts a deleted one, or reverts a
+   *  cancelled one to its snapshot status, matched by id. */
+  const restoreOrder = useCallback((order) => {
+    if (!order || !order.id) return { ok: false };
+    const cur = load();
+    const next = cur.some((o) => o.id === order.id)
+      ? cur.map((o) => (o.id === order.id ? order : o))
+      : [order, ...cur];
+    persistAll(next);
+    return { ok: true };
+  }, []);
+
   /** Record receipts against an order (from a delivery). receipts: [{productId?,barcode?,qty}].
    *  Audit L-D2 (launch): RETURNS a checked `{ ok }` so the delivery caller knows whether the order actually
    *  updated (it used to persist blindly and the caller marked the delivery received even on a failed order
@@ -175,5 +187,5 @@ export function useOrders() {
       : o)));
   }, []);
 
-  return { orders, createOrder, createDraftOrder, sendOrder, cancelOrder, removeOrder, receiveAgainst, markReceived };
+  return { orders, createOrder, createDraftOrder, sendOrder, cancelOrder, removeOrder, restoreOrder, receiveAgainst, markReceived };
 }

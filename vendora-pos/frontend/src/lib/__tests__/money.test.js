@@ -47,6 +47,12 @@ describe('money — decimal-safe currency (explicit rounding policy)', () => {
     expect(money(0.1 + 0.2)).toBe('£0.30');
   });
 
+  it('money puts the sign before the £ for negatives (-£24.00, never £-24.00)', () => {
+    expect(money(-24)).toBe('-£24.00');
+    expect(money(-0.5)).toBe('-£0.50');
+    expect(money(0)).toBe('£0.00');
+  });
+
   it('exposes the rounding policy string', () => {
     expect(ROUNDING).toMatch(/half away from zero/i);
   });

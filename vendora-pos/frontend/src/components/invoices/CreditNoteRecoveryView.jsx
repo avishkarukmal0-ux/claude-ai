@@ -13,7 +13,7 @@ import { readJSON } from '../../lib/storage';
 // store operations (applyCredit / removeCredit / setAllocation), then RE-READS both sides from storage and only
 // clears the flag once they actually match. A failed write or a still-inconsistent re-read keeps the note
 // locked — a reload or dismiss can never silently clear unresolved recovery state.
-const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const gbp = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 
 export default function CreditNoteRecoveryView({ onBack }) {
   const { notes, setAllocation } = useCreditNotes();

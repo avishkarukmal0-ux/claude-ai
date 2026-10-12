@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, BadgePercent, ArrowRight, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { usePriceAlerts } from '../../lib/priceAlertStore';
 import { useInventory } from '../../lib/inventoryStore';
+import ScreenBack from '../common/ScreenBack';
 
 const money = (v) => (v == null ? '—' : `£${(Number(v) || 0).toFixed(2)}`);
 const pct = (m) => (m == null ? '—' : `${Math.round(m * 100)}%`);
@@ -23,9 +24,7 @@ export default function PriceAlertsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Price changes</h2>
       <p className="mb-4 text-xs text-gray-400">When a supplier’s cost moves, review the margin hit here. Retail prices only change when you approve them.</p>
 

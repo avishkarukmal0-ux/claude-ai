@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, FileText, Camera, Plus, Trash2, Check, AlertTriangle, Loader2, ScanText,
+  FileText, Camera, Plus, Trash2, Check, AlertTriangle, Loader2, ScanText,
 } from 'lucide-react';
 import { useInvoices, matchLines, blankInvoiceLine, lineUnitCost, lineTotal, invoiceTotal, validateInvoiceFile } from '../../lib/invoiceStore';
 import { useSuppliers } from '../../lib/supplierStore';
@@ -16,12 +16,25 @@ import { backupAvailable, backupInvoiceFile, listBackedUp, getBackupState } from
 import { parseInvoiceText } from '../../lib/parseInvoiceText';
 import { downscaleImage } from '../../lib/image';
 import { recordFailure } from '../../lib/diagnostics';
+import ScreenBack from '../common/ScreenBack';
 
 // Supplier invoice capture + review (Phase 1). Capture a photo/PDF (or enter manually), REVIEW every field
 // before committing. Matches lines to existing products, flags unmatched, warns on likely duplicates.
 // OCR is optional (behind config): when available we show the extracted text as an aid — never auto-apply.
-const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+// Negatives read as -£24.00 (credit), never £-24.00.
+const gbp = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
+
+// A line is a problem to fix (blocks commit) or a credit (allowed, just flagged).
+function lineIssue(l) {
+  const qty = Number(l.qty);
+  const pack = Number(l.packSize);
+  if (l.qtyMode === 'cases' && l.packSize !== '' && (!Number.isFinite(pack) || pack < 1)) {
+    return { block: true, text: 'Units per case must be 1 or more.' };
+  }
+  if (Number.isFinite(qty) && qty < 0) return { block: false, credit: true, text: 'Negative quantity — treated as a credit line.' };
+  return null;
+}
 
 export default function InvoiceCaptureView({ onBack, onReconcile }) {
   const { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate } = useInvoices();
@@ -122,9 +135,7 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Supplier invoices</h2>
       <p className="mb-4 text-xs text-gray-400">Capture an invoice, check it against your delivery, and claim any discrepancy.</p>
 
@@ -205,13 +216,12 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
   }
 
   const payload = () => ({ ...f, total, lines: matched });
-  const canSave = (f.supplierName || f.supplierId) && (f.lines || []).some((l) => l.name || l.barcode);
+  const blockingIssue = matched.some((l) => lineIssue(l)?.block);
+  const canSave = (f.supplierName || f.supplierId) && (f.lines || []).some((l) => l.name || l.barcode) && !blockingIssue;
 
   return (
     <div>
-      <button type="button" onClick={onCancel} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onCancel} label="Back" />
       <h2 className="mb-3 text-base font-bold text-gray-900">Review invoice</h2>
 
       {file && (
@@ -251,30 +261,36 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
       <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Lines</h3>
       <p className="mb-2 text-xs leading-snug text-gray-400">Enter the quantity, whether it’s in <strong>units</strong> or <strong>cases</strong>, the <strong>units per case</strong> (for cases), and the cost (<strong>£ per case</strong> or <strong>£ per unit</strong> to match). The per-single-unit cost is worked out below each line.</p>
       <ul className="space-y-2">
-        {matched.map((l, i) => (
-          <li key={l.id} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm">
+        {matched.map((l, i) => {
+          const issue = lineIssue(l);
+          return (
+          <li key={l.id} className={`rounded-xl border bg-white p-2.5 shadow-sm ${issue?.block ? 'border-danger/40' : 'border-gray-100'}`}>
             <div className="mb-1.5 flex items-center gap-2">
-              <input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} list="vendora-invoice-products" placeholder="Product" className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
-              {(l.name || l.barcode) && (
-                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold ${l.matched ? 'bg-success-light text-success-dark' : 'bg-warning-light text-warning-dark'}`}>{l.matched ? 'matched' : 'new'}</span>
-              )}
-              <button type="button" onClick={() => removeLine(i)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove line"><Trash2 className="h-3.5 w-3.5" /></button>
+              <input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} list="vendora-invoice-products" placeholder="Product" aria-label={`Product for line ${i + 1}`} className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-base focus:border-primary focus:outline-none" />
+              {issue?.credit
+                ? <span className="shrink-0 rounded-full bg-primary-50 px-1.5 py-0.5 text-xs font-semibold text-primary">credit</span>
+                : (l.name || l.barcode) && (
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold ${l.matched ? 'bg-success-light text-success-dark' : 'bg-warning-light text-warning-dark'}`}>{l.matched ? 'matched' : 'new'}</span>
+                )}
+              <button type="button" onClick={() => removeLine(i)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Remove line ${i + 1}${l.name ? ` (${l.name})` : ''}`}><Trash2 className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-4 gap-1.5">
-              <input value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} inputMode="decimal" placeholder="Qty" aria-label="Quantity" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
-              <select value={l.qtyMode} onChange={(e) => setLine(i, { qtyMode: e.target.value })} aria-label="Units or cases" className="rounded-lg border border-gray-200 bg-white px-1 py-1.5 text-xs text-gray-700 focus:border-primary focus:outline-none">
+              <input value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} inputMode="decimal" placeholder="Qty" aria-label="Quantity" className="min-h-[44px] rounded-lg border border-gray-200 px-2 py-1.5 text-base focus:border-primary focus:outline-none" />
+              <select value={l.qtyMode} onChange={(e) => setLine(i, { qtyMode: e.target.value })} aria-label="Units or cases" className="min-h-[44px] rounded-lg border border-gray-200 bg-white px-1 py-1.5 text-xs text-gray-700 focus:border-primary focus:outline-none">
                 <option value="units">units</option>
                 <option value="cases">cases</option>
               </select>
-              <input value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} inputMode="numeric" placeholder="Units/case" aria-label="Units per case" title="How many single units are in one case" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
-              <input value={l.qtyMode === 'cases' ? l.caseCost : l.unitCost} onChange={(e) => setLine(i, l.qtyMode === 'cases' ? { caseCost: e.target.value } : { unitCost: e.target.value })} inputMode="decimal" placeholder={l.qtyMode === 'cases' ? '£/case' : '£/unit'} aria-label="Cost" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
+              <input value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} inputMode="numeric" min="1" placeholder="Units/case" aria-label="Units per case" title="How many single units are in one case" className="min-h-[44px] rounded-lg border border-gray-200 px-2 py-1.5 text-base focus:border-primary focus:outline-none" />
+              <input value={l.qtyMode === 'cases' ? l.caseCost : l.unitCost} onChange={(e) => setLine(i, l.qtyMode === 'cases' ? { caseCost: e.target.value } : { unitCost: e.target.value })} inputMode="decimal" placeholder={l.qtyMode === 'cases' ? '£/case' : '£/unit'} aria-label="Cost" className="min-h-[44px] rounded-lg border border-gray-200 px-2 py-1.5 text-base focus:border-primary focus:outline-none" />
             </div>
+            {issue && <p className={`mt-1 text-xs font-medium ${issue.block ? 'text-danger-dark' : 'text-primary'}`}>{issue.text}</p>}
             <div className="mt-1 text-right text-xs text-gray-500">{gbp(lineUnitCost(l))}/unit · line {gbp(lineTotal(l))}</div>
           </li>
-        ))}
+          );
+        })}
       </ul>
       <datalist id="vendora-invoice-products">{products.map((p) => <option key={p.id} value={p.name} />)}</datalist>
-      <button type="button" onClick={addLine} className="mt-2 text-xs font-medium text-primary">+ Add line</button>
+      <button type="button" onClick={addLine} className="mt-2 inline-flex min-h-[44px] items-center px-1 text-sm font-medium text-primary">+ Add line</button>
 
       <div className="mt-4 flex items-center justify-between rounded-xl bg-gray-50 p-3">
         <span className="text-sm text-gray-500">Invoice total{unmatchedCount > 0 ? ` · ${unmatchedCount} unmatched` : ''}</span>
@@ -328,9 +344,7 @@ function ReconcileView({ invoice, onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Check vs delivery</h2>
       <p className="mb-3 text-xs text-gray-400">{invoice.supplierName || 'Invoice'}{invoice.reference ? ` · ${invoice.reference}` : ''} · {gbp(invoiceTotal(invoice))}</p>
 

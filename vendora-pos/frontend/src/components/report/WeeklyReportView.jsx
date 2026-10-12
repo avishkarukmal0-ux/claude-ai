@@ -11,7 +11,7 @@ import { weeklyReport, reportToText } from '../../lib/report';
 
 // Weekly owner report (Phase 3). Readable + downloadable. Separates pending claims from recovered money,
 // states the period + freshness, and makes no compliance guarantee.
-const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const gbp = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const d = (ts) => (ts ? new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 
 export default function WeeklyReportView({ onBack }) {

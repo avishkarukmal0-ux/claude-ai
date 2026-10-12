@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowLeft, CalendarClock, AlertTriangle, Wallet, Truck, PiggyBank, Info } from 'lucide-react';
 import ScreenBack from '../common/ScreenBack';
@@ -7,7 +7,7 @@ import { useOrders } from '../../lib/orderStore';
 import { useClaims } from '../../lib/claimStore';
 import { paymentCalendar } from '../../lib/paymentCalendar';
 
-const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const STATUS = {
   unpaid: { label: 'Unpaid', cls: 'bg-gray-100 text-gray-500' },
   partial: { label: 'Part-paid', cls: 'bg-warning-light text-warning-dark' },
@@ -20,14 +20,17 @@ export default function PaymentCalendarView({ onBack }) {
   const { invoices, setDueDate, addPayment } = useInvoices();
   const { orders } = useOrders();
   const { claims } = useClaims();
+  // Inline payment entry (not window.prompt — that's blocked/ignored in an installed PWA, so the old flow did
+  // nothing). Opening a row reveals an amount field; saving records the payment and the calendar recomputes.
+  const [pay, setPay] = useState({ id: null, amount: '' });
 
   const cal = useMemo(() => paymentCalendar({ invoices, orders, claims, now: Date.now() }), [invoices, orders, claims]);
 
-  function recordPayment(inv) {
-    const raw = window.prompt(`Record a payment to ${inv.supplierName}. Amount £:`, '');
-    if (raw == null) return;
-    const res = addPayment(inv.invoiceId, raw);
-    if (res && res.ok === false) toast.error(res.error || 'Couldn’t record that'); else toast.success('Payment recorded');
+  function submitPayment(inv) {
+    const res = addPayment(inv.invoiceId, pay.amount);
+    if (res && res.ok === false) { toast.error(res.error || 'Enter a payment amount.'); return; }
+    toast.success('Payment recorded');
+    setPay({ id: null, amount: '' });
   }
 
   return (
@@ -91,7 +94,15 @@ export default function PaymentCalendarView({ onBack }) {
                   <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-500">Due
                     <input type="date" value={d.dueDate ? new Date(d.dueDate).toISOString().slice(0, 10) : ''} onChange={(e) => setDueDate(d.invoiceId, e.target.value || null)} className="border-none p-0 text-xs text-gray-900 focus:outline-none" />
                   </label>
-                  <button type="button" onClick={() => recordPayment(d)} className="rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95">Record payment</button>
+                  {pay.id === d.invoiceId ? (
+                    <span className="inline-flex items-center gap-1">
+                      <input type="number" inputMode="decimal" min="0" step="0.01" autoFocus value={pay.amount} onChange={(e) => setPay((p) => ({ ...p, amount: e.target.value }))} placeholder="£ amount" aria-label={`Payment amount for ${d.supplierName}`} className="min-h-[44px] w-24 rounded-lg border border-gray-200 px-2 text-sm text-gray-900 focus:border-primary focus:outline-none" />
+                      <button type="button" onClick={() => submitPayment(d)} className="inline-flex min-h-[44px] items-center rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white active:scale-95">Save</button>
+                      <button type="button" onClick={() => setPay({ id: null, amount: '' })} className="inline-flex min-h-[44px] items-center rounded-lg px-2 text-xs font-semibold text-gray-500">Cancel</button>
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => setPay({ id: d.invoiceId, amount: '' })} className="inline-flex min-h-[44px] items-center rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white active:scale-95">Record payment</button>
+                  )}
                 </div>
               </li>
             );

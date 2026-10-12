@@ -143,6 +143,35 @@ function buildFromOpenOrder(order) {
   });
 }
 
+// A committed invoice with no delivery/order anchoring it → a journey anchored on the invoice, so a directly
+// captured bill still appears (and its claim/credit follow-up is chased). Audit (Buy tab): the journey must
+// reflect committed invoices, not only deliveries/orders.
+function buildFromInvoice(invoice, { claims }) {
+  const iClaims = claimsForInvoice(claims, invoice.id);
+  const outstanding = iClaims.length ? round2(iClaims.reduce((n, c) => n + (claimOutstanding(c) || 0), 0)) : 0;
+  const stages = [
+    stage('order', 'skipped', 'Order', 'No order recorded'),
+    stage('delivery', 'skipped', 'Delivery', 'No delivery recorded'),
+    stage('invoice', 'done', 'Invoice', invoice.reference || invoice.supplierName || 'Committed'),
+    stage('resolve', 'skipped', 'Resolve', ''),
+    iClaims.length
+      ? stage('claim', outstanding > 0 ? 'current' : 'done', 'Claim', outstanding > 0 ? `${iClaims.length} open` : 'Settled')
+      : stage('claim', 'optional', 'Claim', ''),
+    iClaims.length && outstanding <= 0
+      ? stage('credit', 'done', 'Credit', 'Credited')
+      : stage('credit', iClaims.length ? 'pending' : 'skipped', 'Credit', ''),
+  ];
+  return finishJourney({
+    id: `i:${invoice.id}`,
+    anchor: 'invoice',
+    supplierId: invoice.supplierId || null,
+    supplierName: invoice.supplierName || '',
+    refs: { orderId: null, orderRef: '', deliveryId: null, deliveryRef: '', invoiceId: invoice.id, invoiceRef: invoice.reference || '' },
+    updatedAt: invoice.updatedAt || invoice.committedAt || invoice.createdAt || 0,
+    stages,
+  });
+}
+
 // Map the current stage to the single next action (reusing existing screen keys). Never auto-sends.
 const NEXT_ACTION = {
   order: { cta: 'Send to supplier', go: { screen: 'orders' }, title: 'Send the order (when you place it)' },
@@ -192,6 +221,14 @@ export function buildJourneys({ orders = [], deliveries = [], invoices = [], cla
     // Fully-handled orders with a delivery are represented by that delivery's journey.
     if (deliveredOrderIds.has(o.id) && st !== 'partially_received') continue;
     journeys.push(buildFromOpenOrder(o));
+  }
+  // Committed invoices not already represented by a delivery/claim journey → their own journey, so a directly
+  // captured bill shows up (and any claim/credit on it is chased).
+  const claimInvoiceIds = new Set(arr(claims).map((c) => c.invoiceId).filter(Boolean));
+  for (const i of arr(invoices)) {
+    if (!i || !i.id || i.status !== 'committed') continue;
+    if (claimInvoiceIds.has(i.id)) continue; // already shown via its delivery/claim journey
+    journeys.push(buildFromInvoice(i, { claims }));
   }
   // Sort: incomplete (active) first, then by most-recent activity.
   return journeys.sort((a, b) => {

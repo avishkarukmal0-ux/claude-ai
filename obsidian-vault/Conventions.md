@@ -51,6 +51,8 @@ The recurring round-3 lesson: *a passing helper test does not prove the whole us
 - Response shape: `{ success: true, ...data }` or `{ success:false, error:{ code, message } }`.
 
 ## PWA local-first patterns (2026-09-30, see [[ADR-002-App-Till-Separation]])
+- **Never use `window.prompt` / `window.confirm` / `alert` for input or confirmation** (2026-10-12, see [[2026-10-12-BuyTab-Audit-JPPvn0W2]]). Installed PWAs block or silently ignore them, so a "Record payment" prompt is a dead button on a home-screen install. Use an inline field (44px) for input and the shared accessible `ConfirmDialog` for confirmation; pair any destructive confirm with an Undo toast and a `restoreX` store method (re-insert preserving `id`), never a silent delete.
+- **Money sign goes OUTSIDE the £** (2026-10-12) — `-£24.00`, never `£-24.00`. `lib/money.js` `money()` handles this; per-view `money`/`gbp` formatters mirror the same one-liner (`n < 0 ? \`-£${Math.abs(n).toFixed(2)}\` : …`).
 - **All on-device storage goes through `lib/storage.js`** — never `localStorage.getItem/setItem` directly
   in a store. It scopes keys to the active workspace, surfaces write failures (don't swallow them), and
   since 2026-09-30 (infra Stage 1, [[2026-09-30-IndexedDB-Durability]]) keeps a synchronous in-memory

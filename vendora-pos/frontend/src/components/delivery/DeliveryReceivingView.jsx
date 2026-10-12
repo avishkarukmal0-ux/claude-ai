@@ -34,7 +34,7 @@ function downscaleImage(file, max = 640, quality = 0.6) {
   });
 }
 
-const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 
 // Stage 2 — receive & check a delivery. Cases/packs with conversion, ordered vs delivered vs
 // accepted, discrepancies, notes/photos, drafts (autosaved), duplicate protection, repeat-last.
@@ -226,7 +226,8 @@ export default function DeliveryReceivingView({ onBack }) {
             value={draft.supplierName}
             onChange={(e) => commit({ ...draft, supplierName: e.target.value })}
             placeholder="Supplier (e.g. Booker)"
-            className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
+            aria-label="Supplier"
+            className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-base text-gray-900 focus:border-primary focus:outline-none"
           />
           <datalist id="supplier-list">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
         </label>
@@ -236,7 +237,8 @@ export default function DeliveryReceivingView({ onBack }) {
             value={draft.reference}
             onChange={(e) => commit({ ...draft, reference: e.target.value })}
             placeholder="Delivery / invoice reference (optional)"
-            className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
+            aria-label="Delivery or invoice reference"
+            className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-base text-gray-900 focus:border-primary focus:outline-none"
           />
         </label>
         {openOrders.length > 0 && (

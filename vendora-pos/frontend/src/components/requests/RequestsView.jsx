@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, MessageSquarePlus, Plus, Check, X, ShoppingCart, Trash2 } from 'lucide-react';
+import { MessageSquarePlus, Plus, Check, X, ShoppingCart, Trash2 } from 'lucide-react';
 import { useRequests, sortRequests } from '../../lib/requestStore';
 import { useBuyList } from '../../lib/buyListStore';
+import ScreenBack from '../common/ScreenBack';
 
 // Customer requests — log "do you sell…?" so repeat demand is visible when deciding what to stock.
 export default function RequestsView({ onBack }) {
@@ -42,20 +43,20 @@ export default function RequestsView({ onBack }) {
         </span>
         {r.status === 'open' && (
           <div className="flex shrink-0 items-center gap-1.5">
-            <button type="button" onClick={() => toBuyList(r)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"><ShoppingCart className="h-3.5 w-3.5" /> Add to list</button>
-            <button type="button" onClick={() => setStatus(r.id, 'declined')} className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 text-gray-500 active:scale-95" aria-label="Won’t stock"><X className="h-3.5 w-3.5" /></button>
+            <button type="button" onClick={() => toBuyList(r)} aria-label={`Add ${r.name} to buy list`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary px-2.5 text-xs font-semibold text-white active:scale-95"><ShoppingCart className="h-3.5 w-3.5" /> Add to list</button>
+            <button type="button" onClick={() => setStatus(r.id, 'declined')} className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-500 active:scale-95" aria-label={`Won’t stock ${r.name}`}><X className="h-4 w-4" /></button>
           </div>
         )}
         {r.status === 'planned' && (
           <div className="flex shrink-0 items-center gap-1.5">
             <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary">On buy list</span>
-            <button type="button" onClick={() => setStatus(r.id, 'stocked')} className="flex items-center gap-1 rounded-lg bg-success px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Got it in</button>
+            <button type="button" onClick={() => setStatus(r.id, 'stocked')} aria-label={`Mark ${r.name} as stocked`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-success px-2.5 text-xs font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Got it in</button>
           </div>
         )}
         {terminal && (
           <div className="flex shrink-0 items-center gap-1.5">
             <span className="text-xs font-semibold text-gray-400">{r.status === 'stocked' ? 'Stocked' : 'Declined'}</span>
-            <button type="button" onClick={() => removeRequest(r.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+            <button type="button" onClick={() => removeRequest(r.id)} className="inline-flex h-11 w-11 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete ${r.name}`}><Trash2 className="h-4 w-4" /></button>
           </div>
         )}
       </li>
@@ -64,17 +65,15 @@ export default function RequestsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Customer requests</h2>
       <p className="mb-4 text-xs text-gray-400">Log what customers ask for. The more a line is asked for, the higher it climbs.</p>
 
       <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} placeholder="What did they ask for? (e.g. oat milk)" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} placeholder="What did they ask for? (e.g. oat milk)" aria-label="Requested item" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <div className="flex gap-2">
-          <input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} placeholder="Note (optional)" className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-          <button type="button" onClick={add} className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white active:scale-95"><Plus className="h-4 w-4" /> Log</button>
+          <input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} placeholder="Note (optional)" aria-label="Note" className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+          <button type="button" onClick={add} className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl bg-primary px-4 text-sm font-semibold text-white active:scale-95"><Plus className="h-4 w-4" /> Log</button>
         </div>
       </div>
 

@@ -44,7 +44,13 @@ export function useSuppliers() {
     setSuppliers((prev) => { const next = prev.filter((s) => s.id !== id); persist(next); return next; });
   }, []);
 
-  return { suppliers, addSupplier, updateSupplier, removeSupplier };
+  // Undo for a removal — re-insert the exact supplier (id preserved so buy-list rows stay linked).
+  const restoreSupplier = useCallback((supplier) => {
+    if (!supplier || !supplier.id) return;
+    setSuppliers((prev) => { if (prev.some((s) => s.id === supplier.id)) return prev; const next = [...prev, supplier]; persist(next); return next; });
+  }, []);
+
+  return { suppliers, addSupplier, updateSupplier, removeSupplier, restoreSupplier };
 }
 
 // Read suppliers once (non-hook) — for lookups outside React state.

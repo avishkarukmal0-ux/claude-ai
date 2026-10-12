@@ -34,5 +34,8 @@ export function sumMoney(values = []) {
 /** Multiply a money amount by a (possibly fractional) quantity, rounded to the penny. */
 export function mul(amount, qty) { return round2((Number(amount) || 0) * (Number(qty) || 0)); }
 
-/** Format as GBP for display. */
-export function money(v) { return `£${round2(v).toFixed(2)}`; }
+/** Format as GBP for display. Negatives read as -£24.00, never £-24.00. */
+export function money(v) {
+  const n = round2(v);
+  return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`;
+}

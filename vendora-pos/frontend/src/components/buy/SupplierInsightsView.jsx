@@ -6,8 +6,9 @@ import { useSuppliers } from '../../lib/supplierStore';
 import { useDeliveries } from '../../lib/deliveryStore';
 import { useClaims } from '../../lib/claimStore';
 import { compareSuppliersForProduct, supplierScorecards } from '../../lib/supplierInsights';
+import ScreenBack from '../common/ScreenBack';
 
-const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const day = (t) => (t ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
 
 // Buying decisions (Phase 5) — compares what suppliers actually charged (per single unit, from committed
@@ -29,9 +30,7 @@ export default function SupplierInsightsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Compare suppliers</h2>
       <p className="mb-4 text-xs text-gray-400">Equivalent per-unit costs from your committed invoices, plus how each supplier has performed. Costs only — add delivery charges yourself where they matter.</p>
 

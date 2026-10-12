@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import {
-  ArrowLeft, Route, Building2, Check, Circle, AlertTriangle, ChevronRight, CheckCircle2,
+  Route, Building2, Check, Circle, AlertTriangle, ChevronRight, CheckCircle2,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useOrders } from '../../lib/orderStore';
 import { useDeliveries } from '../../lib/deliveryStore';
 import { useInvoices } from '../../lib/invoiceStore';
@@ -95,9 +96,7 @@ export default function BuyingJourneyView({ onBack, onGo }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Buying journey</h2>
       <p className="mb-4 text-xs text-gray-400">Follow each purchase from order to credit. Each step opens the normal screen — the shortcuts in Buy still work.</p>
 

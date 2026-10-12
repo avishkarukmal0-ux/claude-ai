@@ -3,8 +3,9 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Receipt, Building2, Share2, Trash2, ChevronRight, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useClaims, claimTotals, nextStates, OPEN_CLAIM_STATUSES } from '../../lib/claimStore';
 import { useDeliveries, DELIVERY_ISSUES } from '../../lib/deliveryStore';
+import ScreenBack from '../common/ScreenBack';
 
-const money = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const STATUS = {
   draft: { label: 'Draft', cls: 'bg-gray-100 text-gray-500' },
   submitted: { label: 'Submitted', cls: 'bg-primary-50 text-primary' },
@@ -44,9 +45,7 @@ export default function ClaimsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Supplier claims</h2>
       <p className="mb-4 text-xs text-gray-400">Recover credit for missing, damaged or wrong-priced goods — evidenced by your delivery photos. You send it; we track it.</p>
 

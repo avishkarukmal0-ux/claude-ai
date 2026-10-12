@@ -3,10 +3,11 @@ import { ArrowLeft, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react
 import { useInvoices } from '../../lib/invoiceStore';
 import { useInventory } from '../../lib/inventoryStore';
 import { priceHistory } from '../../lib/priceHistory';
+import ScreenBack from '../common/ScreenBack';
 
 // Supplier purchase-price history (Phase 3). From committed invoices only. Shows prev→current cost, the
 // source invoice, and flags margin pressure. Estimated gross margin ≠ actual profit. Never changes prices.
-const gbp = (v) => `£${(Number(v) || 0).toFixed(2)}`;
+const gbp = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const pct = (m) => (m == null ? '—' : `${Math.round(m * 100)}%`);
 const d = (ts) => (ts ? new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '');
 
@@ -17,9 +18,7 @@ export default function PriceHistoryView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
       <h2 className="mb-1 text-base font-bold text-gray-900">Purchase price history</h2>
       <p className="mb-4 text-xs text-gray-400">Confirmed cost changes from your committed invoices. We never change your retail prices.</p>
 
