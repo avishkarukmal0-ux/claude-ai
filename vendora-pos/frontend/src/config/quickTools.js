@@ -5,7 +5,7 @@
 //   • hideForMembers — hidden for specific shop-type members (e.g. MUP makes no sense for a vape-only shop)
 //   • gate(ctx, now)  — a predicate over { familyId, memberId, profile } for rules that depend on the business
 //                       profile (MTD only for a qualifying sole trader; MUP only in Scotland/Wales).
-import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud, ShieldX, Thermometer, Tags, PackageCheck } from 'lucide-react';
+import { FileClock, Percent, ShieldCheck, ShieldAlert, Wine, Cloud, ShieldX, Thermometer, Tags, PackageCheck, Scale, BadgeCheck } from 'lucide-react';
 import MtdCountdown from '../components/quicktools/MtdCountdown';
 import MarginCalculator from '../components/quicktools/MarginCalculator';
 import AgeCheckHelper from '../components/quicktools/AgeCheckHelper';
@@ -16,6 +16,8 @@ import RefusalsLogTool from '../components/quicktools/RefusalsLogTool';
 import VapeProductCheck from '../components/quicktools/VapeProductCheck';
 import TemperatureLogTool from '../components/quicktools/TemperatureLogTool';
 import PpdsLabelTool from '../components/quicktools/PpdsLabelTool';
+import WeighLabelTool from '../components/quicktools/WeighLabelTool';
+import FoodRegistrationTool from '../components/quicktools/FoodRegistrationTool';
 import { getFamily } from './shopTypes';
 import { mtdApplies } from '../lib/businessProfile';
 
@@ -103,10 +105,26 @@ export const QUICK_TOOLS = {
   'temp-log': {
     id: 'temp-log',
     label: 'Temperature log',
-    tagline: 'Fridge / freezer checks',
+    tagline: 'Fridge / freezer / hot-hold',
     icon: Thermometer,
     component: TemperatureLogTool,
     requiresModule: 'allergens',
+  },
+  'weigh-label': {
+    id: 'weigh-label',
+    label: 'Weigh & label',
+    tagline: 'Weight → price → label',
+    icon: Scale,
+    component: WeighLabelTool,
+    requiresModule: 'scale-labels', // fresh-weighed only
+  },
+  'food-registration': {
+    id: 'food-registration',
+    label: 'Registration & rating',
+    tagline: 'Council registration & FHRS',
+    icon: BadgeCheck,
+    component: FoodRegistrationTool,
+    requiresModule: 'allergens', // fresh-weighed + world-specialist
   },
 };
 

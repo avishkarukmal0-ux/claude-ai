@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { setActiveWorkspace, __resetMemForTest } from '../storage';
-import { useTemperatureLog, readingSafe } from '../temperatureLog';
+import { useTemperatureLog, readingSafe, temperatureCsv } from '../temperatureLog';
+import { useScaleChecks } from '../scaleChecks';
 import { useRefusalsLog, refusalsCsv } from '../refusalsLog';
 
 beforeEach(() => {
@@ -24,6 +25,30 @@ describe('temperatureLog — safe-range flagging', () => {
     expect(result.current.readings[0].safe).toBe(false);
     let bad;
     act(() => { bad = result.current.addReading({ kind: 'chilled', tempC: '' }); });
+    expect(bad.ok).toBe(false);
+  });
+
+  it('flags hot-hold below 63°C and keeps a corrective action; CSV has a header + rows', () => {
+    expect(readingSafe('hothold', 70)).toBe(true);
+    expect(readingSafe('hothold', 55)).toBe(false);
+    const { result } = renderHook(() => useTemperatureLog());
+    act(() => { result.current.addReading({ unit: 'Pie warmer', kind: 'hothold', tempC: 55, action: 'reheated' }); });
+    expect(result.current.readings[0].safe).toBe(false);
+    expect(result.current.readings[0].action).toBe('reheated');
+    const csv = temperatureCsv(result.current.readings);
+    expect(csv.split('\n')[0]).toMatch(/Date.*Type.*Action/);
+  });
+});
+
+describe('scaleChecks — verified + self-check records', () => {
+  it('records a verified mark and a self-check, surfacing the latest of each', () => {
+    const { result } = renderHook(() => useScaleChecks());
+    act(() => { result.current.recordCheck({ kind: 'verified' }); });
+    act(() => { result.current.recordCheck({ kind: 'selfcheck' }); });
+    expect(result.current.lastVerified).toBeTruthy();
+    expect(result.current.lastSelfCheck).toBeTruthy();
+    let bad;
+    act(() => { bad = result.current.recordCheck({ kind: 'nope' }); });
     expect(bad.ok).toBe(false);
   });
 });

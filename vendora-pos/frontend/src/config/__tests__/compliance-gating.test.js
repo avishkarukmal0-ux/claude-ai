@@ -29,12 +29,18 @@ describe('quick-tool gating — member + business profile', () => {
     expect(idsFor({ familyId: 'grocery-age', profile: { entity: 'sole-trader', turnoverBand: 'over-50k' } }, NOW)).toContain('mtd-countdown');
   });
 
-  it('Fresh group gets PPDS label + temperature log; grocery does not', () => {
+  it('Fresh group gets PPDS label + temperature log + weigh & label + registration; grocery does not', () => {
     const fresh = idsFor({ familyId: 'fresh-weighed' }, NOW);
-    expect(fresh).toEqual(expect.arrayContaining(['ppds-label', 'temp-log']));
+    expect(fresh).toEqual(expect.arrayContaining(['ppds-label', 'temp-log', 'weigh-label', 'food-registration']));
     const grocery = idsFor({ familyId: 'grocery-age' }, NOW);
     expect(grocery).not.toContain('ppds-label');
     expect(grocery).not.toContain('temp-log');
+    expect(grocery).not.toContain('weigh-label');
+  });
+
+  it('weigh & label is fresh-weighed only; registration reaches world-specialist too', () => {
+    expect(idsFor({ familyId: 'world-specialist' }, NOW)).not.toContain('weigh-label');
+    expect(idsFor({ familyId: 'world-specialist' }, NOW)).toContain('food-registration');
   });
 
   it('age-restricted shops get the refusals log and vape product check', () => {
