@@ -94,13 +94,13 @@ export default function TodayActions({ onGo }) {
                   <Icon className="h-5 w-5" strokeWidth={1.9} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="min-w-0 truncate text-sm font-semibold text-gray-900">{a.title}</span>
+                  <span className="flex items-start gap-2">
+                    <span className="min-w-0 text-sm font-semibold leading-tight text-gray-900 line-clamp-2">{a.title}</span>
                     {a.money ? (
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${s.chip}`}>{a.money}</span>
+                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums ${s.chip}`}>{a.money}</span>
                     ) : null}
                   </span>
-                  <span className="mt-0.5 block truncate text-[11px] text-gray-500">{a.detail}</span>
+                  <span className="mt-0.5 block text-xs leading-snug text-gray-500 line-clamp-2">{a.detail}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-primary">
                   {a.cta} <ChevronRight className="h-3.5 w-3.5" />
@@ -109,7 +109,7 @@ export default function TodayActions({ onGo }) {
               <button
                 type="button"
                 onClick={() => snooze(a.id)}
-                className="flex w-9 shrink-0 items-center justify-center rounded-r-2xl text-gray-300 hover:text-gray-500"
+                className="flex w-11 shrink-0 items-center justify-center rounded-r-2xl text-gray-300 hover:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                 aria-label="Snooze until tomorrow"
                 title="Snooze until tomorrow (doesn’t change your records)"
               >

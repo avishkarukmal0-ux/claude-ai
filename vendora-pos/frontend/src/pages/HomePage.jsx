@@ -104,6 +104,7 @@ export default function HomePage() {
   });
   const [screen, setScreen] = useState(null); // full-page workflow screen
   const [activeTool, setActiveTool] = useState(null);
+  const [toolsExpanded, setToolsExpanded] = useState(false); // Quick tools: carousel ⇄ full grid ("See all")
   // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.
   const toolDialogRef = useDialog(!!activeTool, () => setActiveTool(null));
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
@@ -186,14 +187,14 @@ export default function HomePage() {
           {loggedIn ? (
             <>
               <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Demo data — a pretend shop. Your real data is safe.</span>
-              <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="shrink-0 font-semibold underline">Exit demo</button>
+              <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="-my-2 inline-flex min-h-[44px] shrink-0 items-center px-2 font-semibold underline">Exit demo</button>
             </>
           ) : (
             // Signed-out welcome: this is a SAMPLE shop so you can try Vendora. No real data is shown here —
             // log in or create your shop to use it for real (your data is then private to your account).
             <>
               <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> You’re trying Vendora with sample data. Create your shop to use it for real.</span>
-              <button type="button" onClick={() => navigate('/account')} className="shrink-0 rounded-lg bg-amber-900 px-2.5 py-1 font-semibold text-amber-50">Log in / Create shop</button>
+              <button type="button" onClick={() => navigate('/account')} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-amber-900 px-3 py-2 font-semibold text-amber-50">Log in / Create shop</button>
             </>
           )}
         </div>
@@ -205,11 +206,19 @@ export default function HomePage() {
             <circle cx="24" cy="15" r="4.5" fill="white" />
           </svg>
         </span>
+        <h1 className="sr-only">Vendora — {shopLabel} home</h1>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-gray-900">{shopLabel}</div>
           <div className="text-xs text-gray-400">Your Vendora</div>
         </div>
-        <Link to="/" className="text-xs font-medium text-primary hover:underline">Change</Link>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Authenticated → an account/sign-out entry point (sign out lives on /account). The signed-out
+              "Log in / Create shop" CTA is only in the sample-mode banner and is already hidden when logged in. */}
+          {ACCOUNTS_ENABLED && loggedIn && (
+            <Link to="/account" aria-label="Your account and sign out" className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-primary hover:underline">Account</Link>
+          )}
+          <Link to="/" aria-label="Change shop type" className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-primary hover:underline">Change</Link>
+        </div>
       </header>
 
       <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto px-4 pb-24 pt-4 focus:outline-none">
@@ -275,7 +284,7 @@ export default function HomePage() {
               <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">What Vendora helps with</h2>
-                  <button type="button" onClick={dismissPromises} className="text-[11px] font-semibold text-primary">Got it</button>
+                  <button type="button" onClick={dismissPromises} className="-m-2 inline-flex min-h-[44px] items-center p-2 text-xs font-semibold text-primary">Got it</button>
                 </div>
                 <ul className="space-y-1.5">
                   {family.promises.map((p) => (
@@ -289,15 +298,22 @@ export default function HomePage() {
 
             {tools.length > 0 && (
               <section className="mb-5">
-                <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Quick tools</h2>
-                <div className="flex gap-3 overflow-x-auto pb-1">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Quick tools</h2>
+                  {tools.length > 2 && (
+                    <button type="button" onClick={() => setToolsExpanded((v) => !v)} aria-expanded={toolsExpanded} className="-m-2 inline-flex min-h-[44px] items-center rounded-lg p-2 text-xs font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+                      {toolsExpanded ? 'Show less' : 'See all'}
+                    </button>
+                  )}
+                </div>
+                <div className={toolsExpanded ? 'grid grid-cols-2 gap-3' : 'flex gap-3 overflow-x-auto pb-1'}>
                   {tools.map((t) => {
                     const Icon = t.icon;
                     return (
-                      <button key={t.id} type="button" onClick={() => setActiveTool(t)} className="flex w-32 shrink-0 flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                      <button key={t.id} type="button" onClick={() => setActiveTool(t)} className={`flex ${toolsExpanded ? 'w-full' : 'w-32 shrink-0'} flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2`}>
                         <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}1A`, color: accent }}><Icon className="h-5 w-5" strokeWidth={1.75} /></span>
                         <span className="text-sm font-semibold leading-tight text-gray-900">{t.label}</span>
-                        <span className="mt-0.5 text-[11px] leading-snug text-gray-500">{t.tagline}</span>
+                        <span className="mt-0.5 text-xs leading-snug text-gray-500">{t.tagline}</span>
                       </button>
                     );
                   })}
@@ -439,7 +455,7 @@ function HubTile({ icon: Icon, label, desc, onClick, accent }) {
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${accent}1A`, color: accent }}><Icon className="h-6 w-6" strokeWidth={1.75} /></span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-gray-900">{label}</span>
-        <span className="block text-[11px] text-gray-500">{desc}</span>
+        <span className="block text-xs leading-snug text-gray-500">{desc}</span>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
     </button>
@@ -469,7 +485,7 @@ function Row({ icon: Icon, label, sub, onClick, badge = 0, disabled = false }) {
       <Icon className="h-5 w-5 text-gray-400" />
       <span className="flex-1">
         <span className="block text-sm font-medium text-gray-900">{label}</span>
-        {sub && <span className="block text-[11px] text-gray-400">{sub}</span>}
+        {sub && <span className="block text-xs text-gray-400">{sub}</span>}
       </span>
       {badge > 0 && <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">{badge}</span>}
       <ChevronRight className="h-4 w-4 text-gray-300" />

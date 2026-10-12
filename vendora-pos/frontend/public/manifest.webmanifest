@@ -12,7 +12,7 @@
   "categories": ["business", "productivity", "shopping"],
   "shortcuts": [
     { "name": "Scan & check", "short_name": "Scan", "description": "Identify, receive, count or record waste", "url": "/home?tab=scan&source=pwa-shortcut" },
-    { "name": "Stock", "short_name": "Stock", "description": "Your products, counts and refills", "url": "/home?tab=stock&source=pwa-shortcut" },
+    { "name": "Stock check", "short_name": "Stock check", "description": "Count stock, refills and your products", "url": "/home?tab=stock&source=pwa-shortcut" },
     { "name": "Buy list", "short_name": "Buy", "description": "What to reorder, orders and suppliers", "url": "/home?tab=buy&source=pwa-shortcut" }
   ],
   "icons": [
