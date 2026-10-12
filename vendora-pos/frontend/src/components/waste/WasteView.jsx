@@ -43,7 +43,7 @@ export default function WasteView({ onBack }) {
       productId: p.id, batchId: batchId || null, name: p.name,
       qty: md.qty, originalPrice: p.price, reducedPrice: md.reducedPrice,
       expiry: info?.date ? info.date.toISOString() : (p.expiry || null), dateType: info?.type || p.dateType || null,
-      mustPull: !!info?.mustPull,
+      mustPull: !!info?.mustPull, size: p.size ?? null, sizeUnit: p.sizeUnit ?? null,
     });
     if (!res.ok) { toast.error(res.error || 'Couldn’t create the markdown'); return; }
     toast.success('Marked down — print or share the label. Stock is unchanged.');
@@ -332,9 +332,9 @@ export default function WasteView({ onBack }) {
               </select>
               <div className="mb-2 grid grid-cols-2 gap-2">
                 <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">Qty
-                  <input value={dc.qty} onChange={(e) => setDc((d) => ({ ...d, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+                  <input value={dc.qty} onChange={(e) => setDc((d) => ({ ...d, qty: e.target.value }))} inputMode="numeric" aria-label="Quantity to date-code" placeholder="e.g. 2" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
                 </label>
-                <input type="date" value={dc.expiry} onChange={(e) => setDc((d) => ({ ...d, expiry: e.target.value }))} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:border-primary focus:outline-none" />
+                <input type="date" value={dc.expiry} onChange={(e) => setDc((d) => ({ ...d, expiry: e.target.value }))} aria-label="Expiry date" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:border-primary focus:outline-none" />
               </div>
               <select value={dc.dateType} onChange={(e) => setDc((d) => ({ ...d, dateType: e.target.value }))} className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
                 {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}{v.hard ? ' (legal — pull after date)' : ''}</option>)}

@@ -57,6 +57,20 @@ describe('businessProfile — the new onboarding answers persist (Phase 0)', () 
   });
 });
 
+describe('resolveNiche — single source of truth (Phase 0 refinement)', () => {
+  it('resolves tools, nudges, demo data and onboarding questions in one object', async () => {
+    const { resolveNiche, onboardingQuestionsFor } = await import('../../config/niche');
+    const n = resolveNiche({ familyId: 'mobile-value', memberId: 'pet-shop', profile: { region: 'england' } });
+    expect(n.group).toBe('mobile-value');
+    expect(Array.isArray(n.tools)).toBe(true);
+    expect(Array.isArray(n.nudges)).toBe(true);
+    expect(n.demoData.products.length).toBeGreaterThan(0);
+    expect(n.onboardingQuestions).toContain('sellsAnimals'); // mobile-value only
+    expect(onboardingQuestionsFor('fresh-weighed')).toContain('importsFood');
+    expect(onboardingQuestionsFor('fresh-weighed')).not.toContain('sellsAnimals');
+  });
+});
+
 describe('priceMarking — unit price (Phase 1.7)', () => {
   it('computes per-kg / per-100ml and a VAT-inclusive label', () => {
     expect(unitPrice({ price: 8.99, size: 5, sizeUnit: 'kg' }).text).toBe('£1.80/kg');

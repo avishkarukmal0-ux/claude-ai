@@ -13,6 +13,7 @@ import { readJSON, writeJSON } from './storage';
 import { round2, mul } from './money';
 import { actorName } from './actor';
 import { DATE_TYPES } from './inventoryStore';
+import { unitPrice } from './priceMarking';
 
 /** A LEGAL hard stop that is already past: use-by / medicine with an expiry date before now. It is a criminal
  *  offence to sell such stock, so a markdown must be refused even if the caller forgets to pass `mustPull`. */
@@ -50,11 +51,14 @@ export function validateMarkdown({ qty, originalPrice, reducedPrice, mustPull, e
 /** ESTIMATED recovery from a markdown = reduced price × units REPORTED sold. Never a confirmed receipt. */
 export function estimatedRecovery(m) { return mul(num(m.reducedPrice), num(m.soldReported)); }
 
-/** Printable / shareable label text for a markdown. */
+/** Printable / shareable label text for a markdown. Prices are shown INCLUDING VAT and, where the pack size
+ *  is known, with a unit price (Price Marking Order — a customer-facing price label). */
 export function markdownLabelText(m) {
   const lines = ['*** REDUCED TO CLEAR ***', m.name || 'Item'];
-  if (num(m.originalPrice) > 0) lines.push(`Was £${round2(m.originalPrice).toFixed(2)}  —  NOW £${round2(m.reducedPrice).toFixed(2)}`);
-  else lines.push(`Now £${round2(m.reducedPrice).toFixed(2)}`);
+  if (num(m.originalPrice) > 0) lines.push(`Was £${round2(m.originalPrice).toFixed(2)}  —  NOW £${round2(m.reducedPrice).toFixed(2)} incl. VAT`);
+  else lines.push(`Now £${round2(m.reducedPrice).toFixed(2)} incl. VAT`);
+  const up = unitPrice({ price: m.reducedPrice, size: m.size, sizeUnit: m.sizeUnit });
+  if (up) lines.push(up.text);
   if (m.expiry) {
     const d = new Date(m.expiry);
     if (!Number.isNaN(d.getTime())) lines.push(`Sell by ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`);
@@ -86,12 +90,13 @@ export function useMarkdowns() {
   const persistAll = (next) => { const res = persist(next); if (res.ok) setMarkdowns(next); return res; };
 
   /** Create a markdown. Does NOT change stock. Refuses hard-stop (mustPull) stock. @returns {ok, markdown?} */
-  const createMarkdown = useCallback(({ productId = null, batchId = null, name = 'Item', qty, originalPrice, reducedPrice, expiry = null, dateType = null, mustPull = false }) => {
+  const createMarkdown = useCallback(({ productId = null, batchId = null, name = 'Item', qty, originalPrice, reducedPrice, expiry = null, dateType = null, mustPull = false, size = null, sizeUnit = null }) => {
     const check = validateMarkdown({ qty, originalPrice, reducedPrice, mustPull, expiry, dateType });
     if (!check.ok) return { ok: false, error: check.error };
     const m = {
       id: newId(), productId, batchId, name,
       qty: num(qty), originalPrice: originalPrice == null || originalPrice === '' ? null : round2(originalPrice), reducedPrice: round2(reducedPrice),
+      size: size == null || size === '' ? null : Number(size) || null, sizeUnit: sizeUnit || null,
       expiry, dateType, status: 'active', soldReported: 0, binned: 0,
       by: actorName(), createdAt: Date.now(), updatedAt: Date.now(), closedAt: null,
     };

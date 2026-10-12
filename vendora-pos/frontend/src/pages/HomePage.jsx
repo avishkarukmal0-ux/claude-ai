@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
-import { getQuickToolsForShop } from '../config/quickTools';
+import { resolveNiche } from '../config/niche';
 import { getBusinessProfile } from '../lib/businessProfile';
 import TodayAtShop from '../components/home/TodayAtShop';
 import TodayActions from '../components/home/TodayActions';
@@ -183,7 +183,8 @@ export default function HomePage() {
   const member = saved.memberId ? getMember(saved.familyId, saved.memberId) : null;
   const shopLabel = member?.label || family.label;
   const profile = getBusinessProfile();
-  const tools = getQuickToolsForShop({ familyId: saved.familyId, memberId: saved.memberId, profile });
+  const niche = resolveNiche({ familyId: saved.familyId, memberId: saved.memberId, profile });
+  const tools = niche.tools;
   const accent = family.accent;
   const suggestionCount = getOpenSuggestionCount();
   const taskExceptions = getOpenExceptionCount();
@@ -294,7 +295,7 @@ export default function HomePage() {
           <>
             <FirstRunCard onGo={go} />
             <TodayActions onGo={go} />
-            <TodayAtShop familyId={saved.familyId} memberId={saved.memberId} profile={profile} />
+            <TodayAtShop signals={niche.nudges} />
 
             {/* Backup nudge: shop data is on THIS device only until exported. Surface "No backup yet" on Today
                 until the first export (then lastBackupAt is set and this disappears). Not shown in demo/sample. */}

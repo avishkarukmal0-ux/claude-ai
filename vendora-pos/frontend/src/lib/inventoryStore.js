@@ -186,17 +186,22 @@ export function fefo(products, from = new Date()) {
   const rows = [];
   for (const p of products) {
     const batches = batchesOf(p);
-    if (batches.length) {
-      for (const b of batches) {
-        const info = batchExpiryInfo(b, from);
-        if (info && (info.status === 'expired' || info.status === 'soon')) {
-          rows.push({ product: p, batchId: b.id, qty: Number(b.qty) || 0, expiry: b.expiry, dateType: b.dateType, info });
-        }
+    // One row per near/expired dated batch.
+    for (const b of batches) {
+      const info = batchExpiryInfo(b, from);
+      if (info && (info.status === 'expired' || info.status === 'soon')) {
+        rows.push({ product: p, batchId: b.id, qty: Number(b.qty) || 0, expiry: b.expiry, dateType: b.dateType, info });
       }
-    } else if (p.expiry) {
+    }
+    // PLUS the UNDATED residual, governed by the product-level date. Bug fix: this used to be an `else` branch,
+    // so as soon as a product had ANY batch, the still-dated residual units dropped out of "Sell first" and
+    // "£ at risk" entirely (e.g. date-code 2 of 3 use-by milk → the 3rd unit vanished). The residual is
+    // qty − sum(batches) for a batched product, or the full qty for an unbatched one.
+    const residual = batches.length ? undatedQty(p) : (Number(p.qty) || 0);
+    if (residual > 0 && p.expiry) {
       const info = expiryInfo(p, from);
       if (info && (info.status === 'expired' || info.status === 'soon')) {
-        rows.push({ product: p, batchId: null, qty: Number(p.qty) || 0, expiry: p.expiry, dateType: p.dateType, info });
+        rows.push({ product: p, batchId: null, qty: residual, expiry: p.expiry, dateType: p.dateType, info });
       }
     }
   }

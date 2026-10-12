@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Check, ChevronLeft, ArrowRight } from 'lucide-react';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
 import { useBusinessProfile, ENTITIES, TURNOVER_BANDS, REGIONS } from '../lib/businessProfile';
+import { onboardingQuestionsFor } from '../config/niche';
 
 /**
  * NichePickerPage — the public front door (replaces login as the entry for now).
@@ -17,6 +18,7 @@ export default function NichePickerPage() {
   const { profile, update } = useBusinessProfile();
 
   const family = familyId ? getFamily(familyId) : null;
+  const questions = familyId ? onboardingQuestionsFor(familyId) : [];
 
   function pickFamily(id) {
     setFamilyId(id);
@@ -190,15 +192,16 @@ export default function NichePickerPage() {
               <p className="mb-1.5 mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">Your nation</p>
               <Segment options={REGIONS} value={profile.region} onChange={(v) => update({ region: v })} />
 
-              <YesNo label="50+ employees (including any group)?" value={profile.employees50} onChange={(v) => update({ employees50: v })} />
-
-              {familyId === 'mobile-value' && (
+              {questions.includes('employees50') && (
+                <YesNo label="50+ employees (including any group)?" value={profile.employees50} onChange={(v) => update({ employees50: v })} />
+              )}
+              {questions.includes('sellsAnimals') && (
                 <YesNo label="Do you sell live animals as pets?" value={profile.sellsAnimals} onChange={(v) => update({ sellsAnimals: v })} />
               )}
-              {(familyId === 'world-specialist' || familyId === 'fresh-weighed') && (
+              {questions.includes('importsFood') && (
                 <YesNo label="Do you import food directly?" value={profile.importsFood} onChange={(v) => update({ importsFood: v })} />
               )}
-              {(familyId === 'world-specialist' || familyId === 'grocery-age') && (
+              {questions.includes('festivalsOn') && (
                 <YesNo label="Show cultural-festival reminders (Diwali, Eid…)?" value={profile.festivalsOn} onChange={(v) => update({ festivalsOn: v })} />
               )}
             </div>

@@ -14,7 +14,7 @@ export function isDemoActive() { return getActiveWorkspace() === DEMO_WORKSPACE;
 // Each set keeps at least one near use-by (pull/markdown), one near best-before and one low-stock line so the
 // daily actions + expiry/low-stock tools always have something real to show. A few members override the set
 // (e.g. an e-liquid for Vape & CBD, a cut of meat for Butcher). Dates are computed at load so they stay fresh.
-function demoCatalogue(familyId, memberId) {
+export function demoCatalogue(familyId, memberId) {
   const now = Date.now();
   const day = 86400000;
   const iso = (ms) => new Date(ms).toISOString().slice(0, 10);

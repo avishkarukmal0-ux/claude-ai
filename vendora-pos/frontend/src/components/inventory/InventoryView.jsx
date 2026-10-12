@@ -8,6 +8,7 @@ import { useFormDraft } from '../../lib/formDraft';
 import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
+import { unitPrice } from '../../lib/priceMarking';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
@@ -162,7 +163,8 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
           <div className="text-sm font-semibold leading-tight text-gray-900 line-clamp-2">{p.name}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
             {p.barcode && <span className="font-mono">{p.barcode}</span>}
-            {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
+            {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)} incl. VAT</span>}
+            {unitPrice(p) && <span className="text-gray-400">{unitPrice(p).text}</span>}
             {m != null && <span className={m < 0 ? 'text-danger' : 'text-success-dark'}>{(m * 100).toFixed(0)}% margin</span>}
             {p.packSize > 1 && (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-1.5 py-0.5 text-xs font-semibold text-primary">

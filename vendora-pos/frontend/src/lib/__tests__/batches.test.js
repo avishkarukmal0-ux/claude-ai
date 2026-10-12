@@ -52,6 +52,23 @@ describe('batches — FEFO ordering & hard-stop flag', () => {
   });
 });
 
+describe('batches — residual undated units keep the product-level date (milk-bug regression)', () => {
+  it('date-coding 2 of 3 use-by units keeps the 3rd unit in "Sell first" / at-risk via the product date', () => {
+    const { result } = renderHook(() => useInventory());
+    let id;
+    // 3 units, all under a product-level use-by that's already soon (the demo "Fresh Milk" shape).
+    act(() => { id = result.current.addProduct({ name: 'Fresh Milk 2L', cost: 0.8, price: 1.65, qty: 3, expiry: iso(1), dateType: 'use-by' }).id; });
+    // Date-code 2 of them into a past-dated batch.
+    act(() => { result.current.addBatch(id, { qty: 2, expiry: iso(-1), dateType: 'use-by' }); });
+
+    const rows = fefo(result.current.products);
+    const totalUnits = rows.reduce((n, r) => n + r.qty, 0);
+    expect(totalUnits).toBe(3); // all three units still accounted for — the 3rd didn't vanish
+    expect(rows.some((r) => r.batchId === null && r.qty === 1)).toBe(true); // residual row for the 3rd unit
+    expect(rows.some((r) => r.batchId && r.qty === 2)).toBe(true);          // the dated batch of 2
+  });
+});
+
 describe('batches — binning the correct batch once', () => {
   it('wasteBatch reduces the right batch and the total exactly once; undo restores both', () => {
     const { result } = renderHook(() => useInventory());

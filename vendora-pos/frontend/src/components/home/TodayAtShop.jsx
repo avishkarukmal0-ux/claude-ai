@@ -26,8 +26,9 @@ function greeting(d = new Date()) {
 }
 
 /** "Today at the shop" — the morning glance, tailored to the shop's family. */
-export default function TodayAtShop({ familyId, memberId = null, profile = null }) {
-  const signals = buildTodaySignals(familyId, new Date(), { memberId, profile });
+export default function TodayAtShop({ signals: signalsProp, familyId, memberId = null, profile = null }) {
+  // Prefer signals resolved upstream (via resolveNiche); fall back to building them for back-compat.
+  const signals = signalsProp || buildTodaySignals(familyId, new Date(), { memberId, profile });
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
