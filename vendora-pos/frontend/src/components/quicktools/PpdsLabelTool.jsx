@@ -76,7 +76,7 @@ export default function PpdsLabelTool() {
       <div className="mb-3 flex rounded-xl bg-gray-100 p-1 text-sm font-semibold">
         {[['label', 'PPDS label'], ['matrix', 'Allergen sign']].map(([id, lbl]) => (
           <button key={id} type="button" onClick={() => setMode(id)} aria-pressed={mode === id}
-            className={`flex-1 rounded-lg py-2 ${mode === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{lbl}</button>
+            className={`inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg ${mode === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{lbl}</button>
         ))}
       </div>
 

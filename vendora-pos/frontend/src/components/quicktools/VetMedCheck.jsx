@@ -50,7 +50,7 @@ export default function VetMedCheck() {
 
       <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Premises SQP / authorisation</p>
-        <input value={prem.sqpName} onChange={(e) => setPrem((p) => ({ ...p, sqpName: e.target.value }))} placeholder="SQP name" aria-label="SQP name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={prem.sqpName} onChange={(e) => setPrem((p) => ({ ...p, sqpName: e.target.value }))} placeholder="SQP name" aria-label="SQP name" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <label className="block"><span className="mb-1 block text-xs text-gray-500">Authorisation / SQP expiry</span>
           <input type="date" value={prem.sqpExpiry} onChange={(e) => setPrem((p) => ({ ...p, sqpExpiry: e.target.value }))} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:border-primary focus:outline-none" />
         </label>

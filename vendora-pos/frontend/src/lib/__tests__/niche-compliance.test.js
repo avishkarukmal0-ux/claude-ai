@@ -21,11 +21,23 @@ describe('demo catalogue — each group gets its own stock (Phase 0)', () => {
     exitDemo();
   });
 
-  it('swaps in an e-liquid for a vape & CBD shop', () => {
+  it('gives a vape & CBD shop a vape/CBD set with no bread/milk', () => {
     write('shop_type', 'grocery-age:vape-cbd');
     loadDemo();
     const names = readJSON('inventory_v1', []).map((p) => p.name).join(' | ');
-    expect(names).toMatch(/E-liquid/);
+    expect(names).toMatch(/E-liquid|CBD|Pod/);
+    expect(names).not.toMatch(/Bread|Milk|Cola/);
+    exitDemo();
+  });
+
+  it('gives an off-licence a drinks set with ABV, no bread/milk', () => {
+    write('shop_type', 'grocery-age:off-licence');
+    loadDemo();
+    const inv = readJSON('inventory_v1', []);
+    const names = inv.map((p) => p.name).join(' | ');
+    expect(names).toMatch(/Lager|Wine|Vodka/);
+    expect(names).not.toMatch(/Bread|Milk/);
+    expect(inv.some((p) => p.abv > 0)).toBe(true);
     exitDemo();
   });
 

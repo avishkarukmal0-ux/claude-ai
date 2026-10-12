@@ -71,7 +71,7 @@ export default function WeighLabelTool() {
       </div>
 
       {perKgLines.length > 0 && (
-        <select value={productId} onChange={(e) => pick(e.target.value)} className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
+        <select value={productId} onChange={(e) => pick(e.target.value)} className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none">
           <option value="">Pick a per-kg line… (optional)</option>
           {perKgLines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>

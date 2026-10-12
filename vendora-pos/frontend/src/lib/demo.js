@@ -60,12 +60,34 @@ export function demoCatalogue(familyId, memberId) {
     },
   };
 
-  // Member-specific swaps (the group set otherwise applies).
+  // Member-specific FULL sets where the shop sells quite different stock from its group's default — so an
+  // Off-licence shows drinks and a Vape & CBD shop shows vape/CBD lines, not bread/milk.
+  const MEMBER_SETS = {
+    'off-licence': {
+      supplier: 'Bestway (demo)',
+      products: [
+        P('lager', { name: 'Demo Lager 4×440ml', barcode: 'D-LAGER', category: 'Beer', qty: 24, min: 12, cost: 3.20, price: 5.50, abv: 4.5, size: 1.76, sizeUnit: 'L' }),
+        P('wine', { name: 'Demo Red Wine 75cl', barcode: 'D-WINE', category: 'Wine', qty: 4, min: 6, cost: 4.10, price: 7.99, abv: 13, size: 0.75, sizeUnit: 'L' }),
+        P('vodka', { name: 'Demo Vodka 70cl', barcode: 'D-VODKA', category: 'Spirits', qty: 6, min: 4, cost: 11.00, price: 16.99, abv: 37.5, size: 0.7, sizeUnit: 'L' }),
+        P('mixer', { name: 'Demo Tonic 1L', barcode: 'D-TONIC', category: 'Mixers', qty: 18, min: 8, cost: 0.55, price: 1.25, size: 1, sizeUnit: 'L' }),
+      ],
+    },
+    'vape-cbd': {
+      supplier: 'Vape Wholesale (demo)',
+      products: [
+        P('eliquid', { name: 'Demo E-liquid 10ml 10mg', barcode: 'D-ELIQ', category: 'Vape', qty: 15, min: 6, cost: 1.80, price: 3.99, size: 10, sizeUnit: 'ml' }),
+        P('nicsalt', { name: 'Demo Nic Salt 10ml 20mg', barcode: 'D-NSALT', category: 'Vape', qty: 4, min: 8, cost: 2.10, price: 4.50, size: 10, sizeUnit: 'ml' }),
+        P('podkit', { name: 'Demo Refillable Pod Kit', barcode: 'D-POD', category: 'Vape hardware', qty: 9, min: 4, cost: 6.00, price: 12.99 }),
+        P('cbd', { name: 'Demo CBD Oil 500mg', barcode: 'D-CBD', category: 'CBD', qty: 6, min: 4, cost: 7.50, price: 14.99, size: 10, sizeUnit: 'ml' }),
+      ],
+    },
+  };
+  if (MEMBER_SETS[memberId]) return { products: MEMBER_SETS[memberId].products, supplier: MEMBER_SETS[memberId].supplier };
+
+  // Otherwise the group set, with a small member swap where it helps.
   const set = SETS[familyId] || SETS['grocery-age'];
   const products = set.products.slice();
-  if (memberId === 'vape-cbd') {
-    products[0] = P('eliquid', { name: 'Demo E-liquid 10ml 10mg', barcode: 'D-ELIQ', category: 'Vape', qty: 15, min: 6, cost: 1.80, price: 3.99, size: 10, sizeUnit: 'ml' });
-  } else if (memberId === 'pet-shop') {
+  if (memberId === 'pet-shop') {
     products[1] = P('petworm', { name: 'Demo Wormer Tablets', barcode: 'D-WORM', category: 'Pet medicine', qty: 8, min: 4, cost: 2.50, price: 5.50, distCategory: 'NFA-VPS' });
   }
   return { products, supplier: set.supplier };

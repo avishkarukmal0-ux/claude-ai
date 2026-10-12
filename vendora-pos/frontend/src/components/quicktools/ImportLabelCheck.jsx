@@ -34,7 +34,7 @@ export default function ImportLabelCheck() {
       <ul className="space-y-2">
         {ITEMS.map(([k, lbl]) => (
           <li key={k}>
-            <label className="flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+            <label className="flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
               <span className="text-sm text-gray-700">{lbl}</span>
               <input type="checkbox" checked={!!checked[k]} onChange={() => toggle(k)} className="h-5 w-5" />
             </label>

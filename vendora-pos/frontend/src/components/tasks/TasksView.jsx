@@ -155,7 +155,7 @@ export default function TasksView({ onBack }) {
         <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400"><ChevronDown className="h-3.5 w-3.5" /> Shift handover</h3>
         <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
           <p className="mb-2 text-xs text-gray-500">{unresolved.length} unresolved task{unresolved.length === 1 ? '' : 's'} to pass on.</p>
-          <input value={handNote} onChange={(e) => setHandNote(e.target.value)} placeholder="Handover note (optional)" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+          <input value={handNote} onChange={(e) => setHandNote(e.target.value)} placeholder="Handover note (optional)" aria-label="Handover note" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
           <button type="button" onClick={doHandover} className="min-h-[44px] w-full rounded-xl bg-gray-900 px-3 text-sm font-semibold text-white active:scale-[0.99]">Hand over to next shift</button>
         </div>
         {handovers.length > 0 && (

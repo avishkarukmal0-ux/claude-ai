@@ -79,7 +79,7 @@ export default function TraceabilityTool() {
 
       {mode === 'origin' && (
         <>
-          <select value={set} onChange={(e) => { setSet(e.target.value); setVals({}); }} className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
+          <select value={set} onChange={(e) => { setSet(e.target.value); setVals({}); }} className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none">
             <option value="butcher">Beef / meat</option>
             <option value="butcher-fish">Fish</option>
             <option value="greengrocer">Fruit & veg</option>

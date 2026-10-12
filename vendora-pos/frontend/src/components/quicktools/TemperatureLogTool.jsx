@@ -14,6 +14,7 @@ export default function TemperatureLogTool() {
   const previewSafe = f.tempC === '' ? null : readingSafe(f.kind, f.tempC);
 
   function save() {
+    if (previewSafe === false && !f.action.trim()) { toast.error('Add a corrective-action note for an out-of-range reading.'); return; }
     const res = addReading(f);
     if (!res.ok) { toast.error(res.error || 'Couldn’t save'); return; }
     toast[res.reading.safe ? 'success' : 'error'](res.reading.safe ? 'Logged — in range' : 'Logged — OUT of range');
@@ -81,7 +82,10 @@ export default function TemperatureLogTool() {
               <li key={r.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
                 {r.safe ? <CheckCircle2 className="h-5 w-5 shrink-0 text-success" /> : <AlertTriangle className="h-5 w-5 shrink-0 text-danger" />}
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-gray-900">{r.unit} · <span className={r.safe ? '' : 'text-danger'}>{r.tempC}°C</span></span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-gray-900">
+                    {r.unit} · <span className={r.safe ? '' : 'text-danger'}>{r.tempC}°C</span>
+                    {!r.safe && <span className="rounded-full bg-danger-light px-1.5 py-0.5 text-xs font-bold uppercase text-danger-dark">OUT of range</span>}
+                  </span>
                   <span className="block text-xs text-gray-500">{UNIT_KINDS[r.kind]?.label} · {new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{r.by ? ` · ${r.by}` : ''}{r.action ? ` · ${r.action}` : ''}</span>
                 </span>
                 <button type="button" onClick={() => removeReading(r.id)} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-gray-300 hover:text-danger" aria-label="Delete reading"><Trash2 className="h-4 w-4" /></button>

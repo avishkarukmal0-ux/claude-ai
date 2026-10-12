@@ -25,6 +25,12 @@ export default function NichePickerPage() {
     setFamilyId(id);
     setMemberId(null);
     saveShopType(id); // a family on its own is a valid choice
+    // Clear answers that don't apply to the new family, so a Pet-shop "sells animals" (etc.) doesn't linger
+    // after switching to, say, a greengrocer. Universal answers (entity/turnover/nation/employees) are kept.
+    const q = onboardingQuestionsFor(id);
+    const clear = {};
+    for (const f of ['sellsAnimals', 'importsFood', 'festivalsOn']) if (!q.includes(f)) clear[f] = null;
+    if (Object.keys(clear).length) update(clear);
     reloadDemoData();  // in demo, refresh the sample so it fits the new type (no-op otherwise)
   }
 
