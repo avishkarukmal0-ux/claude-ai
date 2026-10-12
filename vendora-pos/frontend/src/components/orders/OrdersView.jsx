@@ -40,9 +40,9 @@ export default function OrdersView({ onBack }) {
         <div className="mb-2 flex items-center gap-2">
           <Building2 className="h-4 w-4 shrink-0 text-gray-400" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{o.supplierName || 'Supplier'}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.cls}`}>{meta.label}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.cls}`}>{meta.label}</span>
         </div>
-        <div className="mb-2 text-[11px] text-gray-500">{t.received}/{t.ordered} units received · {money(t.cost)}</div>
+        <div className="mb-2 text-xs text-gray-500">{t.received}/{t.ordered} units received · {money(t.cost)}</div>
         <ul className="space-y-1.5">
           {(o.lines || []).map((l) => {
             const remaining = Math.max(0, (Number(l.qty) || 0) - (Number(l.receivedQty) || 0));
@@ -64,16 +64,16 @@ export default function OrdersView({ onBack }) {
         </ul>
         {draft && (
           <div className="mt-3 flex items-center gap-2">
-            <button type="button" onClick={() => { sendOrder(o.id); toast.success('Marked as sent — remember to actually send it to the supplier'); }} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><Send className="h-3.5 w-3.5" /> Mark as sent</button>
-            <button type="button" onClick={() => shareOrder(o)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share to supplier</button>
-            <button type="button" onClick={() => { if (confirm('Delete this draft order?')) removeOrder(o.id); }} className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-gray-400 hover:text-danger"><X className="h-3.5 w-3.5" /> Delete</button>
+            <button type="button" onClick={() => { sendOrder(o.id); toast.success('Marked as sent — remember to actually send it to the supplier'); }} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"><Send className="h-3.5 w-3.5" /> Mark as sent</button>
+            <button type="button" onClick={() => shareOrder(o)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share to supplier</button>
+            <button type="button" onClick={() => { if (confirm('Delete this draft order?')) removeOrder(o.id); }} className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-400 hover:text-danger"><X className="h-3.5 w-3.5" /> Delete</button>
           </div>
         )}
         {interactive && (
           <div className="mt-3 flex items-center gap-2">
-            <button type="button" onClick={() => shareOrder(o)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
-            <button type="button" onClick={() => markReceived(o.id)} className="flex items-center gap-1 rounded-lg bg-success px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> All received</button>
-            <button type="button" onClick={() => { if (confirm('Cancel this order?')) cancelOrder(o.id); }} className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-gray-400 hover:text-danger"><X className="h-3.5 w-3.5" /> Cancel</button>
+            <button type="button" onClick={() => shareOrder(o)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
+            <button type="button" onClick={() => markReceived(o.id)} className="flex items-center gap-1 rounded-lg bg-success px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> All received</button>
+            <button type="button" onClick={() => { if (confirm('Cancel this order?')) cancelOrder(o.id); }} className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-400 hover:text-danger"><X className="h-3.5 w-3.5" /> Cancel</button>
           </div>
         )}
       </li>

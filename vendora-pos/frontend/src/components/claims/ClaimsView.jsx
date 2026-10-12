@@ -59,7 +59,7 @@ export default function ClaimsView({ onBack }) {
                 <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'}{d.reference && ` · ${d.reference}`}</span>
-                  <span className="block text-[11px] text-gray-500">{(d.lines || []).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable).length} issue(s) to claim</span>
+                  <span className="block text-xs text-gray-500">{(d.lines || []).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable).length} issue(s) to claim</span>
                 </span>
                 <button type="button" onClick={() => raise(d)} className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
               </li>
@@ -98,7 +98,7 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
         <div className="mb-2 flex items-center gap-2">
           <Building2 className="h-4 w-4 shrink-0 text-gray-400" />
           <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{c.supplierName || 'Supplier'}{c.deliveryRef && <span className="font-normal text-gray-400"> · {c.deliveryRef}</span>}</span>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.cls}`}>{meta.label}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.cls}`}>{meta.label}</span>
         </div>
 
         <ul className="mb-2 space-y-1.5">
@@ -111,7 +111,7 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
               </div>
               {/* Wrong-price line: enter the agreed £/unit so the claim asks for the OVERCHARGE, not the full value (W8). */}
               {i.reason === 'wrong_price' && OPEN_CLAIM_STATUSES.includes(c.status) && (
-                <div className="mt-1 ml-9 flex items-center gap-2 text-[11px] text-gray-500">
+                <div className="mt-1 ml-9 flex items-center gap-2 text-xs text-gray-500">
                   <span>billed {money(i.unitBilled)}/u</span>
                   <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1">agreed £/u
                     <input value={i.unitAgreed ?? ''} onChange={(e) => updateClaimItem(c.id, i.id, { unitAgreed: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" placeholder="0.00" className="w-14 border-none p-0 text-gray-900 focus:outline-none" />
@@ -124,7 +124,7 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
         </ul>
 
         {/* Honest amounts: requested vs approved vs received */}
-        <div className="mb-2 grid grid-cols-3 gap-2 text-center text-[11px]">
+        <div className="mb-2 grid grid-cols-3 gap-2 text-center text-xs">
           <div className="rounded-lg bg-gray-50 p-1.5"><div className="text-gray-400">Requested</div><div className="font-bold tabular-nums text-gray-900">{money(t.requested)}</div></div>
           <div className="rounded-lg bg-gray-50 p-1.5"><div className="text-gray-400">Approved</div><div className="font-bold tabular-nums text-gray-900">{t.approved == null ? '—' : money(t.approved)}</div></div>
           <div className="rounded-lg bg-gray-50 p-1.5"><div className="text-gray-400">Received</div><div className="font-bold tabular-nums text-success">{t.received == null ? '—' : money(t.received)}</div></div>
@@ -132,30 +132,30 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
 
         {(c.status === 'approved' || c.status === 'settled') && (
           <div className="mb-2 grid grid-cols-2 gap-2">
-            <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500">£ approved
+            <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500">£ approved
               <input value={c.approvedAmount ?? ''} onChange={(e) => updateClaim(c.id, { approvedAmount: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
             </label>
-            <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500">£ received
+            <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500">£ received
               <input value={c.receivedAmount ?? ''} onChange={(e) => updateClaim(c.id, { receivedAmount: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
             </label>
-            <label className="col-span-2 flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500">Credit note
+            <label className="col-span-2 flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500">Credit note
               <input value={c.creditNoteRef || ''} onChange={(e) => updateClaim(c.id, { creditNoteRef: e.target.value })} placeholder="reference" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
             </label>
           </div>
         )}
         {OPEN_CLAIM_STATUSES.includes(c.status) && c.status !== 'draft' && (
           <div className="mb-2 flex items-center gap-1.5">
-            <label className="flex flex-1 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500"><CalendarClock className="h-3.5 w-3.5" /> Follow up
+            <label className="flex flex-1 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500"><CalendarClock className="h-3.5 w-3.5" /> Follow up
               <input type="date" value={c.followUpDate || ''} onChange={(e) => updateClaim(c.id, { followUpDate: e.target.value })} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
             </label>
-            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); updateClaim(c.id, { followUpDate: d.toISOString().slice(0, 10) }); }} className="shrink-0 rounded-lg bg-gray-100 px-2 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95">Snooze 1wk</button>
+            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); updateClaim(c.id, { followUpDate: d.toISOString().slice(0, 10) }); }} className="shrink-0 rounded-lg bg-gray-100 px-2 py-1.5 text-xs font-semibold text-gray-600 active:scale-95">Snooze 1wk</button>
           </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => shareClaim(c)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
+          <button type="button" onClick={() => shareClaim(c)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
           {nextStates(c.status).map((s) => (
-            <button key={s} type="button" onClick={() => advance(c.id, s)} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
+            <button key={s} type="button" onClick={() => advance(c.id, s)} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
           ))}
           <button type="button" onClick={() => { if (confirm('Delete this claim?')) removeClaim(c.id); }} className="ml-auto p-1 text-gray-300 hover:text-danger" aria-label="Delete claim"><Trash2 className="h-4 w-4" /></button>
         </div>

@@ -73,7 +73,7 @@ export default function SupportView({ onBack }) {
           <Row label="Failures recorded" value={String(totalFailures)} />
         </dl>
         {totalFailures > 0 && (
-          <ul className="mt-2 space-y-0.5 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+          <ul className="mt-2 space-y-0.5 border-t border-gray-100 pt-2 text-xs text-gray-500">
             {['save', 'sync', 'ocr', 'reminder'].filter((k) => c[k]).map((k) => (
               <li key={k} className="flex justify-between"><span>{KIND_LABEL[k]}</span><span className="tabular-nums">{c[k]}</span></li>
             ))}
@@ -92,7 +92,7 @@ export default function SupportView({ onBack }) {
         ) : (
           <>
             <p className="mt-1 text-xs text-gray-500">Your reference: <span className="font-mono font-semibold text-gray-800">{reference}</span>. Copy the summary and send it to your support contact — nothing is sent automatically.</p>
-            <textarea readOnly value={summary} aria-label="Problem report summary" className="mt-2 h-44 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] text-gray-700" />
+            <textarea readOnly value={summary} aria-label="Problem report summary" className="mt-2 h-44 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 p-2 font-mono text-xs text-gray-700" />
             <div className="mt-2 flex gap-2">
               <button type="button" onClick={copy} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white active:scale-[0.99]"><Copy className="h-4 w-4" /> Copy summary</button>
             </div>

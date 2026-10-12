@@ -90,7 +90,7 @@ export default function CloudBackups({ onBack }) {
         <div className="space-y-4">
           {stores.map((name) => (
             <div key={name}>
-              <h3 className="mb-1.5 px-1 text-[11px] font-bold uppercase tracking-wide text-gray-400">{label(name)}</h3>
+              <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">{label(name)}</h3>
               <ul className="space-y-2">
                 {state.history[name].map((h) => (
                   <li key={h.rev} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
@@ -98,7 +98,7 @@ export default function CloudBackups({ onBack }) {
                       <div className="text-sm font-semibold text-gray-900">
                         {when(h.mtime || h.at)}{h.kind === 'restore' ? ' · restored' : ''}
                       </div>
-                      <div className="text-[11px] text-gray-400">version {h.rev} · {Math.max(1, Math.round((h.size || 0) / 1024))} KB</div>
+                      <div className="text-xs text-gray-400">version {h.rev} · {Math.max(1, Math.round((h.size || 0) / 1024))} KB</div>
                     </div>
                     <button
                       type="button"

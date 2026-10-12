@@ -36,7 +36,7 @@ export default function DeadStockView({ onBack }) {
           ))}
         </div>
         <div className="rounded-xl bg-warning-light px-3 py-2 text-right">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-warning-dark">Tied up</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-warning-dark">Tied up</div>
           <div className="text-lg font-extrabold tabular-nums text-warning-dark">£{deadCapital.toFixed(2)}</div>
         </div>
       </div>
@@ -59,7 +59,7 @@ export default function DeadStockView({ onBack }) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
-                    <div className="mt-0.5 text-[11px] text-gray-500">
+                    <div className="mt-0.5 text-xs text-gray-500">
                       {neverSold ? `Never sold · ${d}d in stock` : `${d}d since last sold`}
                       {Number(p.cost) > 0 && <span> · £{((Number(p.cost) || 0) * (Number(p.qty) || 0)).toFixed(2)} tied up</span>}
                     </div>
@@ -69,7 +69,7 @@ export default function DeadStockView({ onBack }) {
                   </button>
                 </div>
                 <div className="mt-2 flex items-center justify-end gap-3">
-                  <span className="mr-auto text-[11px] text-gray-400">Sold some? Count it down →</span>
+                  <span className="mr-auto text-xs text-gray-400">Sold some? Count it down →</span>
                   <button type="button" onClick={() => updateProduct(p.id, { qty: Math.max(0, (Number(p.qty) || 0) - 1) })} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
                     <Minus className="h-4 w-4" />
                   </button>

@@ -162,7 +162,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         </button>
       )}
       <h3 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-900"><MapPin className="h-4 w-4 text-primary" /> Your area — official figures</h3>
-      <p className="mb-3 text-[11px] text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
+      <p className="mb-3 text-xs text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
 
       <div className="mb-3 flex gap-2">
         <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="Shop postcode e.g. RM10 8AA" aria-label="Shop postcode" className="flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm uppercase focus:border-primary focus:outline-none" />
@@ -170,7 +170,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {busy ? 'Loading…' : 'Get'}
         </button>
       </div>
-      {busy && <p className="mb-2 text-[11px] text-gray-400">First load can take up to a minute while the server wakes…</p>}
+      {busy && <p className="mb-2 text-xs text-gray-400">First load can take up to a minute while the server wakes…</p>}
 
       {result && !result.available && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-600">
@@ -182,17 +182,17 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       {result && result.available && (result.figures || []).length > 0 && (
         <div className="space-y-2">
           {result.offline && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Offline — last updated {fmtDate(result.stored_fetched_at || result.fetchedAt)}</div>
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Offline — last updated {fmtDate(result.stored_fetched_at || result.fetchedAt)}</div>
           )}
           {result.freshness === 'out_of_date' && !result.offline && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-medium text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> These figures are out of date — couldn’t refresh.</div>
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> These figures are out of date — couldn’t refresh.</div>
           )}
           <div className="flex items-center justify-between gap-2">
             {result.area && (result.area.ward || result.area.district) ? (
-              <p className="text-[11px] text-gray-500">{[result.area.ward, result.area.district].filter(Boolean).join(' · ')}</p>
+              <p className="text-xs text-gray-500">{[result.area.ward, result.area.district].filter(Boolean).join(' · ')}</p>
             ) : <span />}
             {!result.offline && (
-              <button type="button" onClick={() => load(true)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-primary hover:underline disabled:opacity-50" aria-label="Refresh the latest figures for this area">
+              <button type="button" onClick={() => load(true)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50" aria-label="Refresh the latest figures for this area">
                 <RefreshCw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} /> Refresh latest
               </button>
             )}
@@ -202,10 +202,10 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
               <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={radiusMode} setMode={setRadiusMode} />
               <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} followView={radiusMode === 'map'} onViewRadius={onViewRadius} /></div>
-              <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
+              <p className="mt-1 text-xs leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
 
               {radFetching && radProfile && (
-                <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-gray-400" aria-live="polite">
+                <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-400" aria-live="polite">
                   <Loader2 className="h-3 w-3 animate-spin" /> Updating for the new view — figures below are for the previous radius.
                 </div>
               )}
@@ -246,7 +246,7 @@ function SourcesNote({ figures = [] }) {
   const hasImd = figures.some((f) => f.kind === 'imd');
   const hasCensus = figures.some((f) => f.kind !== 'imd');
   return (
-    <div className="mt-1 space-y-0.5 text-[10px] leading-snug text-gray-400">
+    <div className="mt-1 space-y-0.5 text-xs leading-snug text-gray-400">
       <p className="flex items-start gap-1"><Info className="mt-0.5 h-2.5 w-2.5 shrink-0" /> Official statistics, licensed under the Open Government Licence v3.0. Figures are estimates for the shop’s immediate area (LSOA).</p>
       {hasCensus && <p>Population, age, households, economic activity &amp; qualifications: Source: Office for National Statistics, Census 2021, licensed under the Open Government Licence v3.0.</p>}
       {hasImd && <p>Deprivation: English Indices of Deprivation 2025, Ministry of Housing, Communities &amp; Local Government. © Crown copyright 2025. Open Government Licence v3.0.</p>}
@@ -257,7 +257,7 @@ function SourcesNote({ figures = [] }) {
 
 function Provenance({ f, fallbackDate }) {
   return (
-    <span className="mt-1 block text-[11px] text-gray-400">
+    <span className="mt-1 block text-xs text-gray-400">
       {f.referenceDate || 'Census 2021'} · {f.source}{f.datasetId ? ` (${f.datasetId})` : ''}{f.geographyCode ? ` · ${f.geographyCode}` : ''} · fetched {fmtDate(f.fetchedAt || fallbackDate)}{f.lastUpdated ? ` · updated ${fmtDate(f.lastUpdated)}` : ''}
     </span>
   );
@@ -278,7 +278,7 @@ function DeprivationFigure({ f, fallbackDate }) {
     <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
       <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400"><MapPin className="h-4 w-4" /> {f.label}</span>
       <span className="mt-1 block text-3xl font-extrabold tabular-nums text-gray-900">Decile {f.decile}<span className="text-base font-semibold text-gray-400"> of 10</span></span>
-      <span className="mt-1 block text-[11px] text-gray-500">1 = most deprived 10% of England{f.rank != null && f.rankOf != null ? ` · rank ${fmtNum(f.rank)} of ${fmtNum(f.rankOf)}` : ''}{f.score != null ? ` · score ${f.score}` : ''}</span>
+      <span className="mt-1 block text-xs text-gray-500">1 = most deprived 10% of England{f.rank != null && f.rankOf != null ? ` · rank ${fmtNum(f.rank)} of ${fmtNum(f.rankOf)}` : ''}{f.score != null ? ` · score ${f.score}` : ''}</span>
       <Provenance f={f} fallbackDate={fallbackDate} />
     </div>
   );
@@ -323,7 +323,7 @@ export function BreakdownFigure({ f }) {
         ))}
       </ul>
       {showToggle && (
-        <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-2 text-[11px] font-medium text-primary hover:underline">
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="mt-2 text-xs font-medium text-primary hover:underline">
           {expanded ? 'Show fewer' : `Show all ${all.length}`}
         </button>
       )}

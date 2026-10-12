@@ -74,7 +74,7 @@ export default function ScanIdentifyView({ onBack }) {
             <h3 className="text-sm font-bold text-gray-900">Booking in…</h3>
             <span className="text-xs text-gray-400">{rapidLog.reduce((n, r) => n + r.added, 0)} units · {rapidLog.length} scans</span>
           </div>
-          <p className="mb-2 text-[11px] text-gray-400">Keep scanning — each item adds to stock (a case barcode adds a full case). Beeps on each scan.</p>
+          <p className="mb-2 text-xs text-gray-400">Keep scanning — each item adds to stock (a case barcode adds a full case). Beeps on each scan.</p>
           <ul className="max-h-64 space-y-1 overflow-y-auto">
             {rapidLog.length === 0 && <li className="rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-400">Nothing scanned yet.</li>}
             {rapidLog.map((r, i) => (
@@ -180,7 +180,7 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
 
   return (
     <div>
-      <div className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${isCaseScan ? 'bg-primary text-white' : 'bg-success-light text-success-dark'}`}>
+      <div className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${isCaseScan ? 'bg-primary text-white' : 'bg-success-light text-success-dark'}`}>
         {isCaseScan ? <Package2 className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
         {isCaseScan ? `Case barcode — ${multiplier} per case` : 'Single barcode'}
       </div>

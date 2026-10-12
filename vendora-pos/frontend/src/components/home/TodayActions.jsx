@@ -68,7 +68,7 @@ export default function TodayActions({ onGo }) {
         <CheckCircle2 className="h-6 w-6 shrink-0 text-success" />
         <div>
           <p className="text-sm font-semibold text-success-dark">You’re all caught up</p>
-          <p className="text-[11px] text-success-dark/80">Nothing urgent right now. Nice one.</p>
+          <p className="text-xs text-success-dark/80">Nothing urgent right now. Nice one.</p>
         </div>
       </section>
     );
@@ -102,7 +102,7 @@ export default function TodayActions({ onGo }) {
                   </span>
                   <span className="mt-0.5 block text-xs leading-snug text-gray-500 line-clamp-2">{a.detail}</span>
                 </span>
-                <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-primary">
+                <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-primary">
                   {a.cta} <ChevronRight className="h-3.5 w-3.5" />
                 </span>
               </button>

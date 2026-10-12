@@ -34,16 +34,16 @@ export default function PriceHistoryView({ onBack }) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-gray-900">{r.name}</div>
-                    <div className="mt-0.5 text-[11px] text-gray-500">
+                    <div className="mt-0.5 text-xs text-gray-500">
                       {r.prev ? <>{gbp(r.prev.unitCost)} → </> : 'first seen '}<b className="text-gray-800">{gbp(r.latest.unitCost)}</b>/unit
                       {r.changePct != null && <span className={`ml-1 font-semibold ${up ? 'text-danger' : 'text-success'}`}>{up ? '+' : ''}{r.changePct}%</span>}
                     </div>
-                    <div className="mt-0.5 text-[10px] text-gray-400">{r.latest.supplierName || 'supplier'}{r.latest.invoiceRef ? ` · ${r.latest.invoiceRef}` : ''} · {d(r.latest.date)}</div>
+                    <div className="mt-0.5 text-xs text-gray-400">{r.latest.supplierName || 'supplier'}{r.latest.invoiceRef ? ` · ${r.latest.invoiceRef}` : ''} · {d(r.latest.date)}</div>
                   </div>
                   <span className={`shrink-0 ${up ? 'text-danger' : 'text-success'}`}>{up ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}</span>
                 </div>
                 {r.price != null && (
-                  <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                  <div className="mt-1.5 flex items-center gap-2 text-xs">
                     <span className="text-gray-500">Est. gross margin now <b className="text-gray-800">{pct(r.marginNow)}</b>{r.marginPrev != null && <span className="text-gray-400"> (was {pct(r.marginPrev)})</span>}</span>
                     {r.marginPressure && <span className="inline-flex items-center gap-1 rounded-full bg-warning-light px-1.5 py-0.5 font-semibold text-warning-dark"><AlertTriangle className="h-3 w-3" /> margin pressure</span>}
                   </div>
@@ -53,7 +53,7 @@ export default function PriceHistoryView({ onBack }) {
           })}
         </ul>
       )}
-      <p className="mt-3 text-center text-[11px] text-gray-400">Estimated gross margin = (price − cost) ÷ price. It is not actual profit (which depends on real sales).</p>
+      <p className="mt-3 text-center text-xs text-gray-400">Estimated gross margin = (price − cost) ÷ price. It is not actual profit (which depends on real sales).</p>
     </div>
   );
 }

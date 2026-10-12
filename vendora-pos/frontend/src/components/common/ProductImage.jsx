@@ -11,19 +11,19 @@ import {
 // failed upload the owner can retry. Only meaningful for a stored (owner/catalogue) image.
 function BackupBadge({ state, onRetry }) {
   if (state === BACKUP_STATE.DONE) {
-    return <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600"><Cloud className="h-3 w-3" /> Backed up</span>;
+    return <span className="flex items-center gap-1 text-xs font-medium text-emerald-600"><Cloud className="h-3 w-3" /> Backed up</span>;
   }
   if (state === BACKUP_STATE.PENDING) {
-    return <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400"><UploadCloud className="h-3 w-3 animate-pulse" /> Backing up…</span>;
+    return <span className="flex items-center gap-1 text-xs font-medium text-gray-400"><UploadCloud className="h-3 w-3 animate-pulse" /> Backing up…</span>;
   }
   if (state === BACKUP_STATE.FAILED) {
     return (
-      <button type="button" onClick={onRetry} className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 active:scale-95">
+      <button type="button" onClick={onRetry} className="flex items-center gap-1 text-xs font-semibold text-amber-600 active:scale-95">
         <AlertCircle className="h-3 w-3" /> Backup failed — retry
       </button>
     );
   }
-  return <span className="flex items-center gap-1 text-[10px] font-medium text-gray-400"><CloudOff className="h-3 w-3" /> On this device</span>;
+  return <span className="flex items-center gap-1 text-xs font-medium text-gray-400"><CloudOff className="h-3 w-3" /> On this device</span>;
 }
 
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024; // pre-compression guard; we downscale anyway
@@ -169,21 +169,21 @@ export default function ProductImage({ product, suggested = null, onSave, onRemo
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Use this photo
               </button>
               <div className="flex gap-1.5">
-                <button type="button" onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><Camera className="h-3.5 w-3.5" /> Take</button>
-                <button type="button" onClick={() => fileRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><Upload className="h-3.5 w-3.5" /> Upload</button>
+                <button type="button" onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-700 active:scale-95"><Camera className="h-3.5 w-3.5" /> Take</button>
+                <button type="button" onClick={() => fileRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-700 active:scale-95"><Upload className="h-3.5 w-3.5" /> Upload</button>
               </div>
               {resolved.attribution && <p className="flex items-start gap-1 text-[9px] leading-tight text-gray-400"><Info className="mt-0.5 h-2.5 w-2.5 shrink-0" /> {resolved.attribution}</p>}
             </>
           ) : resolved.state === 'placeholder' ? (
             <div className="flex gap-1.5">
-              <button type="button" disabled={busy} onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary-50 px-2 py-1.5 text-[11px] font-semibold text-primary active:scale-95 disabled:opacity-50">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />} Take photo</button>
-              <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95 disabled:opacity-50"><Upload className="h-3.5 w-3.5" /> Upload</button>
+              <button type="button" disabled={busy} onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary-50 px-2 py-1.5 text-xs font-semibold text-primary active:scale-95 disabled:opacity-50">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />} Take photo</button>
+              <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-700 active:scale-95 disabled:opacity-50"><Upload className="h-3.5 w-3.5" /> Upload</button>
             </div>
           ) : (
             <>
               <div className="flex gap-1.5">
-                <button type="button" onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><RefreshCw className="h-3.5 w-3.5" /> Replace</button>
-                <button type="button" onClick={doRemove} className="flex items-center justify-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 active:scale-95" aria-label="Remove photo"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button type="button" onClick={() => camRef.current?.click()} className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-700 active:scale-95"><RefreshCw className="h-3.5 w-3.5" /> Replace</button>
+                <button type="button" onClick={doRemove} className="flex items-center justify-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-500 active:scale-95" aria-label="Remove photo"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
               <BackupBadge state={backup} onRetry={handleRetry} />
             </>

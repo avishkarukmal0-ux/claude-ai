@@ -128,11 +128,11 @@ function AutoDeliverySetup() {
             <input type="time" value={cfg.sendAt}
               onChange={(e) => setCfg({ ...cfg, sendAt: e.target.value })}
               className="mt-1 rounded-lg border px-3 py-2 text-sm" />
-            <span className="text-[11px] text-gray-400 ml-2">{cfg.timezone}</span>
+            <span className="text-xs text-gray-400 ml-2">{cfg.timezone}</span>
           </div>
 
           {!waReady && (
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg p-2">
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">
               WhatsApp sending isn’t switched on for the server yet (Twilio keys). You can still save your preferences —
               messages will start once the keys are added.
             </p>
@@ -228,12 +228,12 @@ function DaySummaryModal({ onClose }) {
               <div className="rounded-xl border p-3">
                 <p className="text-xs text-gray-500">Takings</p>
                 <p className="text-2xl font-bold text-gray-900">{fmt(s.takings)}</p>
-                <p className="text-[11px] text-gray-500">{s.transactions.toLocaleString('en-GB')} {s.transactions === 1 ? 'sale' : 'sales'}</p>
+                <p className="text-xs text-gray-500">{s.transactions.toLocaleString('en-GB')} {s.transactions === 1 ? 'sale' : 'sales'}</p>
               </div>
               <div className="rounded-xl border p-3">
                 <p className="text-xs text-gray-500">Profit</p>
                 <p className="text-2xl font-bold text-green-700">{fmt(s.grossProfit)}</p>
-                <p className="text-[11px] text-gray-500">{Number(s.marginPct || 0).toFixed(0)}% margin</p>
+                <p className="text-xs text-gray-500">{Number(s.marginPct || 0).toFixed(0)}% margin</p>
               </div>
             </div>
 
@@ -254,7 +254,7 @@ function DaySummaryModal({ onClose }) {
               className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3">
               <Share2 size={18} /> Send to my phone
             </button>
-            <p className="text-[11px] text-gray-400 text-center -mt-2">Shares the recap to WhatsApp, a text, or wherever you like.</p>
+            <p className="text-xs text-gray-400 text-center -mt-2">Shares the recap to WhatsApp, a text, or wherever you like.</p>
 
             <AutoDeliverySetup />
           </div>
@@ -389,15 +389,15 @@ export default function OverviewPage() {
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             <div className="bg-white/70 rounded-lg p-2">
               <p className="text-lg font-bold text-gray-900">{theft.incidents}</p>
-              <p className="text-[11px] text-gray-500">logged</p>
+              <p className="text-xs text-gray-500">logged</p>
             </div>
             <div className="bg-white/70 rounded-lg p-2">
               <p className="text-lg font-bold text-gray-900">{theft.openCases}</p>
-              <p className="text-[11px] text-gray-500">open cases</p>
+              <p className="text-xs text-gray-500">open cases</p>
             </div>
             <div className="bg-white/70 rounded-lg p-2">
               <p className="text-lg font-bold text-gray-900">{fmt(theft.perTransaction)}</p>
-              <p className="text-[11px] text-gray-500">per sale “tax”</p>
+              <p className="text-xs text-gray-500">per sale “tax”</p>
             </div>
           </div>
           <button onClick={() => navigate('/loss-prevention')}
@@ -419,15 +419,15 @@ export default function OverviewPage() {
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             <div className="bg-red-50 rounded-lg p-2">
               <p className="text-lg font-bold text-red-600">{fmt(waste.atRiskUrgent)}</p>
-              <p className="text-[11px] text-gray-500">urgent ≤7 days ({waste.urgentCount ?? 0})</p>
+              <p className="text-xs text-gray-500">urgent ≤7 days ({waste.urgentCount ?? 0})</p>
             </div>
             <div className="bg-white/70 rounded-lg p-2">
               <p className="text-lg font-bold text-gray-900">{waste.expiringSoonCount}</p>
-              <p className="text-[11px] text-gray-500">lines in {Math.round((waste.windowDays || 21) / 7)}w</p>
+              <p className="text-xs text-gray-500">lines in {Math.round((waste.windowDays || 21) / 7)}w</p>
             </div>
             <div className="bg-white/70 rounded-lg p-2">
               <p className="text-lg font-bold text-red-600">{fmt(waste.expired)}</p>
-              <p className="text-[11px] text-gray-500">expired ({waste.expiredCount})</p>
+              <p className="text-xs text-gray-500">expired ({waste.expiredCount})</p>
             </div>
           </div>
           <button onClick={() => navigate('/expiry')}

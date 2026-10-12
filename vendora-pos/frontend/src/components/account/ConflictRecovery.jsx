@@ -76,9 +76,9 @@ export default function ConflictRecovery({ onBack }) {
               <li key={`${it.name}-${it.at}-${i}`} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-gray-900">{label(it.name)}</span>
-                  <span className="text-[11px] text-gray-400">{it.at ? new Date(it.at).toLocaleString('en-GB') : ''}</span>
+                  <span className="text-xs text-gray-400">{it.at ? new Date(it.at).toLocaleString('en-GB') : ''}</span>
                 </div>
-                <p className="mt-1 text-[11px] text-gray-500">Your replaced copy is kept ({Math.max(1, Math.round((it.value || '').length / 1024))} KB).</p>
+                <p className="mt-1 text-xs text-gray-500">Your replaced copy is kept ({Math.max(1, Math.round((it.value || '').length / 1024))} KB).</p>
               </li>
             ))}
           </ul>

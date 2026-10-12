@@ -48,7 +48,7 @@ export default function MupCalculator() {
           </button>
         ))}
       </div>
-      <p className="mb-3 text-center text-[11px] text-gray-400">Current rate: <b className="text-gray-600">{ratePence}p/unit</b></p>
+      <p className="mb-3 text-center text-xs text-gray-400">Current rate: <b className="text-gray-600">{ratePence}p/unit</b></p>
 
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
@@ -78,7 +78,7 @@ export default function MupCalculator() {
         </div>
       )}
 
-      <p className="mt-4 text-[11px] leading-snug text-gray-400">
+      <p className="mt-4 text-xs leading-snug text-gray-400">
         MUP applies in Scotland (65p/unit) and Wales (50p until 1 Oct 2026, then 65p) — not England.
         {' '}Units = ABV% × litres. A guide — confirm the
         current rate for your region; selling below the floor is a criminal offence.

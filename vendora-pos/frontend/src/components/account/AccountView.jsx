@@ -83,7 +83,7 @@ export default function AccountView({ onDone, onBack }) {
             </div>
           </div>
         )}
-        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-400">
+        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-gray-400">
           <ShieldCheck className="h-3.5 w-3.5" /> Your shop data is backed up to the cloud and returns when you sign back in.
         </p>
       </div>
@@ -141,7 +141,7 @@ export default function AccountView({ onDone, onBack }) {
             Keep it separate for now
           </button>
         </div>
-        <p className="mt-3 text-center text-[11px] text-gray-400">Nothing is deleted either way. This won’t overwrite data already in your shop.</p>
+        <p className="mt-3 text-center text-xs text-gray-400">Nothing is deleted either way. This won’t overwrite data already in your shop.</p>
       </div>
     );
   }
@@ -181,7 +181,7 @@ export default function AccountView({ onDone, onBack }) {
         </button>
       </form>
 
-      <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-400">
+      <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-gray-400">
         <ShieldCheck className="h-3.5 w-3.5" /> Your shop data stays yours. Works offline on this device.
       </p>
     </div>

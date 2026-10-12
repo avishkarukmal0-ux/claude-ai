@@ -53,7 +53,7 @@ export default function SupplierInsightsView({ onBack }) {
                   <li key={c.productId} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold text-gray-900">{c.name}</span>
-                      {c.saving > 0 && <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-success-light px-2 py-0.5 text-[10px] font-semibold text-success-dark"><TrendingDown className="h-3 w-3" /> save {money(c.saving)}/unit</span>}
+                      {c.saving > 0 && <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success-dark"><TrendingDown className="h-3 w-3" /> save {money(c.saving)}/unit</span>}
                     </div>
                     <ul className="space-y-1">
                       {c.rows.map((r, i) => (
@@ -63,7 +63,7 @@ export default function SupplierInsightsView({ onBack }) {
                         </li>
                       ))}
                     </ul>
-                    {c.note && <p className="mt-1 flex items-start gap-1 text-[10px] text-gray-400"><Info className="mt-0.5 h-3 w-3 shrink-0" /> {c.note}</p>}
+                    {c.note && <p className="mt-1 flex items-start gap-1 text-xs text-gray-400"><Info className="mt-0.5 h-3 w-3 shrink-0" /> {c.note}</p>}
                   </li>
                 ))}
               </ul>
@@ -78,15 +78,15 @@ export default function SupplierInsightsView({ onBack }) {
                   <li key={s.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-semibold text-gray-900">{s.name}</span>
-                      {s.committedSpend > 0 && <span className="shrink-0 text-[11px] text-gray-400">{money(s.committedSpend)} invoiced</span>}
+                      {s.committedSpend > 0 && <span className="shrink-0 text-xs text-gray-400">{money(s.committedSpend)} invoiced</span>}
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-gray-600">
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600">
                       <span>{s.deliveries} deliveries</span>
                       {s.shortageRate != null && <span className={s.shortageRate > 0 ? 'text-warning-dark' : ''}>{s.withShortage} with shortages ({s.shortageRate}%)</span>}
                       <span>{s.claims} claims{s.settled ? ` · ${s.settled} settled` : ''}</span>
                       {s.avgTurnaroundDays != null && <span>credit in ~{s.avgTurnaroundDays}d</span>}
                     </div>
-                    {s.missing.length > 0 && <p className="mt-1 flex items-start gap-1 text-[10px] text-gray-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> Limited data: {s.missing.join('; ')}.</p>}
+                    {s.missing.length > 0 && <p className="mt-1 flex items-start gap-1 text-xs text-gray-400"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> Limited data: {s.missing.join('; ')}.</p>}
                   </li>
                 ))}
               </ul>

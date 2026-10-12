@@ -40,10 +40,10 @@ function JourneyCard({ j, onGo }) {
         <Building2 className="h-4 w-4 shrink-0 text-gray-400" />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{j.supplierName || 'Supplier'}</span>
         {j.complete
-          ? <span className="shrink-0 rounded-full bg-success-light px-2 py-0.5 text-[10px] font-semibold text-success-dark">Done</span>
+          ? <span className="shrink-0 rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success-dark">Done</span>
           : j.attention
-            ? <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-semibold text-danger">Needs attention</span>
-            : <span className="shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary">In progress</span>}
+            ? <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-xs font-semibold text-danger">Needs attention</span>
+            : <span className="shrink-0 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary">In progress</span>}
       </div>
 
       {/* Stage stepper */}
@@ -56,7 +56,7 @@ function JourneyCard({ j, onGo }) {
         ))}
       </div>
 
-      {refs.length > 0 && <p className="mb-2 truncate text-[11px] text-gray-400">{refs.join(' · ')}</p>}
+      {refs.length > 0 && <p className="mb-2 truncate text-xs text-gray-400">{refs.join(' · ')}</p>}
 
       {j.nextAction ? (
         <button
@@ -66,7 +66,7 @@ function JourneyCard({ j, onGo }) {
         >
           <span className="min-w-0">
             <span className="block truncate">{j.nextAction.cta}</span>
-            {j.nextAction.detail && <span className="block truncate text-[11px] font-normal text-gray-300">{j.nextAction.detail}</span>}
+            {j.nextAction.detail && <span className="block truncate text-xs font-normal text-gray-300">{j.nextAction.detail}</span>}
           </span>
           <ChevronRight className="h-4 w-4 shrink-0" />
         </button>

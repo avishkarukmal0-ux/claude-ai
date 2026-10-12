@@ -16,12 +16,12 @@ export default function RadiusControl({ unit, setUnit, radiusM, setRadiusM, boun
         <label className="block text-xs font-semibold text-gray-700">Radius — {fmtRadius(radiusM, unit)}</label>
         <div className="flex items-center gap-2">
           {setMode && (
-            <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-[11px] font-semibold" role="group" aria-label="How to set the radius">
+            <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-xs font-semibold" role="group" aria-label="How to set the radius">
               <button type="button" aria-pressed={!mapMode} onClick={() => setMode('slider')} className={`px-2.5 py-1 ${!mapMode ? 'bg-primary text-white' : 'bg-white text-gray-600'}`}>Slider</button>
               <button type="button" aria-pressed={mapMode} onClick={() => setMode('map')} className={`px-2.5 py-1 ${mapMode ? 'bg-primary text-white' : 'bg-white text-gray-600'}`}>Map zoom</button>
             </div>
           )}
-          <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-[11px] font-semibold" role="group" aria-label="Distance unit">
+          <div className="inline-flex overflow-hidden rounded-lg border border-gray-200 text-xs font-semibold" role="group" aria-label="Distance unit">
             {Object.keys(UNITS).map((u) => (
               <button key={u} type="button" aria-pressed={unit === u} onClick={() => setUnit(u)} className={`px-2.5 py-1 ${unit === u ? 'bg-primary text-white' : 'bg-white text-gray-600'}`}>{UNITS[u].abbr}</button>
             ))}
@@ -29,7 +29,7 @@ export default function RadiusControl({ unit, setUnit, radiusM, setRadiusM, boun
         </div>
       </div>
       {mapMode ? (
-        <p className="text-[11px] leading-snug text-gray-500">Zoom the map in or out to set your radius — the circle and the figures below follow the map. Switch to <span className="font-semibold">Slider</span> to set it by hand.</p>
+        <p className="text-xs leading-snug text-gray-500">Zoom the map in or out to set your radius — the circle and the figures below follow the map. Switch to <span className="font-semibold">Slider</span> to set it by hand.</p>
       ) : (
         <>
           <div className="mb-2 flex flex-wrap gap-2">
@@ -46,7 +46,7 @@ export default function RadiusControl({ unit, setUnit, radiusM, setRadiusM, boun
             value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))}
             aria-label={`Radius in ${U.label}`} className="w-full accent-primary"
           />
-          <div className="flex justify-between text-[10px] text-gray-400"><span>{fmtRadius(bounds.min, unit)}</span><span>{fmtRadius(bounds.max, unit)}</span></div>
+          <div className="flex justify-between text-xs text-gray-400"><span>{fmtRadius(bounds.min, unit)}</span><span>{fmtRadius(bounds.max, unit)}</span></div>
         </>
       )}
     </div>

@@ -151,30 +151,30 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-gray-900">{inv.supplierName || 'Unknown supplier'}{inv.reference ? ` · ${inv.reference}` : ''}</div>
-                  <div className="mt-0.5 text-[11px] text-gray-500">
+                  <div className="mt-0.5 text-xs text-gray-500">
                     {inv.date ? new Date(inv.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'no date'} · {(inv.lines || []).length} line{(inv.lines || []).length === 1 ? '' : 's'} · {gbp(invoiceTotal(inv))}
                   </div>
-                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${inv.status === 'committed' ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-500'}`}>{inv.status === 'committed' ? 'Committed' : 'Draft'}</span>
+                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${inv.status === 'committed' ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-500'}`}>{inv.status === 'committed' ? 'Committed' : 'Draft'}</span>
                 </div>
                 <button type="button" onClick={() => { if (window.confirm('Delete this invoice?')) removeInvoice(inv.id); }} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
               </div>
               <div className="mt-2 flex gap-2">
                 {inv.status !== 'committed' && (
-                  <button type="button" onClick={() => commitInvoice(inv.id)} className="rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95">Commit</button>
+                  <button type="button" onClick={() => commitInvoice(inv.id)} className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95">Commit</button>
                 )}
-                <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
+                <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
                 {inv.fileId && (
-                  <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-500 active:scale-95">Delete file</button>
+                  <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-500 active:scale-95">Delete file</button>
                 )}
                 {backupOk && inv.fileId && (() => {
                   const st = backedUp.has(inv.fileId) ? 'uploaded' : (bkState[inv.fileId]?.status || 'none');
-                  if (st === 'uploaded') return <span className="inline-flex items-center gap-1 rounded-lg bg-success-light px-2.5 py-1.5 text-[11px] font-semibold text-success-dark"><Check className="h-3.5 w-3.5" /> Backed up</span>;
-                  if (st === 'pending') return <span className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-400">Backing up…</span>;
-                  return <button type="button" onClick={() => doBackup(inv)} className="rounded-lg border border-primary/30 bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary active:scale-95">{st === 'failed' ? 'Retry backup' : 'Back up'}</button>;
+                  if (st === 'uploaded') return <span className="inline-flex items-center gap-1 rounded-lg bg-success-light px-2.5 py-1.5 text-xs font-semibold text-success-dark"><Check className="h-3.5 w-3.5" /> Backed up</span>;
+                  if (st === 'pending') return <span className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-400">Backing up…</span>;
+                  return <button type="button" onClick={() => doBackup(inv)} className="rounded-lg border border-primary/30 bg-primary-50 px-2.5 py-1.5 text-xs font-semibold text-primary active:scale-95">{st === 'failed' ? 'Retry backup' : 'Back up'}</button>;
                 })()}
               </div>
               {backupOk && inv.fileId && !backedUp.has(inv.fileId) && (
-                <p className="mt-1.5 text-[10px] text-gray-400">Stored on this device only — back up to reach it on another device.</p>
+                <p className="mt-1.5 text-xs text-gray-400">Stored on this device only — back up to reach it on another device.</p>
               )}
             </li>
           ))}
@@ -226,8 +226,8 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
       {ocr.text && (
         <details className="mb-3 rounded-xl border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600">
           <summary className="flex cursor-pointer items-center gap-1 font-medium text-gray-700"><ScanText className="h-3.5 w-3.5" /> Scanned text (check &amp; type the figures below)</summary>
-          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[11px]">{ocr.text}</pre>
-          <button type="button" onClick={fillFromText} className="mt-2 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95">Fill lines from this text (then check each)</button>
+          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs">{ocr.text}</pre>
+          <button type="button" onClick={fillFromText} className="mt-2 rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 active:scale-95">Fill lines from this text (then check each)</button>
         </details>
       )}
 
@@ -249,14 +249,14 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
 
       {/* Lines */}
       <h3 className="mb-1 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-400">Lines</h3>
-      <p className="mb-2 text-[11px] leading-snug text-gray-400">Enter the quantity, whether it’s in <strong>units</strong> or <strong>cases</strong>, the <strong>units per case</strong> (for cases), and the cost (<strong>£ per case</strong> or <strong>£ per unit</strong> to match). The per-single-unit cost is worked out below each line.</p>
+      <p className="mb-2 text-xs leading-snug text-gray-400">Enter the quantity, whether it’s in <strong>units</strong> or <strong>cases</strong>, the <strong>units per case</strong> (for cases), and the cost (<strong>£ per case</strong> or <strong>£ per unit</strong> to match). The per-single-unit cost is worked out below each line.</p>
       <ul className="space-y-2">
         {matched.map((l, i) => (
           <li key={l.id} className="rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm">
             <div className="mb-1.5 flex items-center gap-2">
               <input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} list="vendora-invoice-products" placeholder="Product" className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
               {(l.name || l.barcode) && (
-                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${l.matched ? 'bg-success-light text-success-dark' : 'bg-warning-light text-warning-dark'}`}>{l.matched ? 'matched' : 'new'}</span>
+                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold ${l.matched ? 'bg-success-light text-success-dark' : 'bg-warning-light text-warning-dark'}`}>{l.matched ? 'matched' : 'new'}</span>
               )}
               <button type="button" onClick={() => removeLine(i)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove line"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
@@ -269,7 +269,7 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
               <input value={l.packSize} onChange={(e) => setLine(i, { packSize: e.target.value })} inputMode="numeric" placeholder="Units/case" aria-label="Units per case" title="How many single units are in one case" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
               <input value={l.qtyMode === 'cases' ? l.caseCost : l.unitCost} onChange={(e) => setLine(i, l.qtyMode === 'cases' ? { caseCost: e.target.value } : { unitCost: e.target.value })} inputMode="decimal" placeholder={l.qtyMode === 'cases' ? '£/case' : '£/unit'} aria-label="Cost" className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none" />
             </div>
-            <div className="mt-1 text-right text-[11px] text-gray-500">{gbp(lineUnitCost(l))}/unit · line {gbp(lineTotal(l))}</div>
+            <div className="mt-1 text-right text-xs text-gray-500">{gbp(lineUnitCost(l))}/unit · line {gbp(lineTotal(l))}</div>
           </li>
         ))}
       </ul>
@@ -285,7 +285,7 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
         <button type="button" disabled={!canSave} onClick={() => onSaveDraft(payload())} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 disabled:opacity-40">Save draft</button>
         <button type="button" disabled={!canSave} onClick={() => onCommit(payload())} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><Check className="h-4 w-4" /> Commit</button>
       </div>
-      <p className="mt-2 text-center text-[11px] text-gray-400">Nothing is applied to stock here — committing just confirms the invoice figures for checking &amp; price history.</p>
+      <p className="mt-2 text-center text-xs text-gray-400">Nothing is applied to stock here — committing just confirms the invoice figures for checking &amp; price history.</p>
     </div>
   );
 }
@@ -359,8 +359,8 @@ function ReconcileView({ invoice, onBack }) {
                             <span className="truncate text-sm font-semibold text-gray-900">{d.name}</span>
                             <span className="shrink-0 font-bold tabular-nums text-danger">{gbp(d.overcharge)}</span>
                           </span>
-                          <span className="mt-0.5 block text-[11px] text-gray-500">{d.detail}</span>
-                          <span className="mt-1 inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{d.type === 'overcharge' ? 'overcharge' : d.type === 'shortage' ? 'short-delivered' : 'not delivered'}</span>
+                          <span className="mt-0.5 block text-xs text-gray-500">{d.detail}</span>
+                          <span className="mt-1 inline-block rounded-full bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-500">{d.type === 'overcharge' ? 'overcharge' : d.type === 'shortage' ? 'short-delivered' : 'not delivered'}</span>
                         </span>
                       </label>
                     </li>
@@ -384,7 +384,7 @@ function ReconcileView({ invoice, onBack }) {
                   <button type="button" disabled={selected.length === 0} onClick={raise} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-40 active:scale-[0.99]">
                     <Check className="h-4 w-4" /> Draft a claim for {selected.length} item{selected.length === 1 ? '' : 's'}
                   </button>
-                  <p className="mt-2 text-center text-[11px] text-gray-400">Creates a draft in Supplier claims — you review, then submit &amp; follow up there.</p>
+                  <p className="mt-2 text-center text-xs text-gray-400">Creates a draft in Supplier claims — you review, then submit &amp; follow up there.</p>
                 </div>
               )}
             </>

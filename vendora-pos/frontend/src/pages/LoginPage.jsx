@@ -99,7 +99,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setManualStore((v) => !v)}
-                className="text-[11px] text-pos-muted hover:text-pos-text mt-1"
+                className="text-xs text-pos-muted hover:text-pos-text mt-1"
               >
                 {manualStore ? '← Pick from list' : 'Enter Store ID manually'}
               </button>

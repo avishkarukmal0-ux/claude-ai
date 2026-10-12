@@ -172,7 +172,7 @@ export default function DeliveryReceivingView() {
                   <FileText className="h-4 w-4 shrink-0 text-warning" />
                   <button type="button" onClick={() => edit(d)} className="min-w-0 flex-1 text-left">
                     <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'} {d.reference && `· ${d.reference}`}</span>
-                    <span className="block text-[11px] text-gray-500">{d.lines.length} line{d.lines.length === 1 ? '' : 's'} · saved {new Date(d.updatedAt).toLocaleDateString('en-GB')}</span>
+                    <span className="block text-xs text-gray-500">{d.lines.length} line{d.lines.length === 1 ? '' : 's'} · saved {new Date(d.updatedAt).toLocaleDateString('en-GB')}</span>
                   </button>
                   <button type="button" onClick={() => removeDelivery(d.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Discard draft"><Trash2 className="h-4 w-4" /></button>
                 </li>
@@ -192,9 +192,9 @@ export default function DeliveryReceivingView() {
                     <PackageCheck className="h-4 w-4 shrink-0 text-success" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'} {d.reference && `· ${d.reference}`}</span>
-                      <span className="block text-[11px] text-gray-500">{t.acceptedUnits} units · {money(t.cost)}{t.discrepancies > 0 ? ` · ${t.discrepancies} issue${t.discrepancies === 1 ? '' : 's'}` : ''} · {new Date(d.receivedAt).toLocaleDateString('en-GB')}</span>
+                      <span className="block text-xs text-gray-500">{t.acceptedUnits} units · {money(t.cost)}{t.discrepancies > 0 ? ` · ${t.discrepancies} issue${t.discrepancies === 1 ? '' : 's'}` : ''} · {new Date(d.receivedAt).toLocaleDateString('en-GB')}</span>
                     </span>
-                    <button type="button" onClick={() => repeat(d.id)} className="flex shrink-0 items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary active:scale-95">
+                    <button type="button" onClick={() => repeat(d.id)} className="flex shrink-0 items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary active:scale-95">
                       <Repeat className="h-3.5 w-3.5" /> Repeat
                     </button>
                   </li>
@@ -263,7 +263,7 @@ export default function DeliveryReceivingView() {
         </div>
       )}
       {!barcodeScanSupported && !scanning && (
-        <p className="mb-3 flex items-center gap-1.5 text-[11px] text-gray-400"><Keyboard className="h-3.5 w-3.5" /> Camera scan needs Chrome/Android — typing works everywhere.</p>
+        <p className="mb-3 flex items-center gap-1.5 text-xs text-gray-400"><Keyboard className="h-3.5 w-3.5" /> Camera scan needs Chrome/Android — typing works everywhere.</p>
       )}
 
       {draft.lines.length === 0 ? (
@@ -284,13 +284,13 @@ export default function DeliveryReceivingView() {
                   <input value={l.name} onChange={(e) => setLine(l.key, { name: e.target.value })} placeholder="Item name" className="min-w-0 flex-1 border-none p-0 text-sm font-semibold text-gray-900 placeholder-gray-400 focus:outline-none" />
                   <button type="button" onClick={() => removeLine(l.key)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove line"><Trash2 className="h-4 w-4" /></button>
                 </div>
-                {l.barcode && <div className="font-mono text-[11px] text-gray-400">{l.barcode}</div>}
+                {l.barcode && <div className="font-mono text-xs text-gray-400">{l.barcode}</div>}
 
                 {/* units vs cases + pack size */}
                 <div className="mt-2 flex items-center gap-2 text-xs">
                   <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
                     {['units', 'cases'].map((m) => (
-                      <button key={m} type="button" onClick={() => setLine(l.key, { qtyMode: m })} className={`px-2.5 py-1 text-[11px] font-semibold ${l.qtyMode === m ? 'bg-primary text-white' : 'bg-white text-gray-500'}`}>{m}</button>
+                      <button key={m} type="button" onClick={() => setLine(l.key, { qtyMode: m })} className={`px-2.5 py-1 text-xs font-semibold ${l.qtyMode === m ? 'bg-primary text-white' : 'bg-white text-gray-500'}`}>{m}</button>
                     ))}
                   </div>
                   {l.qtyMode === 'cases' && (
@@ -302,7 +302,7 @@ export default function DeliveryReceivingView() {
                 </div>
 
                 {/* ordered / delivered / accepted */}
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-gray-500">
+                <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
                   <label className="flex flex-col gap-0.5">Ordered
                     <input value={l.orderedQty} onChange={(e) => setLine(l.key, { orderedQty: e.target.value })} inputMode="numeric" placeholder="—" className="rounded-lg border border-gray-200 px-2 py-1 text-center text-sm text-gray-900" />
                   </label>
@@ -315,7 +315,7 @@ export default function DeliveryReceivingView() {
                 </div>
 
                 {/* cost */}
-                <div className="mt-2 flex items-center gap-3 text-[11px] text-gray-500">
+                <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
                   {l.qtyMode === 'cases' ? (
                     <label className="flex items-center gap-1">Case cost £
                       <input value={l.caseCost} onChange={(e) => setLine(l.key, { caseCost: e.target.value })} inputMode="decimal" placeholder="0.00" className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900" />
@@ -329,7 +329,7 @@ export default function DeliveryReceivingView() {
                 </div>
 
                 {/* conversion + accepted summary */}
-                <div className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] text-gray-600">
+                <div className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
                   {l.qtyMode === 'cases' ? `${l.deliveredQty || 0} cases × ${packSize(l)} = ` : ''}<span className="font-semibold text-gray-900">{du} units delivered</span>
                   {au !== du && <span className="text-warning-dark"> · {au} accepted</span>}
                   {shortfall && <span className="text-danger"> · short {ou - du} vs ordered</span>}
@@ -338,13 +338,13 @@ export default function DeliveryReceivingView() {
                 {/* issues */}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {Object.entries(DELIVERY_ISSUES).map(([k, v]) => (
-                    <button key={k} type="button" onClick={() => setLine(l.key, { issue: l.issue === k ? null : k })} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${l.issue === k ? 'bg-danger text-white' : 'bg-gray-100 text-gray-500'}`}>{v.label}</button>
+                    <button key={k} type="button" onClick={() => setLine(l.key, { issue: l.issue === k ? null : k })} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${l.issue === k ? 'bg-danger text-white' : 'bg-gray-100 text-gray-500'}`}>{v.label}</button>
                   ))}
                 </div>
 
                 {/* note + photo */}
                 <div className="mt-2 flex items-center gap-2">
-                  <input value={l.note} onChange={(e) => setLine(l.key, { note: e.target.value })} placeholder="Note (optional)" className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-900 focus:border-primary focus:outline-none" />
+                  <input value={l.note} onChange={(e) => setLine(l.key, { note: e.target.value })} placeholder="Note (optional)" className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-primary focus:outline-none" />
                   {l.photo ? (
                     <img src={l.photo} alt="evidence" className="h-8 w-8 rounded object-cover" />
                   ) : (
@@ -370,7 +370,7 @@ export default function DeliveryReceivingView() {
               <div className="rounded-xl bg-danger/10 px-3 py-2.5 text-center text-xs font-semibold text-danger" role="alert">
                 <AlertTriangle className="mr-1 inline h-4 w-4" />
                 Stock was saved but the delivery record didn’t. Don’t receive again — reload the app and check stock levels first.
-                <button type="button" onClick={() => recovery.clear(recoveryKey)} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-[11px] font-bold text-danger active:scale-95">
+                <button type="button" onClick={() => recovery.clear(recoveryKey)} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-xs font-bold text-danger active:scale-95">
                   I’ve reloaded and checked stock — clear this
                 </button>
               </div>
@@ -379,7 +379,7 @@ export default function DeliveryReceivingView() {
                 <button type="button" onClick={receive} className="flex w-full items-center justify-center gap-2 rounded-xl bg-success px-4 py-3 text-sm font-bold text-white shadow active:scale-[0.99]">
                   <Check className="h-5 w-5" /> Receive → update stock &amp; costs
                 </button>
-                <p className="mt-1 text-center text-[10px] text-gray-400">Updates stock and purchase cost. Retail prices are never changed automatically.</p>
+                <p className="mt-1 text-center text-xs text-gray-400">Updates stock and purchase cost. Retail prices are never changed automatically.</p>
               </>
             )}
           </div>

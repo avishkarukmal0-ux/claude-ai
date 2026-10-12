@@ -53,7 +53,7 @@ export default function RefillView({ onBack }) {
               <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 shadow-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                  <span className="block text-[11px] text-gray-500">Shelf 0 · {backQtyOf(p)} out back</span>
+                  <span className="block text-xs text-gray-500">Shelf 0 · {backQtyOf(p)} out back</span>
                 </span>
                 <button type="button" onClick={() => refillAll(p)} className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95">
                   <ArrowRightLeft className="h-4 w-4" /> Refill
@@ -81,7 +81,7 @@ export default function RefillView({ onBack }) {
                 <li key={p.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="min-w-0 truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                    <span className="shrink-0 text-[11px] text-gray-400">total {Number(p.qty) || 0}</span>
+                    <span className="shrink-0 text-xs text-gray-400">total {Number(p.qty) || 0}</span>
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 font-semibold text-primary"><Store className="h-3.5 w-3.5" /> Shelf {shelf}</span>
@@ -108,7 +108,7 @@ export default function RefillView({ onBack }) {
               <li key={p.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                  <span className="block text-[11px] text-gray-400">{Number(p.qty) || 0} in stock · location not tracked</span>
+                  <span className="block text-xs text-gray-400">{Number(p.qty) || 0} in stock · location not tracked</span>
                 </span>
                 <button type="button" onClick={() => { setShelfQty(p.id, Number(p.qty) || 0); toast.success('Now tracking shelf/back for this item'); }} className="shrink-0 rounded-xl bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-700 active:scale-95">
                   Track shelf

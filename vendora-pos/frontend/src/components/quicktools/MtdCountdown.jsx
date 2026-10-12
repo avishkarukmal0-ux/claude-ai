@@ -54,7 +54,7 @@ export default function MtdCountdown() {
         Vendora tracks your key dates so you’re never caught out. You still file with HMRC or your accountant.
       </div>
 
-      <p className="mt-3 text-[11px] leading-snug text-gray-400">
+      <p className="mt-3 text-xs leading-snug text-gray-400">
         Indicative quarterly update dates (7 Aug · 7 Nov · 7 Feb · 7 May). Always confirm your exact
         obligations with HMRC or your accountant.
       </p>

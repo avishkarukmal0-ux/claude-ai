@@ -141,7 +141,7 @@ export default function SalesImportView({ onBack }) {
               <FileSpreadsheet className="h-5 w-5 shrink-0 text-primary" />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-semibold text-gray-900">{fileName}</span>
-                <span className="block text-[11px] text-gray-400">{parsed.rows.length} rows · {parsed.headers.length} columns</span>
+                <span className="block text-xs text-gray-400">{parsed.rows.length} rows · {parsed.headers.length} columns</span>
               </span>
             </span>
             <button type="button" onClick={reset} className="shrink-0 text-xs font-semibold text-gray-400 hover:text-gray-600">Change</button>
@@ -153,7 +153,7 @@ export default function SalesImportView({ onBack }) {
               <label key={field} className="flex items-center gap-2">
                 <span className="w-32 shrink-0">
                   <span className="block text-xs font-semibold text-gray-800">{FIELD_LABELS[field]}</span>
-                  <span className="block text-[10px] text-gray-400">{FIELD_HINTS[field]}</span>
+                  <span className="block text-xs text-gray-400">{FIELD_HINTS[field]}</span>
                 </span>
                 <select
                   value={mapping[field]}
@@ -186,7 +186,7 @@ export default function SalesImportView({ onBack }) {
               </div>
 
               {(analysis.invalid.length > 0 || analysis.tooOld > 0) && (
-                <p className="mb-3 text-[11px] text-gray-400">
+                <p className="mb-3 text-xs text-gray-400">
                   {analysis.invalid.length > 0 && `${analysis.invalid.length} rows skipped (no quantity/date). `}
                   {analysis.tooOld > 0 && `${analysis.tooOld} rows older than ${MAX_AGE_DAYS} days skipped.`}
                 </p>
@@ -195,13 +195,13 @@ export default function SalesImportView({ onBack }) {
               {analysis.unmatched.length > 0 && (
                 <div className="mb-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                   <p className="mb-1.5 text-xs font-semibold text-gray-700">Couldn’t match these to a product:</p>
-                  <ul className="space-y-0.5 text-[11px] text-gray-500">
+                  <ul className="space-y-0.5 text-xs text-gray-500">
                     {analysis.unmatched.slice(0, 6).map((u, i) => (
                       <li key={i} className="truncate">{u.name || u.barcode || 'unknown'} <span className="text-gray-300">· {u.qty}</span></li>
                     ))}
                     {analysis.unmatched.length > 6 && <li className="text-gray-400">+{analysis.unmatched.length - 6} more</li>}
                   </ul>
-                  <p className="mt-1.5 text-[10px] text-gray-400">Add these as products first (with the right barcode) to include them.</p>
+                  <p className="mt-1.5 text-xs text-gray-400">Add these as products first (with the right barcode) to include them.</p>
                 </div>
               )}
 
@@ -221,7 +221,7 @@ export default function SalesImportView({ onBack }) {
                 <TrendingUp className="h-4 w-4" />
                 {analysis.lines.length ? `Import ${analysis.unitsTotal} sales` : 'Nothing to import'}
               </button>
-              <p className="mt-2 text-center text-[10px] text-gray-400">This adds sales history only. Stock counts are unchanged.</p>
+              <p className="mt-2 text-center text-xs text-gray-400">This adds sales history only. Stock counts are unchanged.</p>
             </>
           )}
         </>
@@ -233,9 +233,9 @@ export default function SalesImportView({ onBack }) {
 function Stat({ label, value, sub, good, warn }) {
   return (
     <div className={`rounded-2xl border p-3 shadow-sm ${good ? 'border-emerald-100 bg-emerald-50' : warn ? 'border-amber-100 bg-amber-50' : 'border-gray-100 bg-white'}`}>
-      <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+      <span className="block text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</span>
       <span className={`block text-lg font-bold tabular-nums ${good ? 'text-emerald-700' : warn ? 'text-amber-700' : 'text-gray-900'}`}>{value}</span>
-      <span className="block text-[11px] text-gray-400">{sub}</span>
+      <span className="block text-xs text-gray-400">{sub}</span>
     </div>
   );
 }
@@ -250,13 +250,13 @@ function History({ imports, onUndo }) {
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><Check className="h-4 w-4" /></span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-gray-900">{im.fileName}</span>
-              <span className="block text-[11px] text-gray-400">
+              <span className="block text-xs text-gray-400">
                 {im.unitsTotal} sales · {im.productsMatched} products
                 {im.unmatchedCount > 0 && ` · ${im.unmatchedCount} skipped`}
                 {' · '}{fmtDate(im.appliedAt)}
               </span>
             </span>
-            <button type="button" onClick={() => onUndo(im)} className="flex shrink-0 items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95">
+            <button type="button" onClick={() => onUndo(im)} className="flex shrink-0 items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95">
               <Undo2 className="h-3.5 w-3.5" /> Undo
             </button>
           </li>

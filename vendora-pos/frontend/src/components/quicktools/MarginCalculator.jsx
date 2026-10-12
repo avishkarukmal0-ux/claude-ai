@@ -37,7 +37,7 @@ export default function MarginCalculator() {
         </div>
       )}
 
-      <p className="mt-4 text-[11px] leading-snug text-gray-400">
+      <p className="mt-4 text-xs leading-snug text-gray-400">
         Margin = profit as a share of the sell price. Markup = profit as a share of cost. Enter
         prices as you buy/sell them (before or after VAT — just be consistent).
       </p>
@@ -68,7 +68,7 @@ function Stat({ label, value, tone }) {
   return (
     <div className="rounded-xl bg-gray-50 p-3 text-center">
       <div className={`text-lg font-bold tabular-nums ${color}`}>{value}</div>
-      <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</div>
+      <div className="mt-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">{label}</div>
     </div>
   );
 }

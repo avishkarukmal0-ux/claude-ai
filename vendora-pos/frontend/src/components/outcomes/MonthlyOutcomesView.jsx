@@ -62,7 +62,7 @@ export default function MonthlyOutcomesView({ onBack }) {
       {/* Coverage bar */}
       {o.coverageTotal > 0 && (
         <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-[11px] text-gray-400"><span>Stock counted this month</span><span>{o.coveragePct}%</span></div>
+          <div className="mb-1 flex items-center justify-between text-xs text-gray-400"><span>Stock counted this month</span><span>{o.coveragePct}%</span></div>
           <div className="h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-primary" style={{ width: `${o.coveragePct}%` }} /></div>
         </div>
       )}
@@ -74,7 +74,7 @@ export default function MonthlyOutcomesView({ onBack }) {
           <span className="text-gray-600">Waste rescued by marking down in time</span>
           <span className="font-bold tabular-nums text-gray-700">{money(o.estimated.rescued)}</span>
         </div>
-        <p className="mt-1 text-[10px] leading-snug text-gray-400">An estimate of value kept out of the bin — separate from the confirmed figures above.</p>
+        <p className="mt-1 text-xs leading-snug text-gray-400">An estimate of value kept out of the bin — separate from the confirmed figures above.</p>
       </div>
       </>
       )}
@@ -87,7 +87,7 @@ function Stat({ icon: Icon, label, value, tone, hint }) {
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
       <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400"><Icon className="h-4 w-4" /> {label}</span>
       <span className={`mt-1 block text-2xl font-extrabold tabular-nums ${tone}`}>{value}</span>
-      {hint && <span className="mt-0.5 block text-[10px] font-medium text-gray-400">{hint}</span>}
+      {hint && <span className="mt-0.5 block text-xs font-medium text-gray-400">{hint}</span>}
     </div>
   );
 }

@@ -48,11 +48,11 @@ export default function SuggestionsInbox({ onBack }) {
                 <Check className="h-4 w-4" strokeWidth={3} />
               </button>
               <span className="min-w-0 flex-1">
-                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${KIND_STYLE[s.kind] || KIND_STYLE.note}`}>{SUGGESTION_KINDS[s.kind]?.label || 'Note'}</span>
+                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${KIND_STYLE[s.kind] || KIND_STYLE.note}`}>{SUGGESTION_KINDS[s.kind]?.label || 'Note'}</span>
                 <span className={`mt-0.5 block text-sm font-medium ${s.done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {s.productName || s.text}
                 </span>
-                {s.productName && s.text && <span className="block text-[11px] text-gray-500">{s.text}</span>}
+                {s.productName && s.text && <span className="block text-xs text-gray-500">{s.text}</span>}
               </span>
               <button type="button" onClick={() => remove(s.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
             </li>

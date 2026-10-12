@@ -86,7 +86,7 @@ export default function NeighbourhoodInsightsView({ onBack }) {
       ) : (
         <>
           {/* Coverage + data age — always visible (before purchase too) */}
-          <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 text-[11px] text-gray-500 shadow-sm">
+          <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-500 shadow-sm">
             <span className="font-semibold text-gray-700">{status.dataSource}</span> · {status.coverage} · reference year {status.referenceYear} · {status.licence}
           </div>
 
@@ -104,7 +104,7 @@ export default function NeighbourhoodInsightsView({ onBack }) {
                 <div className="mb-3">
                   <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={bounds} mode={radiusMode} setMode={setRadiusMode} />
                   {radiusMode === 'map' && !(result && result.location && result.location.point) && (
-                    <p className="mt-1 text-[11px] text-amber-700">Build the area profile first — then zoom the map below to set your radius.</p>
+                    <p className="mt-1 text-xs text-amber-700">Build the area profile first — then zoom the map below to set your radius.</p>
                   )}
                 </div>
                 <button type="button" disabled={busy} onClick={() => build()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white active:scale-[0.99] disabled:opacity-50">
@@ -117,7 +117,7 @@ export default function NeighbourhoodInsightsView({ onBack }) {
               {result && result.location && result.location.point && (
                 <div className="mb-4">
                   <RadiusMap point={result.location.point} radiusM={radiusM} followView={radiusMode === 'map'} onViewRadius={onViewRadius} />
-                  <p className="mt-1 text-[10px] leading-snug text-gray-400">Map © OpenStreetMap contributors. The circle is {fmtRadius(radiusM, unit)} around your shop; figures below cover whole census areas whose centre falls inside it.</p>
+                  <p className="mt-1 text-xs leading-snug text-gray-400">Map © OpenStreetMap contributors. The circle is {fmtRadius(radiusM, unit)} around your shop; figures below cover whole census areas whose centre falls inside it.</p>
                 </div>
               )}
 
@@ -177,7 +177,7 @@ function NotEntitled({ status, preview }) {
       {preview && (
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
           <h3 className="mb-1 text-sm font-bold text-gray-900">What you’d get</h3>
-          <p className="mb-2 text-[11px] italic text-gray-400">{preview.note}</p>
+          <p className="mb-2 text-xs italic text-gray-400">{preview.note}</p>
           <ul className="mb-3 space-y-1">
             {(preview.shows || []).map((s) => (
               <li key={s.key} className="flex items-start gap-2 text-[12px] text-gray-700"><BarChart3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> {s.label}</li>
@@ -213,7 +213,7 @@ function ProfileResult({ result }) {
   return (
     <div className="space-y-3">
       {result.location && <LocationCard location={result.location} />}
-      <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-2.5 text-[11px] font-medium text-amber-800"><AlertTriangle className="mb-0.5 mr-1 inline h-3.5 w-3.5" /> Estimated — a circular radius built from {p.outputAreas} whole census areas, not exact counts.</div>
+      <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-2.5 text-xs font-medium text-amber-800"><AlertTriangle className="mb-0.5 mr-1 inline h-3.5 w-3.5" /> Estimated — a circular radius built from {p.outputAreas} whole census areas, not exact counts.</div>
       <div className="grid grid-cols-2 gap-3">
         <Stat icon={Users} label="People nearby (est.)" value={num(p.population)} />
         <Stat icon={Home} label="Households (est.)" value={num(p.households)} />
@@ -246,7 +246,7 @@ function LocationCard({ location }) {
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-3 text-[12px] text-gray-600 shadow-sm">
       <div className="flex items-center gap-1.5 font-semibold text-gray-800"><MapPin className="h-3.5 w-3.5 text-primary" /> {location.postcode}{location.admin ? ` · ${location.admin}` : ''}</div>
-      {location.point && <div className="mt-0.5 text-[11px] text-gray-400">Confirmed location: {Number(location.point.lat).toFixed(4)}, {Number(location.point.lng).toFixed(4)} · {location.radiusM >= 1000 ? `${location.radiusM / 1000} km` : `${location.radiusM} m`} radius</div>}
+      {location.point && <div className="mt-0.5 text-xs text-gray-400">Confirmed location: {Number(location.point.lat).toFixed(4)}, {Number(location.point.lng).toFixed(4)} · {location.radiusM >= 1000 ? `${location.radiusM / 1000} km` : `${location.radiusM} m`} radius</div>}
     </div>
   );
 }
@@ -264,15 +264,15 @@ function Limitations({ items }) {
   if (!items || !items.length) return null;
   return (
     <div className="rounded-xl bg-gray-50 p-2.5">
-      <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400"><Info className="h-3 w-3" /> What this does &amp; doesn’t say</div>
-      <ul className="space-y-0.5">{items.map((t, i) => <li key={i} className="text-[10px] leading-snug text-gray-500">• {t}</li>)}</ul>
+      <div className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-400"><Info className="h-3 w-3" /> What this does &amp; doesn’t say</div>
+      <ul className="space-y-0.5">{items.map((t, i) => <li key={i} className="text-xs leading-snug text-gray-500">• {t}</li>)}</ul>
     </div>
   );
 }
 
 function Attribution({ text, extra }) {
   if (!text) return null;
-  return <p className="mt-2 text-[10px] leading-snug text-gray-400">{extra ? `${extra} — ` : ''}{text}</p>;
+  return <p className="mt-2 text-xs leading-snug text-gray-400">{extra ? `${extra} — ` : ''}{text}</p>;
 }
 
 const num = (n) => (Number(n) || 0).toLocaleString('en-GB');

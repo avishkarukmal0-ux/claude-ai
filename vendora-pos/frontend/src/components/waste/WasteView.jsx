@@ -5,6 +5,7 @@ import { useWaste } from '../../lib/wasteStore';
 import { useInventory, DATE_TYPES, fefo, undatedQty } from '../../lib/inventoryStore';
 import { useMarkdowns, markdownLabelText, markdownTotals } from '../../lib/markdownStore';
 import { useRecoveryGuard } from '../../lib/recoveryGuard';
+import ScreenBack from '../common/ScreenBack';
 
 function newOpId() {
   try { if (crypto?.randomUUID) return crypto.randomUUID(); } catch { /* ignore */ }
@@ -124,16 +125,22 @@ export default function WasteView({ onBack }) {
     if (recovery.has(`product:${p.id}`)) { toast.error('This item needs checking after a failed save — reload and verify its stock before binning again.'); return; }
     const opGroupId = newOpId();
     const valuation = (p.cost ?? 0) * 1;
+    let entry = null;
     if (batchId) {
       const res = wasteBatch({ id: p.id, batchId, qty: 1, valuation, reason: 'expired / near-date', opGroupId });
       if (!res.ok) { if (res.needsRecovery) recovery.record(`product:${p.id}`, { kind: 'waste', name: p.name }); toast.error(res.error || 'Couldn’t bin that'); return; }
-      addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: batchId, batchInfo: res.batch, reason: 'expired / near-date' });
+      entry = addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, productBatchId: batchId, batchInfo: res.batch, reason: 'expired / near-date' });
     } else {
       const res = recordWaste({ id: p.id, qty: 1, valuation, reason: 'expired / near-date', batchId: opGroupId });
       if (!res.ok) { if (res.needsRecovery) recovery.record(`product:${p.id}`, { kind: 'waste', name: p.name }); toast.error(res.error || 'Couldn’t bin that'); return; }
-      addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, reason: 'expired / near-date' });
+      entry = addEntry({ type: 'wasted', name: p.name, value: (p.cost ?? 0) * res.applied, qty: res.applied, productId: p.id, batchId: opGroupId, reason: 'expired / near-date' });
     }
-    toast.success(`Binned 1 × ${p.name} · stock updated`);
+    // Binning changes stock — offer an Undo (restores stock + removes the ledger entry via the same safe path).
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Binned 1 × {p.name}
+        {entry && <button type="button" onClick={() => { undoEntry(entry); toast.dismiss(t.id); }} className="font-semibold text-primary underline">Undo</button>}
+      </span>
+    ), { icon: '🗑️', duration: 6000 });
   }
 
   // Undo restores stock + history consistently (batch-aware).
@@ -182,9 +189,7 @@ export default function WasteView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Waste &amp; savings</h2>
       <p className="mb-4 text-xs text-gray-400">Log what you bin and what you rescue. See the money either way.</p>
@@ -196,7 +201,7 @@ export default function WasteView({ onBack }) {
           <AlertTriangle className="mr-1 inline h-4 w-4" />
           “{g.name || 'An item'}” was binned but its record didn’t save and couldn’t be undone. Reload the app and
           check this item’s stock before binning it again.
-          <button type="button" onClick={() => recovery.clear(g.opKey)} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-[11px] font-bold text-danger active:scale-95">
+          <button type="button" onClick={() => recovery.clear(g.opKey)} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-xs font-bold text-danger active:scale-95">
             I’ve reloaded and checked its stock — clear this
           </button>
         </div>
@@ -215,23 +220,23 @@ export default function WasteView({ onBack }) {
                 <li key={`${p.id}:${batchId || 'nb'}`} className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${info.mustPull ? 'border-danger/40 bg-danger-light' : info.status === 'expired' ? 'border-warning/40 bg-warning-light' : 'border-gray-100 bg-white'}`}>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-gray-900">{p.name} <span className="font-normal text-gray-400">×{qty}</span></span>
-                    <span className={`block text-[11px] ${info.status === 'expired' ? 'text-danger' : 'text-gray-500'}`}>
+                    <span className={`block text-xs ${info.status === 'expired' ? 'text-danger' : 'text-gray-500'}`}>
                       {DATE_TYPES[info.type].label} {info.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ·{' '}
                       {info.daysLeft < 0 ? `${Math.abs(info.daysLeft)}d ago` : info.daysLeft === 0 ? 'today' : `in ${info.daysLeft}d`}
                     </span>
                     {info.mustPull ? (
-                      <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold text-danger-dark"><AlertTriangle className="h-3 w-3" /> Do not sell — pull now</span>
+                      <span className="mt-0.5 flex items-center gap-1 text-xs font-bold text-danger-dark"><AlertTriangle className="h-3 w-3" /> Do not sell — pull now</span>
                     ) : (
-                      <span className="mt-0.5 inline-block rounded-full bg-warning-light px-1.5 py-0.5 text-[10px] font-semibold text-warning-dark">Mark down to sell in time</span>
+                      <span className="mt-0.5 inline-block rounded-full bg-warning-light px-1.5 py-0.5 text-xs font-semibold text-warning-dark">Mark down to sell in time</span>
                     )}
                   </span>
-                  <span className="flex shrink-0 flex-col gap-1">
+                  <span className="flex shrink-0 flex-col gap-3">
                     {!info.mustPull && (
                       <button
                         type="button"
                         disabled={qty <= 0}
                         onClick={() => startMarkdown(row)}
-                        className="rounded-lg bg-primary-50 px-2.5 py-1.5 text-[11px] font-semibold text-primary ring-1 ring-primary/20 active:scale-95 disabled:opacity-40"
+                        className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary ring-1 ring-primary/20 active:scale-95 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         Mark down
                       </button>
@@ -240,7 +245,7 @@ export default function WasteView({ onBack }) {
                       type="button"
                       disabled={qty <= 0}
                       onClick={() => binRow(row)}
-                      className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95 disabled:opacity-40"
+                      className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-white/70 px-3 text-xs font-semibold text-danger-dark ring-1 ring-danger/20 active:scale-95 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                     >
                       {info.mustPull ? 'Pull' : 'Bin'}
                     </button>
@@ -265,7 +270,7 @@ export default function WasteView({ onBack }) {
               <input value={md.reducedPrice} onChange={(e) => setMd((m) => ({ ...m, reducedPrice: e.target.value }))} inputMode="decimal" placeholder={Number(md.row.product.price) > 0 ? `was ${money(md.row.product.price)}` : 'price'} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
             </label>
           </div>
-          <p className="mb-2 text-[11px] text-gray-400">Creates a reduced-price label to print/share. It does <strong>not</strong> change your stock or record a sale.</p>
+          <p className="mb-2 text-xs text-gray-400">Creates a reduced-price label to print/share. It does <strong>not</strong> change your stock or record a sale.</p>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setMd(null)} className="rounded-xl bg-gray-100 px-3 py-2.5 text-sm font-semibold text-gray-600">Cancel</button>
             <button type="button" onClick={submitMarkdown} className="rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white">Create label</button>
@@ -286,13 +291,13 @@ export default function WasteView({ onBack }) {
                 <div className="flex items-start justify-between gap-2">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-gray-900">{m.name} <span className="font-normal text-gray-400">×{m.qty}</span></span>
-                    <span className="block text-[11px] text-gray-500">{Number(m.originalPrice) > 0 ? `was ${money(m.originalPrice)} · ` : ''}now <span className="font-semibold text-danger">{money(m.reducedPrice)}</span>{m.expiry ? ` · sell by ${new Date(m.expiry).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</span>
+                    <span className="block text-xs text-gray-500">{Number(m.originalPrice) > 0 ? `was ${money(m.originalPrice)} · ` : ''}now <span className="font-semibold text-danger">{money(m.reducedPrice)}</span>{m.expiry ? ` · sell by ${new Date(m.expiry).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</span>
                   </span>
                   <button type="button" onClick={() => removeMarkdown(m.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove markdown"><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => printLabel(m)} className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><Printer className="h-3.5 w-3.5" /> Print</button>
-                  <button type="button" onClick={() => shareLabel(m)} className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
+                  <button type="button" onClick={() => printLabel(m)} className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 active:scale-95"><Printer className="h-3.5 w-3.5" /> Print</button>
+                  <button type="button" onClick={() => shareLabel(m)} className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
                   <button
                     type="button"
                     onClick={() => {
@@ -301,13 +306,13 @@ export default function WasteView({ onBack }) {
                       const bin = Math.max(0, (Number(m.qty) || 0) - (Number(sold) || 0));
                       if (window.confirm(`Record ${sold || 0} sold (reported) and bin the remaining ${bin}?`)) closeMarkdown(m, sold, bin);
                     }}
-                    className="flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"
+                    className="flex items-center gap-1 rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"
                   ><Check className="h-3.5 w-3.5" /> Record outcome</button>
                 </div>
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-[10px] text-gray-400">“Sold” here is your own estimate — confirmed sales only come from till imports. Unsold units you bin update stock.</p>
+          <p className="mt-1.5 text-xs text-gray-400">“Sold” here is your own estimate — confirmed sales only come from till imports. Unsold units you bin update stock.</p>
         </section>
       )}
 
@@ -365,22 +370,22 @@ export default function WasteView({ onBack }) {
       <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="What is it? (e.g. Milk 2L)" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <div className="mb-3 grid grid-cols-2 gap-2">
-          <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">
-            £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="value" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+          <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
+            £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="value" className="w-full border-none p-0 text-base text-gray-900 focus:outline-none" />
           </label>
-          <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">
-            Qty<input value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+          <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
+            Qty<input value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-base text-gray-900 focus:outline-none" />
           </label>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" disabled={!form.value} onClick={() => log('wasted')} className="flex items-center justify-center gap-1.5 rounded-xl bg-danger px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button type="button" disabled={!form.value} onClick={() => log('wasted')} className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-danger px-3 text-sm font-semibold text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2">
             <Trash2 className="h-4 w-4" /> Binned it
           </button>
-          <button type="button" disabled={!form.value} onClick={() => log('saved')} className="flex items-center justify-center gap-1.5 rounded-xl bg-success px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+          <button type="button" disabled={!form.value} onClick={() => log('saved')} className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-success px-3 text-sm font-semibold text-white disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success focus-visible:ring-offset-2">
             <PiggyBank className="h-4 w-4" /> Saved it
           </button>
         </div>
-        <p className="mt-2 text-[11px] leading-snug text-gray-400">
+        <p className="mt-2 text-xs leading-snug text-gray-400">
           “Saved” = marked down or used before it expired. That’s money you kept. This quick log is
           for stock that isn’t in your catalogue — it doesn’t change stock levels. To bin a catalogued
           item and update stock, use the <span className="font-semibold">Sell first</span> list above.
@@ -399,7 +404,7 @@ export default function WasteView({ onBack }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{e.name}</span>
-                  <span className="block text-[11px] text-gray-500">
+                  <span className="block text-xs text-gray-500">
                     {e.qty > 1 ? `×${e.qty} · ` : ''}{new Date(e.ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                   </span>
                 </span>

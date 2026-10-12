@@ -26,7 +26,7 @@ export default function InstallCard() {
           <p className="text-sm font-semibold text-gray-900">Add Vendora to your home screen</p>
           {canInstall ? (
             <>
-              <p className="mt-0.5 text-[11px] text-gray-500">Opens like an app and works offline on the shop floor.</p>
+              <p className="mt-0.5 text-xs text-gray-500">Opens like an app and works offline on the shop floor.</p>
               <button
                 type="button"
                 onClick={async () => { const r = await promptInstall(); if (r.ok) setHidden(true); }}
@@ -36,7 +36,7 @@ export default function InstallCard() {
               </button>
             </>
           ) : (
-            <p className="mt-1 text-[11px] leading-relaxed text-gray-600">
+            <p className="mt-1 text-xs leading-relaxed text-gray-600">
               In Safari, tap <Share className="inline h-3.5 w-3.5 align-text-bottom" /> <span className="font-semibold">Share</span>,
               then <Plus className="inline h-3.5 w-3.5 align-text-bottom" /> <span className="font-semibold">Add to Home Screen</span>.
             </p>

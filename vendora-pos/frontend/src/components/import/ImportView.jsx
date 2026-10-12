@@ -57,7 +57,7 @@ export default function ImportView({ onBack, onDone }) {
         placeholder="…or paste CSV here: Name, Barcode, Cost, Price, Qty"
         className="mb-1 w-full rounded-xl border border-gray-200 p-3 font-mono text-xs text-gray-900 focus:border-primary focus:outline-none"
       />
-      <p className="mb-4 text-[11px] text-gray-400">We detect columns by header (Name / Barcode / Cost / Price / Qty), or read them in that order.</p>
+      <p className="mb-4 text-xs text-gray-400">We detect columns by header (Name / Barcode / Cost / Price / Qty), or read them in that order.</p>
 
       {rows.length > 0 && (
         <>
@@ -68,12 +68,12 @@ export default function ImportView({ onBack, onDone }) {
             {rows.slice(0, 8).map((r, i) => (
               <li key={i} className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm">
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{r.name}</span>
-                {r.barcode && <span className="font-mono text-[11px] text-gray-400">{r.barcode}</span>}
+                {r.barcode && <span className="font-mono text-xs text-gray-400">{r.barcode}</span>}
                 {r.price !== '' && <span className="text-xs text-gray-500">£{Number(r.price).toFixed(2)}</span>}
                 {r.qty !== '' && <span className="text-xs text-gray-400">×{r.qty}</span>}
               </li>
             ))}
-            {rows.length > 8 && <li className="px-1 text-[11px] text-gray-400">+{rows.length - 8} more…</li>}
+            {rows.length > 8 && <li className="px-1 text-xs text-gray-400">+{rows.length - 8} more…</li>}
           </ul>
           <button type="button" onClick={doImport} className="flex w-full items-center justify-center gap-2 rounded-xl bg-success px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-success/30 active:scale-[0.99]">
             <Upload className="h-5 w-5" /> Import {rows.length} product{rows.length === 1 ? '' : 's'}

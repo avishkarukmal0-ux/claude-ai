@@ -56,7 +56,7 @@ export default function ComplianceRadar() {
         </>
       )}
 
-      <p className="mt-4 text-[11px] leading-snug text-gray-400">
+      <p className="mt-4 text-xs leading-snug text-gray-400">
         Indicative dates for planning — always confirm your exact obligations with HMRC, your local
         authority, or your accountant. Vendora keeps the records that make these easy.
       </p>

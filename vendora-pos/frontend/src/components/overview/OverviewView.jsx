@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ArrowLeft, Banknote, TrendingDown, PiggyBank, Package, AlertTriangle, ChevronRight, Boxes, Hourglass, LineChart, Percent, Trophy } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useTakings, entryTotals } from '../../lib/takingsStore';
 import { useWaste } from '../../lib/wasteStore';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
@@ -31,9 +32,7 @@ export default function OverviewView({ onBack, onOpen }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Owner glance</h2>
       <p className="mb-4 text-xs text-gray-400">Your shop at a glance — from what you’ve logged. No till needed yet.</p>
@@ -83,7 +82,7 @@ export default function OverviewView({ onBack, onOpen }) {
       )}
 
       {insights.stock.unknownCount > 0 && (
-        <p className="mt-3 rounded-xl bg-warning-light/60 px-3 py-2 text-[11px] leading-snug text-warning-dark">
+        <p className="mt-3 rounded-xl bg-warning-light/60 px-3 py-2 text-xs leading-snug text-warning-dark">
           {insights.stock.unknownCount} product{insights.stock.unknownCount === 1 ? ' has' : 's have'} no cost set, so £ valuations here are partial. Add costs in Stock for a full picture.
         </p>
       )}
@@ -115,7 +114,7 @@ export default function OverviewView({ onBack, onOpen }) {
         </div>
       )}
       {insights.top.length === 0 && (
-        <p className="mt-4 text-center text-[11px] text-gray-400">
+        <p className="mt-4 text-center text-xs text-gray-400">
           Best sellers appear from confirmed sales — import your till sales (More → Data) for accurate figures.
           Editing a stock count is a correction, not a sale.
         </p>
@@ -137,7 +136,7 @@ function Stat({ label, value, icon: Icon, tone, onClick, hint }) {
         {onClick && <ChevronRight className="ml-auto h-3.5 w-3.5 text-gray-300" />}
       </span>
       <span className={`mt-1 text-2xl font-extrabold tabular-nums ${tone}`}>{value}</span>
-      {hint && <span className="mt-0.5 text-[10px] font-medium text-gray-400">{hint}</span>}
+      {hint && <span className="mt-0.5 text-xs font-medium text-gray-400">{hint}</span>}
     </Tag>
   );
 }

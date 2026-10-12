@@ -40,7 +40,7 @@ export default function SyncStatus() {
       <Icon className={`h-3.5 w-3.5 ${tone} ${s.status === 'syncing' ? 'animate-spin' : ''}`} />
       <span className={tone}>{text}</span>
       {s.pending > 0 && s.status !== 'syncing' && (
-        <span className="ml-auto rounded-full bg-primary-50 px-2 py-0.5 text-[10px] text-primary">{s.pending} pending</span>
+        <span className="ml-auto rounded-full bg-primary-50 px-2 py-0.5 text-xs text-primary">{s.pending} pending</span>
       )}
     </button>
   );

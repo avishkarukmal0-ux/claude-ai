@@ -43,22 +43,22 @@ export default function PriceAlertsView({ onBack }) {
               <li key={a.id} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                 <div className="mb-1 flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{a.name}</span>
-                  <span className={`flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${up ? 'bg-danger/10 text-danger' : 'bg-success-light text-success-dark'}`}>
+                  <span className={`flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-bold ${up ? 'bg-danger/10 text-danger' : 'bg-success-light text-success-dark'}`}>
                     {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}{a.changePct > 0 ? '+' : ''}{a.changePct}%
                   </span>
                 </div>
                 <div className="mb-1 flex items-center gap-2 text-[12px] text-gray-600">
                   cost {money(a.prevCost)} <ArrowRight className="h-3.5 w-3.5 text-gray-400" /> <span className="font-semibold text-gray-900">{money(a.newCost)}</span>
                 </div>
-                <div className="mb-2 text-[11px] text-gray-500">
+                <div className="mb-2 text-xs text-gray-500">
                   margin {pct(a.prevMargin)} <ArrowRight className="inline h-3 w-3 text-gray-400" /> <span className={a.newMargin != null && a.prevMargin != null && a.newMargin < a.prevMargin ? 'font-semibold text-danger' : 'font-semibold text-gray-700'}>{pct(a.newMargin)}</span>
                   {a.suggestedRetail != null && <> · hold margin at retail <span className="font-semibold text-gray-900">{money(a.suggestedRetail)}</span></>}
                 </div>
                 <div className="flex items-center gap-2">
                   {a.suggestedRetail != null && (
-                    <button type="button" onClick={() => approve(a)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Set retail {money(a.suggestedRetail)}</button>
+                    <button type="button" onClick={() => approve(a)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Set retail {money(a.suggestedRetail)}</button>
                   )}
-                  <button type="button" onClick={() => dismiss(a.id)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 active:scale-95"><X className="h-3.5 w-3.5" /> Keep price</button>
+                  <button type="button" onClick={() => dismiss(a.id)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95"><X className="h-3.5 w-3.5" /> Keep price</button>
                 </div>
               </li>
             );

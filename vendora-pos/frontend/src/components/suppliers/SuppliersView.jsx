@@ -79,7 +79,7 @@ export default function SuppliersView({ onBack, familyId }) {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-gray-900">{s.name}</span>
                 {(s.phone || s.notes) && (
-                  <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-gray-500">
+                  <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
                     {s.phone && <a href={`tel:${s.phone}`} className="flex items-center gap-1 text-primary"><Phone className="h-3 w-3" />{s.phone}</a>}
                     {s.notes && <span>{s.notes}</span>}
                   </span>

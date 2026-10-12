@@ -67,9 +67,9 @@ export default function NotificationsView({ onBack }) {
           <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">{device.enabled ? <Bell className="h-4 w-4 text-primary" /> : <BellOff className="h-4 w-4 text-gray-400" />} This device</h3>
           <Toggle on={device.enabled} onClick={toggleDevice} />
         </div>
-        <p className="mt-0.5 text-[11px] text-gray-400">Shows a reminder when you open Vendora in the morning. Works on this device only.</p>
-        {!notificationSupported() && <p className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] text-gray-500">This browser can’t show notifications — use the email digest below instead.</p>}
-        {perm === 'denied' && <p className="mt-2 rounded-lg bg-warning-light px-2 py-1.5 text-[11px] text-warning-dark">Notifications are blocked. Turn them on for this site in your browser settings, then try again.</p>}
+        <p className="mt-0.5 text-xs text-gray-400">Shows a reminder when you open Vendora in the morning. Works on this device only.</p>
+        {!notificationSupported() && <p className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-500">This browser can’t show notifications — use the email digest below instead.</p>}
+        {perm === 'denied' && <p className="mt-2 rounded-lg bg-warning-light px-2 py-1.5 text-xs text-warning-dark">Notifications are blocked. Turn them on for this site in your browser settings, then try again.</p>}
 
         {device.enabled && (
           <div className="mt-3 space-y-3">
@@ -80,7 +80,7 @@ export default function NotificationsView({ onBack }) {
           </div>
         )}
 
-        <div className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
+        <div className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500">
           Right now this device would show: <b className="text-gray-700">{digestLine(localDigest)}</b>
         </div>
       </section>
@@ -89,7 +89,7 @@ export default function NotificationsView({ onBack }) {
       {emailAllowed ? <EmailSection /> : (
         <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
           <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900"><Mail className="h-4 w-4 text-gray-400" /> Email digest</h3>
-          <p className="mt-1 text-[11px] text-gray-400">
+          <p className="mt-1 text-xs text-gray-400">
             {ACCOUNTS_ENABLED && isLoggedIn()
               ? 'Only the owner or a manager can set up the shop email digest.'
               : 'Log in to your shop account to set up an email digest that arrives even when the app is closed.'}
@@ -97,7 +97,7 @@ export default function NotificationsView({ onBack }) {
         </section>
       )}
 
-      <p className="mt-4 text-center text-[11px] text-gray-400">Device reminders need the app to be opened. The email digest is the reliable one — it arrives on its own.</p>
+      <p className="mt-4 text-center text-xs text-gray-400">Device reminders need the app to be opened. The email digest is the reliable one — it arrives on its own.</p>
     </div>
   );
 }
@@ -150,10 +150,10 @@ function EmailSection() {
         <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900"><Mail className="h-4 w-4 text-primary" /> Email digest</h3>
         <Toggle on={prefs.email.enabled} onClick={() => save({ ...prefs, email: { enabled: !prefs.email.enabled } })} />
       </div>
-      <p className="mt-0.5 text-[11px] text-gray-400">A daily summary emailed to you — arrives even when the app is closed.</p>
+      <p className="mt-0.5 text-xs text-gray-400">A daily summary emailed to you — arrives even when the app is closed.</p>
 
       {!configured && (
-        <p className="mt-2 rounded-lg bg-warning-light px-2 py-1.5 text-[11px] text-warning-dark">
+        <p className="mt-2 rounded-lg bg-warning-light px-2 py-1.5 text-xs text-warning-dark">
           Email isn’t switched on for your shop yet. Your choices are saved and take effect once it’s set up (needs an email provider on the server).
         </p>
       )}
@@ -161,7 +161,7 @@ function EmailSection() {
       {prefs.email.enabled && (
         <div className="mt-3 space-y-3">
           <label className="block">
-            <span className="text-[11px] font-semibold text-gray-500">Send to</span>
+            <span className="text-xs font-semibold text-gray-500">Send to</span>
             <input value={prefs.recipient} onChange={(e) => setPrefs({ ...prefs, recipient: e.target.value })} onBlur={() => save(prefs)} type="email" placeholder="Your account email" className="mt-0.5 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
           </label>
           <CategoryPicker prefs={prefs} onChange={(patch) => save({ ...prefs, ...patch })} />
@@ -169,13 +169,13 @@ function EmailSection() {
           <QuietRow prefs={prefs} onChange={(patch) => save({ ...prefs, ...patch })} />
           <button type="button" onClick={showPreview} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 active:scale-95">Show me a preview</button>
           {preview && (
-            <div className="rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-gray-600">
+            <div className="rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600">
               <b className="text-gray-800">Preview:</b> {preview.empty ? 'All clear — nothing to send.' : `${preview.expiry.count} expiring · ${preview.claims.count} claim(s) (£${preview.claims.outstanding.toFixed(2)}) · ${preview.tasks.count} urgent task(s)`}
             </div>
           )}
         </div>
       )}
-      {saving && <p className="mt-2 text-[11px] text-gray-400"><Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Saving…</p>}
+      {saving && <p className="mt-2 text-xs text-gray-400"><Loader2 className="mr-1 inline h-3 w-3 animate-spin" /> Saving…</p>}
     </section>
   );
 }
@@ -192,7 +192,7 @@ function CategoryPicker({ prefs, onChange }) {
   const cats = prefs.categories || {};
   return (
     <div>
-      <span className="text-[11px] font-semibold text-gray-500">Tell me about</span>
+      <span className="text-xs font-semibold text-gray-500">Tell me about</span>
       <div className="mt-1 space-y-1">
         {CATS.map((c) => {
           const on = cats[c.key] !== false;

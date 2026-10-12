@@ -52,7 +52,7 @@ export default function MergeView({ onBack }) {
             const keepId = keepByGroup[g.key] || g.products[0].id;
             return (
               <div key={g.key} className="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
-                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                   {g.reason === 'barcode' ? 'Same barcode' : 'Same name'}
                 </p>
@@ -63,7 +63,7 @@ export default function MergeView({ onBack }) {
                         <input type="radio" name={`keep-${g.key}`} checked={keepId === p.id} onChange={() => setKeepByGroup((m) => ({ ...m, [g.key]: p.id }))} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                          <span className="block text-[11px] text-gray-500">
+                          <span className="block text-xs text-gray-500">
                             {Number(p.qty) || 0} in stock{p.barcode ? ` · ${p.barcode}` : ''}{keepId === p.id ? ' · keep this' : ''}
                           </span>
                         </span>

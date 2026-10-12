@@ -34,10 +34,10 @@ export default function SaveSyncStatus() {
       {signedIn ? (
         <>
           <SyncStatus />
-          <p className="px-3 pb-1 text-[11px] text-gray-400">Cross-device sync keeps your other devices up to date. For a restore point, use Export backup below.</p>
+          <p className="px-3 pb-1 text-xs text-gray-400">Cross-device sync keeps your other devices up to date. For a restore point, use Export backup below.</p>
         </>
       ) : (
-        <p className="px-3 pb-1 text-[11px] text-gray-400">Your data lives on this device. Use Export backup below to keep a copy you can restore.</p>
+        <p className="px-3 pb-1 text-xs text-gray-400">Your data lives on this device. Use Export backup below to keep a copy you can restore.</p>
       )}
     </div>
   );

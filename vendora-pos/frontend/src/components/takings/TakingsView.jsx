@@ -87,7 +87,7 @@ export default function TakingsView({ onBack }) {
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-gray-900">{new Date(e.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                     {t.variance != null && Math.abs(t.variance) >= 0.005 && (
-                      <span className={`block text-[11px] ${t.variance < 0 ? 'text-danger' : 'text-warning-dark'}`}>{t.variance < 0 ? `£${Math.abs(t.variance).toFixed(2)} short` : `£${t.variance.toFixed(2)} over`}</span>
+                      <span className={`block text-xs ${t.variance < 0 ? 'text-danger' : 'text-warning-dark'}`}>{t.variance < 0 ? `£${Math.abs(t.variance).toFixed(2)} short` : `£${t.variance.toFixed(2)} over`}</span>
                     )}
                   </span>
                   <span className="text-sm font-bold tabular-nums text-gray-900">£{t.takings.toFixed(2)}</span>

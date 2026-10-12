@@ -92,24 +92,24 @@ export default function CreditNoteRecoveryView({ onBack }) {
                   <div className="truncate text-sm font-semibold text-gray-900">
                     {note.deleted ? 'Deleted credit note' : (note.supplierName || 'Supplier')}{note.reference ? ` · ${note.reference}` : ''}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-gray-500">
+                  <div className="mt-0.5 text-xs text-gray-500">
                     {note.deleted ? 'The note was removed but some claims may still credit it.' : `${gbp(note.amount)} credit note`}
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-bold text-danger">Locked</span>
+                <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-xs font-bold text-danger">Locked</span>
               </div>
 
-              <p className="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-[11px] leading-snug text-gray-600">
+              <p className="mt-2 rounded-lg bg-white/70 px-2.5 py-2 text-xs leading-snug text-gray-600">
                 Locked because a save failed partway through. The note’s allocations and the claims that credit it
                 are shown below — reconciling restores them to match.
               </p>
 
               <div className="mt-2 space-y-1.5">
-                <div className="flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                <div className="flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                   <span>Claim</span><span>Note says · Claim says</span>
                 </div>
                 {recon.rows.length === 0 ? (
-                  <p className="rounded-lg bg-white px-2.5 py-2 text-[11px] text-gray-500">No allocations or claim credits remain — safe to reconcile.</p>
+                  <p className="rounded-lg bg-white px-2.5 py-2 text-xs text-gray-500">No allocations or claim credits remain — safe to reconcile.</p>
                 ) : recon.rows.map((row) => {
                   const claim = claims.find((c) => c.id === row.claimId);
                   const outcome = row.consistent ? null
@@ -123,14 +123,14 @@ export default function CreditNoteRecoveryView({ onBack }) {
                         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-gray-800">
                           {claim ? (claim.supplierName || 'Claim') : 'Claim no longer exists'}{claim && claim.deliveryRef ? ` · ${claim.deliveryRef}` : ''}
                         </span>
-                        <span className={`shrink-0 text-[11px] tabular-nums ${row.consistent ? 'text-gray-500' : 'font-semibold text-danger'}`}>
+                        <span className={`shrink-0 text-xs tabular-nums ${row.consistent ? 'text-gray-500' : 'font-semibold text-danger'}`}>
                           {gbp(row.allocated)} · {gbp(row.credited)}
                         </span>
                         {row.consistent
                           ? <Check className="h-3.5 w-3.5 shrink-0 text-success" aria-label="Matches" />
-                          : <span className="shrink-0 text-[10px] font-bold text-danger" aria-label="Does not match">(differs)</span>}
+                          : <span className="shrink-0 text-xs font-bold text-danger" aria-label="Does not match">(differs)</span>}
                       </div>
-                      {outcome && <p className="mt-1 pl-5 text-[10px] font-medium text-primary">{outcome}</p>}
+                      {outcome && <p className="mt-1 pl-5 text-xs font-medium text-primary">{outcome}</p>}
                     </div>
                   );
                 })}
@@ -144,7 +144,7 @@ export default function CreditNoteRecoveryView({ onBack }) {
               >
                 {busyId === id ? <><Loader2 className="h-4 w-4 animate-spin" /> Reconciling…</> : <><Check className="h-4 w-4" /> Reconcile this credit note</>}
               </button>
-              <p className="mt-1 text-center text-[10px] text-gray-400">Corrects the note and claims together, re-reads both, and only unlocks if they match.</p>
+              <p className="mt-1 text-center text-xs text-gray-400">Corrects the note and claims together, re-reads both, and only unlocks if they match.</p>
             </li>
           ))}
         </ul>

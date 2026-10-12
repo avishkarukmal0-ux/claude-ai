@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge } from 'lucide-react';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical } from 'lucide-react';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
 import ProductHistory from './ProductHistory';
 import MergeView from './MergeView';
@@ -152,13 +152,14 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHistory }) {
   const m = margin(p);
   const low = isLowStock(p);
+  const [menuOpen, setMenuOpen] = useState(false); // kebab menu: History / Edit / Delete (declutters the row)
   return (
     <li className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 gap-2.5">
           <ProductThumb product={p} />
           <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
+          <div className="text-sm font-semibold leading-tight text-gray-900 line-clamp-2">{p.name}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
             {p.barcode && <span className="font-mono">{p.barcode}</span>}
             {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)}</span>}
@@ -213,24 +214,29 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, onEdit, onHist
           </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button type="button" onClick={onHistory} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Stock history">
-            <History className="h-5 w-5" />
+        {/* Actions collapse into a "⋮" menu so the row isn't a wall of icon buttons (375px). Delete sits apart
+            at the bottom (danger tint) and CONFIRMS — it removes the product + its stock number. */}
+        <div className="relative shrink-0">
+          <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`More actions for ${p.name}`}>
+            <MoreVertical className="h-5 w-5" />
           </button>
-          <button type="button" onClick={onEdit} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Edit product">
-            <Pencil className="h-5 w-5" />
-          </button>
-          {/* Delete is separated from Edit (divider + extra gap) and CONFIRMS — it deletes the product and
-              can't be undone here, so it must not sit flush against Edit where a mis-tap is easy. */}
-          <span className="mx-1 h-6 w-px bg-gray-200" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={() => { if (window.confirm(`Delete “${p.name}”? This removes the product and its stock number. This can’t be undone here.`)) removeProduct(p.id); }}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-danger-light hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
-            aria-label={`Delete ${p.name}`}
-          >
-            <Trash2 className="h-5 w-5" />
-          </button>
+          {menuOpen && (
+            <>
+              <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
+              <div role="menu" className="absolute right-0 top-11 z-20 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onHistory(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
+                  <History className="h-4 w-4 text-gray-400" /> Stock history
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
+                  <Pencil className="h-4 w-4 text-gray-400" /> Edit product
+                </button>
+                <div className="my-1 border-t border-gray-100" />
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); if (window.confirm(`Delete “${p.name}”? This removes the product and its stock number. This can’t be undone here.`)) removeProduct(p.id); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm font-medium text-danger hover:bg-danger-light">
+                  <Trash2 className="h-4 w-4" /> Delete product
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between">
@@ -286,7 +292,7 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
         <button type="button" onClick={() => setShowPack(true)} className="mb-2 text-xs font-medium text-primary">+ Comes in a case? Add pack size</button>
       ) : (
         <div className="mb-2 rounded-xl border border-gray-200 bg-white p-2">
-          <p className="mb-1.5 text-[11px] text-gray-500">If you buy this by the case, set how many singles are in a case. Scanning the case barcode then books in a whole case.</p>
+          <p className="mb-1.5 text-xs text-gray-500">If you buy this by the case, set how many singles are in a case. Scanning the case barcode then books in a whole case.</p>
           <div className="grid grid-cols-2 gap-2">
             <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case (e.g. 24)" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
             <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode (optional)" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
@@ -377,11 +383,11 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
 
       {/* Extra barcodes (Phase 2.7a) — the same product can scan under several codes. */}
       <div className="mb-2">
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Other barcodes</p>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Other barcodes</p>
         {extra.length > 0 && (
           <div className="mb-1.5 flex flex-wrap gap-1.5">
             {extra.map((c) => (
-              <span key={c} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 font-mono text-[11px] text-gray-700">
+              <span key={c} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">
                 {c}
                 <button type="button" onClick={() => removeExtra(c)} className="text-gray-400 hover:text-danger" aria-label={`Remove barcode ${c}`}>×</button>
               </span>
@@ -404,11 +410,11 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
 
       {/* Supplier aliases (Phase 2.7b) — what a supplier calls this on their invoice. */}
       <div className="mb-2">
-        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Supplier names / codes</p>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Supplier names / codes</p>
         {aliases.length > 0 && (
           <ul className="mb-1.5 space-y-1">
             {aliases.map((a, i) => (
-              <li key={`${a.code}-${a.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1 text-[11px] text-gray-700">
+              <li key={`${a.code}-${a.name}-${i}`} className="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1 text-xs text-gray-700">
                 <span className="min-w-0 flex-1 truncate">{supplierLabel(a.supplierId)}: {a.code && <span className="font-mono">{a.code}</span>}{a.code && a.name ? ' · ' : ''}{a.name}</span>
                 <button type="button" onClick={() => removeAlias(i)} className="text-gray-400 hover:text-danger" aria-label="Remove supplier alias">×</button>
               </li>

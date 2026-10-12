@@ -129,14 +129,14 @@ export default function StocktakeView({ onBack }) {
                 <li key={h.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-gray-900">{dateLabel(h.finishedAt)}</span>
-                    <span className="block text-[11px] text-gray-500">{h.itemsCounted} counted · {h.discrepancyCount} off</span>
+                    <span className="block text-xs text-gray-500">{h.itemsCounted} counted · {h.discrepancyCount} off</span>
                   </span>
                   {h.shrinkageValue > 0 ? (
-                    <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-danger">
+                    <span className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 text-xs font-bold tabular-nums text-danger">
                       −{money(h.shrinkageValue)}
                     </span>
                   ) : (
-                    <span className="shrink-0 rounded-full bg-success-light px-2 py-0.5 text-[11px] font-bold text-success-dark">Clean</span>
+                    <span className="shrink-0 rounded-full bg-success-light px-2 py-0.5 text-xs font-bold text-success-dark">Clean</span>
                   )}
                 </li>
               ))}
@@ -162,12 +162,12 @@ export default function StocktakeView({ onBack }) {
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400"><TrendingDown className="h-4 w-4" /> Shrinkage</span>
             <span className="mt-1 block text-2xl font-extrabold tabular-nums text-danger">−{money(summary.shrinkageValue)}</span>
-            <span className="text-[10px] text-gray-400">{summary.shrinkageUnits} units missing</span>
+            <span className="text-xs text-gray-400">{summary.shrinkageUnits} units missing</span>
           </div>
           <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
             <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400"><TrendingUp className="h-4 w-4" /> Overage</span>
             <span className="mt-1 block text-2xl font-extrabold tabular-nums text-success">+{money(summary.overageValue)}</span>
-            <span className="text-[10px] text-gray-400">more on shelf than expected</span>
+            <span className="text-xs text-gray-400">more on shelf than expected</span>
           </div>
         </div>
 
@@ -178,7 +178,7 @@ export default function StocktakeView({ onBack }) {
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${l.variance < 0 ? 'text-danger' : 'text-success'}`} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{l.name}</span>
-                  <span className="block text-[11px] text-gray-500">Expected {l.expected} · counted {l.counted}{l.material && <span className="ml-1 font-semibold text-danger">· big difference</span>}</span>
+                  <span className="block text-xs text-gray-500">Expected {l.expected} · counted {l.counted}{l.material && <span className="ml-1 font-semibold text-danger">· big difference</span>}</span>
                   {(() => {
                     const needsReason = l.material && !String(session.reasons?.[l.productId] || '').trim();
                     return (
@@ -188,7 +188,7 @@ export default function StocktakeView({ onBack }) {
                         placeholder={l.material ? 'Reason required — e.g. damaged, miscount, theft' : 'Reason (optional) — e.g. damaged, miscount'}
                         aria-label={`Reason for ${l.name}`}
                         aria-required={l.material || undefined}
-                        className={`mt-1 w-full rounded-lg border px-2 py-1 text-[11px] text-gray-900 focus:outline-none ${needsReason ? 'border-danger focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
+                        className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-gray-900 focus:outline-none ${needsReason ? 'border-danger focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
                       />
                     );
                   })()}
@@ -210,7 +210,7 @@ export default function StocktakeView({ onBack }) {
             <AlertTriangle className="mr-1 inline h-4 w-4" />
             A previous count save was left unsafe (stock changed but the record didn’t). Reload the app and check
             stock before applying again.
-            <button type="button" onClick={() => recovery.clear('stocktake')} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-[11px] font-bold text-danger active:scale-95">
+            <button type="button" onClick={() => recovery.clear('stocktake')} className="mt-1.5 block w-full rounded-lg bg-danger/15 px-2 py-1.5 text-xs font-bold text-danger active:scale-95">
               I’ve reloaded and checked stock — clear this
             </button>
           </div>
@@ -218,7 +218,7 @@ export default function StocktakeView({ onBack }) {
         <button type="button" disabled={countBlocked} onClick={applyAndFinish} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-bold text-white shadow-sm active:scale-[0.99] disabled:opacity-50">
           <Check className="h-4 w-4" /> Apply counts to stock
         </button>
-        <p className="mt-2 text-center text-[11px] text-gray-400">Applies each count as a correction (safe if stock moved mid-count) and saves it. Count only the items you check — a shelf at a time is fine.</p>
+        <p className="mt-2 text-center text-xs text-gray-400">Applies each count as a correction (safe if stock moved mid-count) and saves it. Count only the items you check — a shelf at a time is fine.</p>
       </div>
     );
   }
@@ -277,7 +277,7 @@ export default function StocktakeView({ onBack }) {
             <li key={p.id} className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${isCounted ? 'border-primary/30 bg-primary-50/40' : 'border-gray-100 bg-white'}`}>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                <span className="block text-[11px] text-gray-500">
+                <span className="block text-xs text-gray-500">
                   {p.countedAt ? 'Counted' : 'Recorded'} {expected}
                   {p.countedAt && <span className="text-gray-400"> · last {dateLabel(p.countedAt)}</span>}
                   {isCounted && variance !== 0 && (

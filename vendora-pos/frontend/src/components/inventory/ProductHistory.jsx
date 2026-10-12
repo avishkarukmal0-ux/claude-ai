@@ -77,12 +77,12 @@ export default function ProductHistory({ product, onBack }) {
                     <span className="text-sm font-semibold text-gray-900">{r.reversalOf ? 'Reversal' : meta.label}</span>
                     <span className={`text-xs font-bold tabular-nums ${up ? 'text-success-dark' : 'text-danger'}`}>{up ? '+' : ''}{r.delta}</span>
                   </div>
-                  <div className="truncate text-[11px] text-gray-400">
+                  <div className="truncate text-xs text-gray-400">
                     {when(r.at)}{r.actor ? ` · ${r.actor}` : ''}{r.reason ? ` · ${r.reason}` : ''}
                   </div>
                 </div>
                 <span className="shrink-0 text-right">
-                  <span className="block text-[10px] uppercase tracking-wide text-gray-300">balance</span>
+                  <span className="block text-xs uppercase tracking-wide text-gray-300">balance</span>
                   <span className="block text-sm font-semibold tabular-nums text-gray-700">{r.balance}</span>
                 </span>
               </li>

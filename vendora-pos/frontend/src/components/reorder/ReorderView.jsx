@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowLeft, ShoppingCart, Plus, Minus, Trash2, Check, PackagePlus, Building2, Share2, Flame, Mail } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
@@ -144,9 +145,7 @@ export default function ReorderView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} label="Home" />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Buy list</h2>
       <p className="mb-3 text-xs text-gray-400">Low stock becomes your cash-&-carry list. Tick items off as you shop.</p>
@@ -178,12 +177,12 @@ export default function ReorderView({ onBack }) {
                     <span className="flex items-center gap-1.5">
                       <span className="min-w-0 truncate text-sm font-semibold text-gray-900">{p.name}</span>
                       {fast ? (
-                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">
+                        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-danger/10 px-1.5 py-0.5 text-xs font-bold text-danger">
                           <Flame className="h-3 w-3" /> Fast
                         </span>
                       ) : null}
                     </span>
-                    <span className="block text-[11px] text-gray-500">
+                    <span className="block text-xs text-gray-500">
                       {vpd
                         ? <>{basis === 'estimated' ? 'Est. sells' : 'Sells'} {weeklyLabel(vpd)} · <span className={fast ? 'font-semibold text-danger' : ''}>{coverLabel(cover, p.qty)}</span> · suggest +{sq}</>
                         : <>In stock: {Number(p.qty) || 0} · low · suggest +{sq}</>}
@@ -193,7 +192,7 @@ export default function ReorderView({ onBack }) {
                   <button
                     type="button"
                     onClick={() => addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: sq, supplierId: p.supplierId, supplierName: supplierNameById[p.supplierId] })}
-                    className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95"
+                    className="flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl bg-primary px-3.5 text-sm font-semibold text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
                     <Plus className="h-4 w-4" /> Add
                   </button>
@@ -234,14 +233,14 @@ export default function ReorderView({ onBack }) {
                 <button
                   type="button"
                   onClick={() => shareGroup(supplier, groupItems)}
-                  className="ml-auto flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-600 active:scale-95"
+                  className="ml-auto flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600 active:scale-95"
                 >
                   <Share2 className="h-3.5 w-3.5" /> Share
                 </button>
                 <button
                   type="button"
                   onClick={() => placeOrder(supplier, groupItems)}
-                  className="flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-[11px] font-semibold text-primary active:scale-95"
+                  className="flex items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary active:scale-95"
                 >
                   <ShoppingCart className="h-3.5 w-3.5" /> Place order
                 </button>
@@ -259,7 +258,7 @@ export default function ReorderView({ onBack }) {
                     </button>
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate text-sm font-semibold ${i.bought ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{i.name}</span>
-                      {i.barcode && <span className="block font-mono text-[11px] text-gray-400">{i.barcode}</span>}
+                      {i.barcode && <span className="block font-mono text-xs text-gray-400">{i.barcode}</span>}
                     </span>
                     {!i.bought && (
                       <div className="flex items-center gap-2">
@@ -284,7 +283,7 @@ export default function ReorderView({ onBack }) {
       )}
 
       {items.length > 0 && (
-        <p className="mt-4 flex items-center gap-1.5 text-[11px] leading-snug text-gray-400">
+        <p className="mt-4 flex items-center gap-1.5 text-xs leading-snug text-gray-400">
           <PackagePlus className="h-3.5 w-3.5" /> Back from the cash-&-carry? Book it in on the Scan tab to update stock.
         </p>
       )}

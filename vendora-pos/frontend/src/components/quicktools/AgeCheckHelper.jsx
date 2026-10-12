@@ -69,7 +69,7 @@ export default function AgeCheckHelper() {
         </div>
       )}
 
-      <p className="mt-4 text-[11px] leading-snug text-gray-400">
+      <p className="mt-4 text-xs leading-snug text-gray-400">
         A helper only — it doesn’t record or approve a sale. Always check valid photo ID. The till
         handles the actual refusal log at checkout.
       </p>

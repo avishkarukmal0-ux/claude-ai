@@ -197,18 +197,18 @@ export default function HomePage() {
     <div className="flex min-h-screen flex-col bg-gray-50">
       <a href="#main-content" className="skip-link">Skip to content</a>
       {demo && (
-        <div className="flex items-center justify-between gap-2 bg-amber-100 px-4 py-2 text-xs font-medium text-amber-900" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.5rem)' }}>
+        <div className="flex items-center justify-between gap-2 bg-amber-100 px-4 py-1.5 text-xs font-medium text-amber-900" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.375rem)' }}>
           {loggedIn ? (
             <>
-              <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Demo data — a pretend shop. Your real data is safe.</span>
-              <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="-my-2 inline-flex min-h-[44px] shrink-0 items-center px-2 font-semibold underline">Exit demo</button>
+              <span className="flex min-w-0 items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Demo data — your real shop is safe.</span></span>
+              <button type="button" onClick={() => { exitDemo(); window.location.reload(); }} className="-my-1.5 inline-flex min-h-[44px] shrink-0 items-center px-2 font-semibold underline">Exit demo</button>
             </>
           ) : (
             // Signed-out welcome: this is a SAMPLE shop so you can try Vendora. No real data is shown here —
             // log in or create your shop to use it for real (your data is then private to your account).
             <>
-              <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> You’re trying Vendora with sample data. Create your shop to use it for real.</span>
-              <button type="button" onClick={() => navigate('/account')} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-amber-900 px-3 py-2 font-semibold text-amber-50">Log in / Create shop</button>
+              <span className="flex min-w-0 items-center gap-1.5"><Sparkles className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">Sample data — try Vendora.</span></span>
+              <button type="button" onClick={() => navigate('/account')} className="-my-1.5 inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-amber-900 px-3 font-semibold text-amber-50">Create shop</button>
             </>
           )}
         </div>
@@ -534,7 +534,7 @@ function Row({ icon: Icon, label, sub, onClick, badge = 0, disabled = false }) {
         <span className="block text-sm font-medium text-gray-900">{label}</span>
         {sub && <span className="block text-xs text-gray-400">{sub}</span>}
       </span>
-      {badge > 0 && <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">{badge}</span>}
+      {badge > 0 && <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-xs font-bold text-white">{badge}</span>}
       <ChevronRight className="h-4 w-4 text-gray-300" />
     </button>
   );
@@ -554,7 +554,7 @@ function RowLink({ to, icon: Icon, label }) {
 // marks the active tab for assistive tech. onSelect clears any open workflow screen on tap (incl. same-tab).
 function NavTab({ label, icon: Icon, to, active, onSelect, accent, badge = 0 }) {
   return (
-    <Link to={to} onClick={onSelect} aria-current={active ? 'page' : undefined} className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset" style={{ color: active ? accent : '#4b5563' }}>
+    <Link to={to} onClick={onSelect} aria-current={active ? 'page' : undefined} className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset" style={{ color: active ? accent : '#4b5563' }}>
       {badge > 0 && <span className="absolute right-1/2 top-1 translate-x-3 rounded-full bg-danger px-1 text-[9px] font-bold text-white">{badge > 9 ? '9+' : badge}</span>}
       <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} />
       {label}

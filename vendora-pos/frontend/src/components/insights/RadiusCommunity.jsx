@@ -22,7 +22,7 @@ function Rows({ rows }) {
   return (
     <ul className="space-y-1">
       {top.map((r) => (
-        <li key={r.label} className="text-[11px]">
+        <li key={r.label} className="text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-gray-700">{r.label}</span>
             <span className="shrink-0 font-semibold tabular-nums text-gray-900">{r.suppressed ? r.display : `${fmtNum(r.count)}${r.pct != null ? ` · ${r.pct}%` : ''}`}</span>
@@ -38,34 +38,34 @@ function Rows({ rows }) {
 
 export default function RadiusCommunity({ state, profile }) {
   if (state === 'loading') {
-    return <p className="mt-2 flex items-center gap-1.5 text-[11px] text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Finding who lives in this radius…</p>;
+    return <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Finding who lives in this radius…</p>;
   }
   if (state === 'error') {
-    return <p className="mt-2 text-[10px] leading-snug text-gray-400">Couldn’t load the community breakdown right now — try again in a moment.</p>;
+    return <p className="mt-2 text-xs leading-snug text-gray-400">Couldn’t load the community breakdown right now — try again in a moment.</p>;
   }
   if (state === 'unconfigured') {
-    return <p className="mt-2 text-[10px] leading-snug text-amber-700">Not switched on yet on the server (the census data provider or OA centroids) — once it’s set up, who-lives-here appears here.</p>;
+    return <p className="mt-2 text-xs leading-snug text-amber-700">Not switched on yet on the server (the census data provider or OA centroids) — once it’s set up, who-lives-here appears here.</p>;
   }
   if (state !== 'ok' || !profile) return null;
   const cats = profile.categories || {};
   const dep = profile.deprivation || null; // population-weighted IMD average across the radius (when available)
   return (
     <div className="mt-2 space-y-3">
-      <p className="flex items-start gap-1 text-[10px] leading-snug text-gray-400"><Globe2 className="mt-0.5 h-3 w-3 shrink-0" /> Estimated make-up of the people in this radius (whole census areas inside the circle), to help you stock for your community. Small groups show as “fewer than N”.</p>
+      <p className="flex items-start gap-1 text-xs leading-snug text-gray-400"><Globe2 className="mt-0.5 h-3 w-3 shrink-0" /> Estimated make-up of the people in this radius (whole census areas inside the circle), to help you stock for your community. Small groups show as “fewer than N”.</p>
       {dep && dep.decile != null && (
         <div className="rounded-xl bg-gray-50 p-2.5">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">Deprivation across this radius</span>
+          <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Deprivation across this radius</span>
           <span className="mt-0.5 block text-lg font-extrabold tabular-nums text-gray-900">Decile {dep.decile}<span className="text-xs font-semibold text-gray-400"> of 10</span></span>
-          <span className="block text-[10px] leading-snug text-gray-400">1 = most deprived 10% of England · population-weighted average over {dep.lsoaCount} area{dep.lsoaCount === 1 ? '' : 's'}{dep.score != null ? ` · avg score ${dep.score}` : ''} (estimate).</span>
+          <span className="block text-xs leading-snug text-gray-400">1 = most deprived 10% of England · population-weighted average over {dep.lsoaCount} area{dep.lsoaCount === 1 ? '' : 's'}{dep.score != null ? ` · avg score ${dep.score}` : ''} (estimate).</span>
         </div>
       )}
       {SECTIONS.map(({ key, label }) => {
         const rows = (cats[key] || []).filter((r) => (r.count || 0) > 0 || r.suppressed);
         return (
           <section key={key}>
-            <h5 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</h5>
+            <h5 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</h5>
             {rows.length ? <Rows rows={rows} /> : (
-              <p className="text-[10px] leading-snug text-amber-700">
+              <p className="text-xs leading-snug text-amber-700">
                 {key === 'countryOfBirth'
                   ? 'Country of birth isn’t available yet — its census dataset needs verifying on the server.'
                   : 'No data for this breakdown in this area.'}
