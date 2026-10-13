@@ -12,6 +12,7 @@ import { useSuppliers } from '../../lib/supplierStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
 import { unitPrice } from '../../lib/priceMarking';
+import { validBarcode } from '../../lib/barcode';
 import { ALLERGENS } from '../../data/allergens';
 
 // Food shops (Fresh & weighed, World & specialist) need allergen/ingredient capture for PPDS.
@@ -21,8 +22,9 @@ function isFoodShop() {
 }
 
 // A barcode is optional, but if present it must be a real EAN/UPC length (8–14 digits).
-// Canonical impl now lives in lib/barcode.js; re-exported here so existing imports/tests keep working.
-export { validBarcode } from '../../lib/barcode';
+// Canonical impl lives in lib/barcode.js; imported above for local use and re-exported so existing
+// imports/tests of `validBarcode` from this module keep working.
+export { validBarcode };
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.
