@@ -21,10 +21,8 @@ function isFoodShop() {
 }
 
 // A barcode is optional, but if present it must be a real EAN/UPC length (8–14 digits).
-export function validBarcode(code) {
-  const v = String(code || '').trim();
-  return v === '' || /^\d{8,14}$/.test(v);
-}
+// Canonical impl now lives in lib/barcode.js; re-exported here so existing imports/tests keep working.
+export { validBarcode } from '../../lib/barcode';
 
 // Stock tab — a real, on-device inventory. Add/search products, adjust stock,
 // see margins and low-stock at a glance. Works offline; no backend needed.

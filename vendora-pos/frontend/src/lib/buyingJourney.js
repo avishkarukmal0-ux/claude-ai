@@ -149,10 +149,19 @@ function buildFromOpenOrder(order) {
 function buildFromInvoice(invoice, { claims }) {
   const iClaims = claimsForInvoice(claims, invoice.id);
   const outstanding = iClaims.length ? round2(iClaims.reduce((n, c) => n + (claimOutstanding(c) || 0), 0)) : 0;
+  // Audit (Buy tab): a committed invoice with NO received delivery behind it is not a finished purchase —
+  // the goods haven't been booked in or checked against the bill, so it must NOT badge "Done". The invoice is
+  // captured, but checking it against a delivery is the open step, so mark the INVOICE stage 'current'
+  // ("Check vs delivery") → the journey stays "In progress" with that as its next action. (Once it's
+  // reconciled and a claim links it, a delivery/claim-anchored journey represents it instead.) It only reads
+  // complete when a claim on it is fully settled — the money side is closed.
+  const settled = iClaims.length > 0 && outstanding <= 0;
   const stages = [
     stage('order', 'skipped', 'Order', 'No order recorded'),
     stage('delivery', 'skipped', 'Delivery', 'No delivery recorded'),
-    stage('invoice', 'done', 'Invoice', invoice.reference || invoice.supplierName || 'Committed'),
+    settled
+      ? stage('invoice', 'done', 'Invoice', invoice.reference || invoice.supplierName || 'Committed')
+      : stage('invoice', 'current', 'Invoice', 'Committed — check it against a delivery'),
     stage('resolve', 'skipped', 'Resolve', ''),
     iClaims.length
       ? stage('claim', outstanding > 0 ? 'current' : 'done', 'Claim', outstanding > 0 ? `${iClaims.length} open` : 'Settled')

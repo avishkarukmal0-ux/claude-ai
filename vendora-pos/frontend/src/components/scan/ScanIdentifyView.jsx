@@ -9,6 +9,7 @@ import { useInventory, margin, worstExpiry } from '../../lib/inventoryStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse } from '../../config/categories';
 import { lookupBarcode } from '../../lib/productLookup';
+import { isBarcode } from '../../lib/barcode';
 import ProductImage from '../common/ProductImage';
 
 // Scan → identify. Scan (or type) a barcode and see exactly what it is: the product, its category, price,
@@ -108,13 +109,14 @@ export default function ScanIdentifyView({ onBack }) {
           ) : (
             <p className="mb-3 rounded-xl bg-warning-light px-3 py-2 text-xs text-warning-dark">This browser can’t use the camera scanner — type the barcode below instead.</p>
           )}
-          <form onSubmit={(e) => { e.preventDefault(); resolve(typed); }} className="flex gap-2">
+          <form onSubmit={(e) => { e.preventDefault(); if (isBarcode(typed)) resolve(typed); }} className="flex gap-2">
             <div className="relative flex-1">
               <Keyboard className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input value={typed} onChange={(e) => setTyped(e.target.value)} inputMode="numeric" placeholder="Type a barcode" aria-label="Type a barcode" className="w-full rounded-xl border border-gray-200 py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none" />
+              <input value={typed} onChange={(e) => setTyped(e.target.value)} inputMode="numeric" placeholder="Type a barcode" aria-label="Type a barcode" className={`min-h-[44px] w-full rounded-xl border py-2.5 pl-9 pr-3 text-base focus:outline-none ${typed.trim() && !isBarcode(typed) ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`} />
             </div>
-            <button type="submit" disabled={!typed.trim()} className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Check</button>
+            <button type="submit" disabled={!isBarcode(typed)} className="inline-flex min-h-[44px] items-center rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white disabled:opacity-40">Check</button>
           </form>
+          {typed.trim() && !isBarcode(typed) && <p className="mt-1 text-xs font-medium text-danger-dark">A barcode is 8–14 digits.</p>}
         </div>
       )}
 

@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v28';
+const CACHE_VERSION = 'vendora-v29';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 

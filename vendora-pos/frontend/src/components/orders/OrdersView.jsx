@@ -63,7 +63,9 @@ export default function OrdersView({ onBack }) {
   ), { duration: 6000 });
   function doCancel(o) { setConfirm(null); cancelOrder(o.id); undoToast('Order cancelled.', o); }
   function doDelete(o) { setConfirm(null); removeOrder(o.id); undoToast('Draft deleted.', o); }
-  function allArrived(o) { markReceived(o.id); toast('Marked all arrived — book in on Scan to change stock', { icon: '📦' }); }
+  // Capture the order's pre-arrival state so Undo can restore the exact line/received figures (restoreOrder
+  // upserts by id). No window.confirm here — the Undo toast is the accessible, reversible confirmation.
+  function allArrived(o) { const before = o; markReceived(o.id); undoToast('Marked all arrived — book in on Scan to change stock.', before); }
 
   function OrderCard({ o, interactive, draft }) {
     const t = orderTotals(o);

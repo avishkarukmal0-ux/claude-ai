@@ -196,20 +196,32 @@ export default function CreditNotesView({ onBack }) {
 
 function AddForm({ suppliers, onSave, onCancel }) {
   const [f, setF] = useState({ supplierName: '', reference: '', date: Date.now(), amount: '' });
+  const [touched, setTouched] = useState(false);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const canSave = (f.supplierName || '').trim() && Number(f.amount) > 0;
+  const supplierMissing = !(f.supplierName || '').trim();
+  const amountRaw = String(f.amount).trim();
+  const amountInvalid = amountRaw === '' || !(Number(f.amount) > 0);
+  const canSave = !supplierMissing && !amountInvalid;
+  function trySave() {
+    setTouched(true);
+    if (!canSave) return;
+    onSave({ ...f, amount: Number(f.amount) });
+  }
+  const amtCls = touched && amountInvalid ? 'border-danger/50' : 'border-gray-200 focus:border-primary';
   return (
     <div className="mb-4 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
-      <input value={f.supplierName} onChange={set('supplierName')} list="vendora-cn-suppliers" placeholder="Supplier" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.supplierName} onChange={set('supplierName')} list="vendora-cn-suppliers" placeholder="Supplier" aria-label="Supplier" className={`mb-1 min-h-[44px] w-full rounded-xl border px-3 py-2.5 text-base focus:outline-none ${touched && supplierMissing ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`} />
       <datalist id="vendora-cn-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
-      <div className="mb-2 grid grid-cols-3 gap-2">
-        <input value={f.reference} onChange={set('reference')} placeholder="Credit ref" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input type="date" value={dayInput(f.date)} onChange={(e) => setF((p) => ({ ...p, date: e.target.value ? new Date(e.target.value).getTime() : null }))} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.amount} onChange={set('amount')} inputMode="decimal" placeholder="£ amount" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      {touched && supplierMissing && <p className="mb-1 text-xs font-medium text-danger-dark">Enter the supplier.</p>}
+      <div className="mb-1 mt-1 grid grid-cols-3 gap-2">
+        <input value={f.reference} onChange={set('reference')} placeholder="Credit ref" aria-label="Credit reference" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+        <input type="date" value={dayInput(f.date)} onChange={(e) => setF((p) => ({ ...p, date: e.target.value ? new Date(e.target.value).getTime() : null }))} aria-label="Credit date" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+        <input value={f.amount} onChange={set('amount')} inputMode="decimal" placeholder="£ amount" aria-label="Amount" className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${amtCls}`} />
       </div>
-      <div className="flex gap-2">
-        <button type="button" disabled={!canSave} onClick={() => onSave({ ...f, amount: Number(f.amount) })} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save</button>
-        <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
+      {touched && amountInvalid && <p className="mb-1 text-xs font-medium text-danger-dark">Enter an amount greater than £0.</p>}
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={trySave} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-primary px-3 text-sm font-semibold text-white">Save</button>
+        <button type="button" onClick={onCancel} className="inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-600">Cancel</button>
       </div>
     </div>
   );

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, read, write, removeKey, getActiveWorkspace } from './storage';
 import { matchBarcode, matchBySupplierAlias } from './inventoryStore';
-import { round2 as r2, sumMoney } from './money';
+import { round2 as r2, sumMoney, money } from './money';
 
 const NAME = 'invoices_v1';
 const FILES = 'invoice_files_v1'; // local-only (not in STORE_NAMES)
@@ -191,10 +191,19 @@ export function useInvoices() {
     return commitAll(load().map((x) => (x.id === id ? { ...x, dueDate: dueDate || null, updatedAt: Date.now() } : x)));
   }, []);
 
-  /** Record a (partial) payment against an invoice. Amount is clamped positive; status is derived. */
+  /** Record a (partial) payment against an invoice. Amount must be positive and not exceed what's still owed
+   *  (when the invoice has a known total) — overpaying a bill is almost always a typo, so reject it with the
+   *  owed figure rather than silently recording a negative balance. */
   const addPayment = useCallback((id, amount) => {
     const amt = r2(amount);
     if (!(amt > 0)) return { ok: false, error: 'Enter a payment amount.' };
+    const inv = load().find((x) => x.id === id);
+    if (inv) {
+      const owed = invoiceOwed(inv); // null when the invoice has no total recorded → can't cap, so allow
+      if (owed != null && amt > owed + 0.005) {
+        return { ok: false, error: `That's more than the ${money(owed)} still owed. Enter ${money(owed)} or less.` };
+      }
+    }
     return commitAll(load().map((x) => (x.id === id
       ? { ...x, payments: [...(x.payments || []), { id: newId('pay'), amount: amt, at: Date.now() }], updatedAt: Date.now() }
       : x)));
@@ -208,8 +217,19 @@ export function useInvoices() {
   const removeInvoice = useCallback((id) => {
     const ws = getActiveWorkspace();
     const inv = load().find((x) => x.id === id);
-    if (inv && inv.fileId) { const map = loadFiles(ws); delete map[inv.fileId]; saveFiles(ws, map); }
-    return commitAll(load().filter((x) => x.id !== id));
+    // Capture the stored file too so an Undo can restore the whole record, scan included.
+    let file = null;
+    if (inv && inv.fileId) { const map = loadFiles(ws); file = map[inv.fileId] || null; delete map[inv.fileId]; saveFiles(ws, map); }
+    const res = commitAll(load().filter((x) => x.id !== id));
+    return res.ok ? { ...res, invoice: inv || null, file } : res;
+  }, []);
+
+  /** Undo a removal — re-insert the exact invoice (id preserved) and restore its stored file if captured. */
+  const restoreInvoice = useCallback((invoice, file) => {
+    if (!invoice || !invoice.id) return { ok: false };
+    if (load().some((x) => x.id === invoice.id)) return { ok: true }; // already back
+    if (file && invoice.fileId) { const ws = getActiveWorkspace(); const map = loadFiles(ws); map[invoice.fileId] = file; saveFiles(ws, map); }
+    return commitAll([invoice, ...load()]);
   }, []);
 
   const getFile = useCallback((fileId) => {
@@ -228,7 +248,7 @@ export function useInvoices() {
 
   const findDuplicate = useCallback((inv) => findDuplicateInvoice(inv, load()), []);
 
-  return { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate, setDueDate, addPayment, removePayment };
+  return { invoices, saveDraft, commitInvoice, removeInvoice, restoreInvoice, getFile, deleteFile, findDuplicate, setDueDate, addPayment, removePayment };
 }
 
 // Test hook: clear invoice files for the active workspace.

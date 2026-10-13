@@ -28,7 +28,7 @@ function Pip({ s }) {
       <span className={`flex h-6 w-6 items-center justify-center rounded-full ${m.cls}`}>
         <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />
       </span>
-      <span className={`text-[9px] font-semibold ${s.status === 'current' || s.status === 'attention' ? 'text-gray-900' : 'text-gray-400'}`}>{STAGE_LABEL[s.key]}</span>
+      <span className={`text-xs font-semibold ${s.status === 'current' || s.status === 'attention' ? 'text-gray-900' : 'text-gray-400'}`}>{STAGE_LABEL[s.key]}</span>
     </div>
   );
 }

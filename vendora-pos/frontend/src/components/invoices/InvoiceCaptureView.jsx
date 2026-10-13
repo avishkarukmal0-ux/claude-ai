@@ -17,6 +17,7 @@ import { parseInvoiceText } from '../../lib/parseInvoiceText';
 import { downscaleImage } from '../../lib/image';
 import { recordFailure } from '../../lib/diagnostics';
 import ScreenBack from '../common/ScreenBack';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 // Supplier invoice capture + review (Phase 1). Capture a photo/PDF (or enter manually), REVIEW every field
 // before committing. Matches lines to existing products, flags unmatched, warns on likely duplicates.
@@ -29,15 +30,22 @@ const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
 function lineIssue(l) {
   const qty = Number(l.qty);
   const pack = Number(l.packSize);
+  const costRaw = l.qtyMode === 'cases' ? l.caseCost : l.unitCost;
+  const cost = Number(costRaw);
   if (l.qtyMode === 'cases' && l.packSize !== '' && (!Number.isFinite(pack) || pack < 1)) {
     return { block: true, text: 'Units per case must be 1 or more.' };
+  }
+  // A negative cost is a typo, not a credit (a credit is a negative QUANTITY) — flag it rather than silently
+  // clamping it to £0, so the figure the owner sees matches what they typed.
+  if (costRaw !== '' && costRaw != null && Number.isFinite(cost) && cost < 0) {
+    return { block: true, text: 'Cost can’t be negative. For a refund line, use a negative quantity.' };
   }
   if (Number.isFinite(qty) && qty < 0) return { block: false, credit: true, text: 'Negative quantity — treated as a credit line.' };
   return null;
 }
 
 export default function InvoiceCaptureView({ onBack, onReconcile }) {
-  const { invoices, saveDraft, commitInvoice, removeInvoice, getFile, deleteFile, findDuplicate } = useInvoices();
+  const { invoices, saveDraft, commitInvoice, removeInvoice, restoreInvoice, getFile, deleteFile, findDuplicate } = useInvoices();
   const { suppliers } = useSuppliers();
   const { products } = useInventory();
   const [mode, setMode] = useState('list'); // 'list' | 'review' | 'reconcile'
@@ -45,7 +53,21 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
   const [file, setFile] = useState(null);   // { dataUrl, type }
   const [ocr, setOcr] = useState({ busy: false, text: null });
   const [reconcileId, setReconcileId] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null); // invoice pending delete-confirm
   const fileRef = useRef(null);
+
+  function doDeleteInvoice(inv) {
+    setConfirmDel(null);
+    const res = removeInvoice(inv.id);
+    if (res && res.ok === false) { toast.error(res.error || 'Couldn’t delete the invoice.'); return; }
+    const removed = res && res.invoice ? res.invoice : inv;
+    const removedFile = res && res.file ? res.file : null;
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Invoice deleted.
+        <button type="button" onClick={() => { restoreInvoice(removed, removedFile); toast.dismiss(t.id); }} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-primary underline">Undo</button>
+      </span>
+    ), { duration: 6000 });
+  }
 
   // Document backup (Phase 3) — only offered when the flag is on, the shop is signed in, AND the server
   // reports it enabled. `backedUp` is the server's authoritative set; `bkState` is this device's progress.
@@ -167,21 +189,21 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
                   </div>
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${inv.status === 'committed' ? 'bg-success-light text-success-dark' : 'bg-gray-100 text-gray-500'}`}>{inv.status === 'committed' ? 'Committed' : 'Draft'}</span>
                 </div>
-                <button type="button" onClick={() => { if (window.confirm('Delete this invoice?')) removeInvoice(inv.id); }} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => setConfirmDel(inv)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete invoice ${inv.reference || inv.supplierName || ''}`.trim()}><Trash2 className="h-4 w-4" /></button>
               </div>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 {inv.status !== 'committed' && (
-                  <button type="button" onClick={() => commitInvoice(inv.id)} className="rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95">Commit</button>
+                  <button type="button" onClick={() => commitInvoice(inv.id)} className="inline-flex min-h-[44px] items-center rounded-lg bg-primary px-3 text-xs font-semibold text-white active:scale-95">Commit</button>
                 )}
-                <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
+                <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
                 {inv.fileId && (
-                  <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-500 active:scale-95">Delete file</button>
+                  <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-500 active:scale-95">Delete file</button>
                 )}
                 {backupOk && inv.fileId && (() => {
                   const st = backedUp.has(inv.fileId) ? 'uploaded' : (bkState[inv.fileId]?.status || 'none');
-                  if (st === 'uploaded') return <span className="inline-flex items-center gap-1 rounded-lg bg-success-light px-2.5 py-1.5 text-xs font-semibold text-success-dark"><Check className="h-3.5 w-3.5" /> Backed up</span>;
-                  if (st === 'pending') return <span className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-400">Backing up…</span>;
-                  return <button type="button" onClick={() => doBackup(inv)} className="rounded-lg border border-primary/30 bg-primary-50 px-2.5 py-1.5 text-xs font-semibold text-primary active:scale-95">{st === 'failed' ? 'Retry backup' : 'Back up'}</button>;
+                  if (st === 'uploaded') return <span className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-success-light px-3 text-xs font-semibold text-success-dark"><Check className="h-3.5 w-3.5" /> Backed up</span>;
+                  if (st === 'pending') return <span className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-400">Backing up…</span>;
+                  return <button type="button" onClick={() => doBackup(inv)} className="inline-flex min-h-[44px] items-center rounded-lg border border-primary/30 bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95">{st === 'failed' ? 'Retry backup' : 'Back up'}</button>;
                 })()}
               </div>
               {backupOk && inv.fileId && !backedUp.has(inv.fileId) && (
@@ -191,6 +213,16 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDel}
+        title="Delete this invoice?"
+        message={`${confirmDel?.supplierName || 'Invoice'}${confirmDel?.reference ? ` · ${confirmDel.reference}` : ''}. Removes the record${confirmDel?.fileId ? ' and its stored scan' : ''}. You can undo straight after.`}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => doDeleteInvoice(confirmDel)}
+        onCancel={() => setConfirmDel(null)}
+      />
     </div>
   );
 }
@@ -249,7 +281,7 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
 
       {/* Header fields */}
       <div className="space-y-2">
-        <input value={f.supplierName} onChange={set('supplierName')} list="vendora-invoice-suppliers" placeholder="Supplier" aria-label="Supplier" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.supplierName} onChange={set('supplierName')} list="vendora-invoice-suppliers" placeholder="Supplier" aria-label="Supplier" className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <datalist id="vendora-invoice-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
         <div className="grid grid-cols-2 gap-2">
           <input value={f.reference} onChange={set('reference')} placeholder="Invoice ref" aria-label="Invoice reference" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
@@ -298,8 +330,8 @@ function ReviewForm({ draft, file, ocr, suppliers, products, findDuplicate, onCa
       </div>
 
       <div className="mt-3 flex gap-2">
-        <button type="button" disabled={!canSave} onClick={() => onSaveDraft(payload())} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 disabled:opacity-40">Save draft</button>
-        <button type="button" disabled={!canSave} onClick={() => onCommit(payload())} className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"><Check className="h-4 w-4" /> Commit</button>
+        <button type="button" disabled={!canSave} onClick={() => onSaveDraft(payload())} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-gray-200 px-4 text-sm font-semibold text-gray-700 disabled:opacity-40">Save draft</button>
+        <button type="button" disabled={!canSave} onClick={() => onCommit(payload())} className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1 rounded-xl bg-primary px-4 text-sm font-semibold text-white disabled:opacity-40"><Check className="h-4 w-4" /> Commit</button>
       </div>
       <p className="mt-2 text-center text-xs text-gray-400">Nothing is applied to stock here — committing just confirms the invoice figures for checking &amp; price history.</p>
     </div>

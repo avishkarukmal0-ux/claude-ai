@@ -17,6 +17,16 @@ describe('buyingJourney — stage derivation', () => {
     expect(j.complete).toBe(false);
   });
 
+  it('a committed invoice with no received delivery is NOT "Done" — shows in-progress with a check action', () => {
+    const invoices = [{ id: 'inv1', status: 'committed', reference: 'INV-7', supplierName: 'Booker', committedAt: now }];
+    const [j] = buildJourneys({ invoices, now });
+    expect(j.anchor).toBe('invoice');
+    expect(j.complete).toBe(false);                       // never badges Done without a delivery behind it
+    expect(stageOf(j, 'invoice').status).toBe('current');
+    expect(stageOf(j, 'delivery').status).toBe('skipped');
+    expect(j.nextAction.go).toEqual({ screen: 'invoices' }); // "Check vs delivery"
+  });
+
   it('D8: a part-received order still surfaces an active journey for the outstanding remainder', () => {
     const orders = [{ id: 'o1', status: 'ordered', orderedAt: now, supplierName: 'Bestway', lines: [{ qty: 10, receivedQty: 5 }] }];
     const deliveries = [{ id: 'd1', status: 'received', orderId: 'o1', supplierName: 'Bestway', lines: [{ name: 'Milk', issue: null }], receivedAt: now }];

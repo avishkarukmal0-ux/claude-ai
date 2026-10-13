@@ -91,8 +91,8 @@ export default function PaymentCalendarView({ onBack }) {
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-500">Due
-                    <input type="date" value={d.dueDate ? new Date(d.dueDate).toISOString().slice(0, 10) : ''} onChange={(e) => setDueDate(d.invoiceId, e.target.value || null)} className="border-none p-0 text-xs text-gray-900 focus:outline-none" />
+                  <label className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-gray-200 px-2 text-xs text-gray-500">Due
+                    <input type="date" value={d.dueDate ? new Date(d.dueDate).toISOString().slice(0, 10) : ''} onChange={(e) => setDueDate(d.invoiceId, e.target.value || null)} aria-label={`Due date for ${d.supplierName}`} className="min-h-[44px] border-none bg-transparent p-0 text-sm text-gray-900 focus:outline-none" />
                   </label>
                   {pay.id === d.invoiceId ? (
                     <span className="inline-flex items-center gap-1">

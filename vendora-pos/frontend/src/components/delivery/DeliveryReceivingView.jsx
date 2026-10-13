@@ -15,6 +15,7 @@ import {
   deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, packSize, deliveryTotals,
 } from '../../lib/deliveryStore';
 import BarcodeScanner, { barcodeScanSupported } from '../scan/BarcodeScanner';
+import { isBarcode } from '../../lib/barcode';
 
 // Downscale a photo to a small JPEG data URL so evidence photos don't blow storage quota.
 function downscaleImage(file, max = 640, quality = 0.6) {
@@ -73,6 +74,7 @@ export default function DeliveryReceivingView({ onBack }) {
   function addByBarcode(raw) {
     const barcode = (raw || '').trim();
     if (!barcode || !draft) return;
+    if (!isBarcode(barcode)) { toast.error('A barcode is 8–14 digits.'); return; }
     const lines = [...draft.lines];
     const idx = lines.findIndex((l) => l.barcode === barcode);
     if (idx >= 0) {
@@ -261,9 +263,9 @@ export default function DeliveryReceivingView({ onBack }) {
         <div className="mb-3"><BarcodeScanner onScan={(v) => { setScanning(false); addByBarcode(v); }} onClose={() => setScanning(false)} /></div>
       ) : (
         <div className="mb-3 flex gap-2">
-          <input value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addByBarcode(code); }} inputMode="numeric" placeholder="Barcode" className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-          <button type="button" onClick={() => addByBarcode(code)} className="rounded-xl bg-gray-100 px-3 py-2.5 text-gray-700 active:scale-95" aria-label="Add barcode"><Plus className="h-5 w-5" /></button>
-          <button type="button" onClick={() => setScanning(true)} className="rounded-xl bg-primary px-3 py-2.5 text-white active:scale-95" aria-label="Scan"><Camera className="h-5 w-5" /></button>
+          <input value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addByBarcode(code); }} inputMode="numeric" placeholder="Barcode" aria-label="Barcode" className={`min-h-[44px] min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-base focus:outline-none ${code.trim() && !isBarcode(code) ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`} />
+          <button type="button" onClick={() => addByBarcode(code)} disabled={!isBarcode(code)} className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-gray-100 px-3 text-gray-700 active:scale-95 disabled:opacity-40" aria-label="Add barcode"><Plus className="h-5 w-5" /></button>
+          <button type="button" onClick={() => setScanning(true)} className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-3 text-white active:scale-95" aria-label="Scan"><Camera className="h-5 w-5" /></button>
         </div>
       )}
       {!barcodeScanSupported && !scanning && (
