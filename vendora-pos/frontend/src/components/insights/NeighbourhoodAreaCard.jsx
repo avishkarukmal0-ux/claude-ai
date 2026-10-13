@@ -166,8 +166,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       <p className="mb-3 text-xs text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
 
       <div className="mb-3 flex gap-2">
-        <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="Shop postcode e.g. RM10 8AA" aria-label="Shop postcode" className="flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm uppercase focus:border-primary focus:outline-none" />
-        <button type="button" disabled={busy} onClick={() => load()} className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white active:scale-95 disabled:opacity-50">
+        <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="Shop postcode e.g. RM10 8AA" aria-label="Shop postcode" className="min-h-[44px] flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-base uppercase focus:border-primary focus:outline-none" />
+        <button type="button" disabled={busy} onClick={() => load()} aria-label="Get area figures" className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-white active:scale-95 disabled:opacity-50">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {busy ? 'Loading…' : 'Get'}
         </button>
       </div>

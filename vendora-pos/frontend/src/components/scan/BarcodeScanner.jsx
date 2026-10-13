@@ -12,9 +12,13 @@ const hasNative = typeof window !== 'undefined' && 'BarcodeDetector' in window;
 const supported = true; // native or lazy ponyfill — scanning is offered everywhere now
 
 // Resolve a BarcodeDetector constructor: the native one, or the ponyfill loaded on demand.
+// The ponyfill's WASM is SELF-HOSTED at /zxing_reader.wasm (copied from zxing-wasm in public/) and
+// precached by the service worker — so it loads from our own origin under a strict CSP (connect-src 'self')
+// and works offline, instead of being fetched from fastly.jsdelivr.net (blocked by CSP).
 async function loadDetectorCtor() {
   if (hasNative) return window.BarcodeDetector;
   const mod = await import('barcode-detector/pure');
+  try { mod.setZXingModuleOverrides({ locateFile: (path) => (path.endsWith('.wasm') ? `/${path}` : path) }); } catch { /* fall back to default */ }
   return mod.BarcodeDetector;
 }
 

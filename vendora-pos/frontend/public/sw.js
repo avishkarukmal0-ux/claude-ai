@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v32';
+const CACHE_VERSION = 'vendora-v33';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -18,6 +18,7 @@ const SHELL_ASSETS = [
   '/icon-512.png',
   '/apple-touch-icon.png',
   '/favicon.svg',
+  '/zxing_reader.wasm', // self-hosted barcode-scanner WASM (iPhone/Firefox) — no CDN, works offline
 ];
 
 /** Put a URL in the cache, best-effort (never throws). */
