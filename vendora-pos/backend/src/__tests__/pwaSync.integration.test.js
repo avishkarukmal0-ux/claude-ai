@@ -102,33 +102,34 @@ describe('PWA sync — /api/pwa-sync', () => {
   });
 
   dbTest('an unknown store name is rejected per-item (not a 422 that wedges the whole push)', async () => {
+    // Pair the bogus store with a FRESH compliance store (untouched by earlier tests) so baseRev:0 fast-forwards.
     const res = await auth(request(app).post('/api/pwa-sync/push'))
       .send({ changes: [
-        { name: 'not_a_real_store', value: '[]', baseRev: 0, mtime: 1 },
-        { name: 'inventory_v1', value: '[{"id":"x"}]', baseRev: 0, mtime: 2 },
+        { name: 'not_a_real_store', value: '[]', baseRev: 0, mtime: Date.now() },
+        { name: 'recall_log_v1', value: '[]', baseRev: 0, mtime: Date.now() },
       ] });
     expect(res.status).toBe(200);
     expect(res.body.rejected).toEqual([{ name: 'not_a_real_store', reason: 'unknown' }]);
-    expect(res.body.applied.map((a) => a.name)).toContain('inventory_v1'); // the good store still syncs
+    expect(res.body.applied.map((a) => a.name)).toContain('recall_log_v1'); // the good store still syncs
   });
 
   dbTest('an oversize value is rejected per-item, others still apply', async () => {
     const big = 'x'.repeat(2 * 1024 * 1024 + 10);
     const res = await auth(request(app).post('/api/pwa-sync/push'))
       .send({ changes: [
-        { name: 'movements_v1', value: big, baseRev: 0, mtime: 1 },
-        { name: 'suppliers_v1', value: '[]', baseRev: 0, mtime: 2 },
+        { name: 'movements_v1', value: big, baseRev: 0, mtime: Date.now() },
+        { name: 'animal_licence_v1', value: '[]', baseRev: 0, mtime: Date.now() },
       ] });
     expect(res.status).toBe(200);
     expect(res.body.rejected).toEqual([{ name: 'movements_v1', reason: 'too_large' }]);
-    expect(res.body.applied.map((a) => a.name)).toContain('suppliers_v1');
+    expect(res.body.applied.map((a) => a.name)).toContain('animal_licence_v1');
   });
 
   dbTest('the business-profile + compliance stores are allowed to sync', async () => {
     const res = await auth(request(app).post('/api/pwa-sync/push'))
       .send({ changes: [
-        { name: 'business_profile_v1', value: '{"region":"england"}', baseRev: 0, mtime: 1 },
-        { name: 'temperature_log_v1', value: '[]', baseRev: 0, mtime: 1 },
+        { name: 'business_profile_v1', value: '{"region":"england"}', baseRev: 0, mtime: Date.now() },
+        { name: 'temperature_log_v1', value: '[]', baseRev: 0, mtime: Date.now() },
       ] });
     expect(res.status).toBe(200);
     expect(res.body.rejected).toEqual([]);
