@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { fmtRadius } from '../../lib/radiusUnits';
 
 // Radius-aggregated figures block for the "Your area" catchment. Purely presentational — the parent owns the
@@ -8,7 +8,7 @@ import { fmtRadius } from '../../lib/radiusUnits';
 // (the /area + /radius routes are role-gated), so this line is never shown to staff.
 const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-GB');
 
-export default function RadiusFigures({ state, http, diag, profile, radiusM, unit }) {
+export default function RadiusFigures({ state, http, diag, profile, radiusM, unit, onRetry }) {
   return (
     <>
       {state === 'loading' && (
@@ -31,12 +31,22 @@ export default function RadiusFigures({ state, http, diag, profile, radiusM, uni
       {state === 'locked' && (
         <p className="mt-2 text-xs leading-snug text-gray-400">People-by-radius is the paid Neighbourhood Insights add-on. The figures below are for your immediate area (LSOA).</p>
       )}
+      {state === 'timeout' && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" role="alert">
+          <span className="text-xs leading-snug text-gray-600">Couldn’t count people in this radius.</span>
+          {onRetry && (
+            <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-white active:scale-95">
+              <RefreshCw className="h-3.5 w-3.5" /> Retry
+            </button>
+          )}
+        </div>
+      )}
       {state === 'error' && (
         <p className="mt-2 text-xs leading-snug text-gray-400">Couldn’t load the radius figures right now. The figures below are for your immediate area (LSOA).</p>
       )}
       {/* Small diagnostic (owner/manager card only). Tells us the request state + whether Nomis actually returned
           data for the OAs (oasWithPopulation/oaCount) without DevTools. Remove/flag-gate later. */}
-      <p className="mt-1 text-[9px] leading-snug text-gray-300">
+      <p className="mt-1 text-xs leading-snug text-gray-300">
         radius: {state}{http != null ? ` (${http})` : ''}
         {diag ? ` · ${diag.oasWithPopulation}/${diag.oaCount} OA w/ data · sample ${diag.sampleOa || '—'} age:${diag.sampleAgeCats} hh:${diag.sampleHhCats}` : ''}
       </p>

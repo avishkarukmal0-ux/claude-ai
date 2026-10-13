@@ -68,23 +68,24 @@ async function areaHandler(req, res, next) {
 router.post('/area', ownerOrManager, areaHandler);
 router.get('/area', ownerOrManager, areaHandler);
 
-// GET /radius?postcode=&radiusM= → radius-aggregated census figures for the catchment circle, so the numbers on
-// the "Your area" card re-sum as the radius changes. This is the PAID Neighbourhood Insights aggregation; here it
-// is exposed on the free card ONLY for testing, behind INSIGHTS_TEST_UNLOCK (default off). In production this
-// returns 403 and the paid Insights screen (entitlement-gated) is the real home for radius figures. Never
-// fabricates: with no centroid data it returns configured:false. Owner/manager only.
-router.get('/radius', ownerOrManager, async (req, res, next) => {
+// /radius → radius-aggregated census figures for the catchment circle, so the numbers on the "Your area" card
+// re-sum as the radius changes. This is the PAID Neighbourhood Insights aggregation; exposed on the free card
+// ONLY for testing, behind INSIGHTS_TEST_UNLOCK (default off → 403). Never fabricates: no centroid data →
+// configured:false. Owner/manager only. Mounted on BOTH methods (POST keeps the postcode in the body, out of
+// logs/URLs; GET is the legacy fallback for an out-of-step client).
+async function radiusHandler(req, res, next) {
   try {
     if (!config.neighbourhoodInsights.testUnlock) {
       throw new AppError('Radius figures are the paid Neighbourhood Insights add-on.', 403, 'INSIGHTS_PAID');
     }
-    const postcode = (req.query.postcode || '').toString();
-    const radiusM = Number(req.query.radiusM);
+    const src = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+    const postcode = (src.postcode || '').toString();
+    const radiusM = Number(src.radiusM);
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
     // Default: headline only (people + households) → 2 Nomis tables, fast. `full=1` ("Who lives here") returns the
     // full profile with the community breakdowns (country of birth, ethnic group, main language) — fetched only
     // when the owner opens that section, so the headline stays fast.
-    const full = req.query.full === '1' || req.query.full === 'true';
+    const full = src.full === '1' || src.full === 'true' || src.full === true || src.full === 1;
     const out = await insights.buildProfile({ postcode, radiusM, headlineOnly: !full });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
     res.json({ success: true, testUnlock: true, ...out });
@@ -92,7 +93,9 @@ router.get('/radius', ownerOrManager, async (req, res, next) => {
     if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, err.code || 'RADIUS'));
     next(err);
   }
-});
+}
+router.post('/radius', ownerOrManager, radiusHandler);
+router.get('/radius', ownerOrManager, radiusHandler);
 
 // GET /tiles/:z/:x/:y.png → OSM map tile for the catchment circle on the "Your area" card. Proxied server-side
 // (owner/manager; the browser never calls the tile host directly, so no CSP change). Available with the free

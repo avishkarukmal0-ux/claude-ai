@@ -33,12 +33,35 @@ export function __setFetch(fn) { _fetch = fn || ((url, opts) => fetch(url, opts)
 // Radius-aggregated figures for the catchment circle (the paid Insights aggregation). Available on the free card
 // only when the server's INSIGHTS_TEST_UNLOCK is on (otherwise 403). Returns the buildProfile shape
 // ({ ok, configured, profile, ... }); throws with .status so the caller can hide on 403 (locked/production).
-export async function getRadiusProfile({ postcode, radiusM, full = false }) {
-  const qs = `postcode=${encodeURIComponent(norm(postcode))}&radiusM=${Math.round(radiusM)}${full ? '&full=1' : ''}`;
-  const res = await _fetch(`${BASE}/radius?${qs}`, { headers: authHeader() });
-  let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
-  if (!res.ok) { const e = new Error((body && body.message) || `radius ${res.status}`); e.status = res.status; throw e; }
-  return body || {};
+export async function getRadiusProfile({ postcode, radiusM, full = false, signal = null, timeoutMs = TIMEOUT_MS }) {
+  const pc = norm(postcode);
+  // POST keeps the postcode in the BODY (out of URLs/logs). Own 30s timeout, linked to the caller's signal so a
+  // superseded request (new radius/postcode, or unmount) is ABORTED — stops the duplicate overlapping calls and
+  // never hangs the UI. Throws AbortError on timeout; the caller maps that to a retryable "couldn't count" state.
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (signal) { if (signal.aborted) controller.abort(); else signal.addEventListener('abort', onAbort, { once: true }); }
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let res = await _fetch(`${BASE}/radius`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ postcode: pc, radiusM: Math.round(radiusM), full: !!full }),
+      signal: controller.signal,
+    });
+    // Deploy-mismatch fallback: a server with only GET /radius 404s the POST — retry once with GET.
+    if (res.status === 404) {
+      let b = null; try { b = await res.clone().json(); } catch { /* non-JSON 404 = method not found */ }
+      if (!(b && b.error === 'no_data')) {
+        const qs = `postcode=${encodeURIComponent(pc)}&radiusM=${Math.round(radiusM)}${full ? '&full=1' : ''}`;
+        const getRes = await _fetch(`${BASE}/radius?${qs}`, { headers: authHeader(), signal: controller.signal });
+        if (getRes.ok || getRes.status !== 404) res = getRes;
+      }
+    }
+    let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
+    if (!res.ok) { const e = new Error((body && body.message) || `radius ${res.status}`); e.status = res.status; throw e; }
+    return body || {};
+  } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
 }
 
 export function tileUrl(z, x, y) { return `${BASE}/tiles/${z}/${x}/${y}.png`; }

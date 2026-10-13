@@ -13,11 +13,13 @@ beforeEach(() => {
 afterEach(() => { __setFetch(null); vi.restoreAllMocks(); });
 
 describe('neighbourhoodClient.getRadiusProfile — radius aggregation request', () => {
-  it('calls /radius with the postcode + radiusM and returns the parsed body', async () => {
-    let seenUrl = null;
-    __setFetch(async (url) => { seenUrl = url; return { ok: true, status: 200, json: async () => ({ success: true, configured: true, profile: { population: 1000, households: 400, outputAreas: 5 } }) }; });
+  it('POSTs /radius with the postcode in the body (not the URL) and returns the parsed body', async () => {
+    let seenUrl = null; let seenOpts = null;
+    __setFetch(async (url, opts) => { seenUrl = url; seenOpts = opts; return { ok: true, status: 200, json: async () => ({ success: true, configured: true, profile: { population: 1000, households: 400, outputAreas: 5 } }) }; });
     const out = await getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1609.3 });
-    expect(seenUrl).toMatch(/\/api\/pwa-neighbourhood\/radius\?postcode=RM108AA&radiusM=1609/);
+    expect(seenUrl).toBe('/api/pwa-neighbourhood/radius'); // no query string
+    expect(seenOpts.method).toBe('POST');
+    expect(JSON.parse(seenOpts.body)).toEqual({ postcode: 'RM108AA', radiusM: 1609, full: false });
     expect(out.configured).toBe(true);
     expect(out.profile.population).toBe(1000);
   });
@@ -25,6 +27,29 @@ describe('neighbourhoodClient.getRadiusProfile — radius aggregation request', 
   it('throws with .status on a non-ok response (e.g. 403 locked)', async () => {
     __setFetch(async () => ({ ok: false, status: 403, json: async () => ({ message: 'paid add-on' }) }));
     await expect(getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1000 })).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('falls back to GET /radius when POST 404s (deploy mismatch)', async () => {
+    const methods = [];
+    __setFetch(async (url, opts) => {
+      methods.push((opts && opts.method) || 'GET');
+      if (!opts || opts.method !== 'POST') return { ok: true, status: 200, json: async () => ({ success: true, configured: true, profile: { population: 5 } }) };
+      return { ok: false, status: 404, json: async () => { throw new Error('html'); } };
+    });
+    const out = await getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1000 });
+    expect(out.configured).toBe(true);
+    expect(methods).toContain('POST');
+    expect(methods).toContain('GET');
+  });
+
+  it('aborts when the caller signal fires (supersede / unmount)', async () => {
+    const ac = new AbortController();
+    __setFetch((url, opts) => new Promise((_, reject) => {
+      opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }));
+    const p = getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1000, signal: ac.signal });
+    ac.abort();
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 

@@ -41,6 +41,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [whoProfile, setWhoProfile] = useState(null);
   const [whoState, setWhoState] = useState('idle');  // idle | loading | ok | error
   const [radFetching, setRadFetching] = useState(false); // F8: a new radius/postcode fetch is in flight over stale figures
+  const [radRetry, setRadRetry] = useState(0); // bump to re-run the radius fetch after a timeout (Retry button)
 
   const point = result && result.area && result.area.point;
   const radPostcode = (result && result.postcode) || postcode;
@@ -77,13 +78,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       return undefined;
     }
     let live = true;
+    const ac = new AbortController(); // abort the in-flight request when the radius/postcode changes or on unmount
     // Keep the last figures visible while fetching a NEW radius for the SAME postcode, but mark them as updating
     // (F8) so the user knows they're for the previous view until the new ones land.
     setRadState((s) => (s === 'ok' && !postcodeChanged ? 'ok' : 'loading'));
     setRadFetching(true);
     const id = setTimeout(async () => {
       try {
-        const out = await getRadiusProfile({ postcode: radPostcode, radiusM });
+        const out = await getRadiusProfile({ postcode: radPostcode, radiusM, signal: ac.signal });
         if (!live) return;
         setRadFetching(false);
         const diag = out && out.diag ? out.diag : null;
@@ -91,19 +93,20 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); radCache.current.set(key, { state: 'ok', profile: out.profile, http: 200, diag }); }
         else { setRadProfile(null); setRadState('unconfigured'); radCache.current.set(key, { state: 'unconfigured', profile: null, http: 200, diag }); }
       } catch (e) {
-        if (!live) return;
+        if (!live) return; // a cleanup-abort lands here with live=false and is ignored; only a real failure/timeout shows
         setRadFetching(false);
         const code = (e && e.status) || 0;
-        setRadHttp(code); setRadState(code === 403 ? 'locked' : 'error');
-        // cache a 403 (stable config) but not transient errors, so a real outage retries next time.
+        // A 30s timeout aborts with AbortError → a retryable "couldn't count" state, distinct from a 403 lock.
+        setRadState(code === 403 ? 'locked' : (e && e.name === 'AbortError') ? 'timeout' : 'error');
+        setRadHttp(code);
         if (code === 403) radCache.current.set(key, { state: 'locked', profile: null, http: 403, diag: null });
       }
       // Map-zoom settles on a discrete step (one zoomend), so it doesn't need the long slider-drag debounce —
       // respond sooner. Slider mode keeps the longer debounce so dragging doesn't fire a request per step.
     }, radiusMode === 'map' ? 300 : 650);
-    return () => { live = false; clearTimeout(id); };
+    return () => { live = false; clearTimeout(id); ac.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode]);
+  }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode, radRetry]);
 
   // "Who lives here" community breakdown (country of birth, ethnic group, main language) — fetched on demand when
   // the owner opens the section (not while locked/idle). It asks the server for the FULL profile (full=1), which
@@ -122,19 +125,20 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     // area/radius, clear it immediately — never show one area's community under another's name.
     if (keyChanged) { setWhoProfile(null); setWhoState('loading'); }
     else setWhoState((s) => (s === 'ok' ? 'ok' : 'loading'));
+    const ac = new AbortController();
     const id = setTimeout(async () => {
       try {
-        const out = await getRadiusProfile({ postcode: radPostcode, radiusM, full: true });
+        const out = await getRadiusProfile({ postcode: radPostcode, radiusM, full: true, signal: ac.signal });
         if (!live) return;
         if (out && out.configured && out.profile) { setWhoProfile(out.profile); setWhoState('ok'); whoCache.current.set(key, out.profile); }
         else { setWhoProfile(null); setWhoState('unconfigured'); }
       } catch (e) {
         if (!live) return;
         const code = (e && e.status) || 0;
-        setWhoProfile(null); setWhoState(code === 403 ? 'locked' : 'error');
+        setWhoProfile(null); setWhoState(code === 403 ? 'locked' : (e && e.name === 'AbortError') ? 'timeout' : 'error');
       }
     }, 400);
-    return () => { live = false; clearTimeout(id); };
+    return () => { live = false; clearTimeout(id); ac.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [whoOpen, radState, radiusM, point && point.lat, point && point.lng, radPostcode]);
 
@@ -186,10 +190,12 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               autoComplete="postal-code"
               autoCapitalize="characters"
               inputMode="text"
-              className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 pr-9 text-base uppercase focus:border-primary focus:outline-none"
+              aria-invalid={result && !result.ok && (result.kind === 'invalid' || result.kind === 'empty') ? true : undefined}
+              aria-describedby={result && !result.ok ? 'area-error' : undefined}
+              className={`min-h-[44px] w-full rounded-xl border px-3 py-2.5 pr-11 text-base uppercase focus:outline-none ${result && !result.ok && (result.kind === 'invalid' || result.kind === 'empty') ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
             />
             {postcode && (
-              <button type="button" onClick={() => { setPostcode(''); setResult(null); }} aria-label="Clear postcode" className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700">×</button>
+              <button type="button" onClick={() => { setPostcode(''); setResult(null); }} aria-label="Clear postcode" className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-xl text-gray-400 hover:text-gray-700">×</button>
             )}
           </div>
         </label>
@@ -206,7 +212,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       )}
 
       {result && !result.ok && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-700">
+        <div id="area-error" role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
           <span className="flex items-center gap-1.5">
             {result.kind === 'auth' ? <Info className="h-3.5 w-3.5 text-primary" /> : <AlertTriangle className="h-3.5 w-3.5 text-gray-500" />}
             {ERROR_MSG[result.kind] || 'Couldn’t load area figures.'}
@@ -230,8 +236,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               <p className="text-xs text-gray-500">{[result.area.ward, result.area.district].filter(Boolean).join(' · ')}</p>
             ) : <span />}
             {!result.offline && (
-              <button type="button" onClick={() => load(true)} disabled={busy} className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50" aria-label="Refresh the latest figures for this area">
-                <RefreshCw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} /> Refresh latest
+              <button type="button" onClick={() => load(true)} disabled={busy} className="inline-flex min-h-[44px] shrink-0 items-center gap-1 px-2 text-xs font-medium text-primary hover:underline disabled:opacity-50" aria-label="Refresh the latest figures for this area">
+                <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} /> Refresh latest
               </button>
             )}
           </div>
@@ -247,14 +253,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
                   <Loader2 className="h-3 w-3 animate-spin" /> Updating for the new view — figures below are for the previous radius.
                 </div>
               )}
-              <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} />
+              <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} onRetry={() => { setRadState('loading'); setRadRetry((n) => n + 1); }} />
 
               {/* On-demand "Who lives here" — country of birth, ethnic group, main language — so the owner can stock
                   for the local community. Shown whenever the radius feature is available (hidden only when the data
                   is locked to the paid add-on, or before a postcode is entered); opening it loads the breakdowns. */}
               {radState !== 'locked' && radState !== 'idle' && (
                 <div className="mt-2 border-t border-gray-100 pt-2">
-                  <button type="button" onClick={() => setWhoOpen((v) => !v)} aria-expanded={whoOpen} className="flex w-full items-center justify-between text-left text-[12px] font-semibold text-primary">
+                  <button type="button" onClick={() => setWhoOpen((v) => !v)} aria-expanded={whoOpen} className="flex min-h-[44px] w-full items-center justify-between text-left text-xs font-semibold text-primary">
                     <span className="flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /> Who lives here — stock for your community</span>
                     <ChevronDown className={`h-4 w-4 transition-transform ${whoOpen ? 'rotate-180' : ''}`} />
                   </button>
