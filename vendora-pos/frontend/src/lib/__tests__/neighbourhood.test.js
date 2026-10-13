@@ -63,6 +63,15 @@ describe('neighbourhoodClient — online + offline fallback', () => {
     expect(getStored('RM10 8AA')).toBeTruthy(); // cached in the durable store
   });
 
+  it('clearStored removes the saved copy for a postcode (space/case-insensitive)', async () => {
+    const { clearStored } = await import('../neighbourhoodClient');
+    __setFetch(async () => ({ ok: true, status: 200, json: async () => SAMPLE }));
+    await getArea('RM10 8AA');
+    expect(getStored('RM10 8AA')).toBeTruthy();
+    clearStored('rm108aa');
+    expect(getStored('RM10 8AA')).toBeNull();
+  });
+
   it('sends the postcode in the POST body, never in the URL (keeps it out of logs/history)', async () => {
     let seenUrl = null; let seenOpts = null;
     __setFetch(async (url, opts) => { seenUrl = url; seenOpts = opts; return { ok: true, status: 200, json: async () => SAMPLE }; });

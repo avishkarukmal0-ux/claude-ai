@@ -27,6 +27,28 @@ const CATEGORIES = [
   { key: 'householdComposition', label: 'Household composition', table: 'TS003' },
 ];
 
+// Server-side result cache for buildProfile. The census is static data, so a completed (postcode, radius,
+// headline?) computation is reused — the SLOW part is the first-ever fetch of a postcode's output areas from
+// Nomis. This makes repeat visits instant AND, crucially, makes a Retry fast: the first request may exceed the
+// client's 30s timeout, but Node keeps computing and caches the result, so the user's Retry is a cache hit.
+const _resultCache = new Map(); // key -> { at, out }
+const RESULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — census doesn't change
+const RESULT_MAX = 500;
+const normPc = (pc) => String(pc || '').toUpperCase().replace(/\s+/g, '');
+const cacheKey = (pc, r, headlineOnly) => `${normPc(pc)}|${r}|${headlineOnly ? 'h' : 'f'}`;
+function cacheGet(key) {
+  const e = _resultCache.get(key);
+  if (!e) return null;
+  if (Date.now() - e.at > RESULT_TTL_MS) { _resultCache.delete(key); return null; }
+  _resultCache.delete(key); _resultCache.set(key, e); // LRU bump
+  return e.out;
+}
+function cacheSet(key, out) {
+  if (_resultCache.size >= RESULT_MAX) { const oldest = _resultCache.keys().next().value; _resultCache.delete(oldest); }
+  _resultCache.set(key, { at: Date.now(), out });
+}
+function __clearResultCache() { _resultCache.clear(); }
+
 const BASE_META = () => ({
   dataSource: config.neighbourhoodInsights.dataSource,          // 'ONS Census 2021'
   referenceYear: config.neighbourhoodInsights.referenceYear,    // 2021
@@ -119,10 +141,17 @@ async function buildProfile({ postcode, radiusM, headlineOnly = false }) {
     return { ok: false, reason: `Choose a radius between ${min} and ${max} metres.` };
   }
 
+  // Cache check first — a previously computed (postcode, radius, headline?) result is reused instantly.
+  const ck = cacheKey(postcode, r, headlineOnly);
+  const cached = cacheGet(ck);
+  if (cached) return cached;
+
   const location = await loc.resolvePostcode(postcode);
   if (!location.ok) return { ok: false, reason: location.reason };
   if (!location.supported) {
-    return { ok: true, supported: false, country: location.country, reason: location.reason, ...BASE_META() };
+    const out = { ok: true, supported: false, country: location.country, reason: location.reason, ...BASE_META() };
+    cacheSet(ck, out); // an unsupported nation is a stable answer — cache it so Scotland/NI don't re-resolve
+    return out;
   }
 
   const locOut = { postcode: location.postcode, admin: location.admin, point: location.point, oa: location.oa, radiusM: r };
@@ -150,7 +179,9 @@ async function buildProfile({ postcode, radiusM, headlineOnly = false }) {
   }
 
   const diag = (provider.lastDiag && provider.lastDiag()) || undefined; // testing aid: OAs that actually got data
-  return { ok: true, supported: true, configured: true, location: locOut, profile, ...(diag ? { diag } : {}) };
+  const out = { ok: true, supported: true, configured: true, location: locOut, profile, ...(diag ? { diag } : {}) };
+  cacheSet(ck, out); // a real computed profile is static census data — cache it (makes Retry + repeat instant)
+  return out;
 }
 
 /**
@@ -192,4 +223,4 @@ async function radiusDeprivation(areas, imdLookup = imd.getFigure) {
   };
 }
 
-module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, dataStatus, preview, buildProfile, radiusDeprivation, radii, radiusBounds, CATEGORIES };
+module.exports = { isEnabled, isDataConfigured, isBillingConfigured, status, dataStatus, preview, buildProfile, radiusDeprivation, radii, radiusBounds, CATEGORIES, __clearResultCache };

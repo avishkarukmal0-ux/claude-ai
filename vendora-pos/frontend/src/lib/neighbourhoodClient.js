@@ -22,6 +22,10 @@ export function getStored(postcode) { const rec = readCache()[norm(postcode)]; r
 function putStored(postcode, data) {
   try { const all = readCache(); all[norm(postcode)] = { data, fetched_at: Date.now() }; writeJSON(STORE_KEY, all); } catch { /* best effort */ }
 }
+/** Delete the saved area copy for a postcode (used by "Clear postcode" so clearing really removes the data). */
+export function clearStored(postcode) {
+  try { const all = readCache(); if (all[norm(postcode)]) { delete all[norm(postcode)]; writeJSON(STORE_KEY, all); } } catch { /* best effort */ }
+}
 
 // Pluggable transport for tests.
 let _fetch = (url, opts) => fetch(url, opts);

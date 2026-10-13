@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft, Globe2, ChevronDown } from 'lucide-react';
-import { getArea, fetchTileObjectURL, getRadiusProfile, isValidUkPostcode } from '../../lib/neighbourhoodClient';
+import { getArea, fetchTileObjectURL, getRadiusProfile, isValidUkPostcode, clearStored } from '../../lib/neighbourhoodClient';
 import { currentSession } from '../../lib/account';
 import ScreenBack from '../common/ScreenBack';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
@@ -170,6 +170,10 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     auth: 'Sign in to see local figures.',
   };
   const showFigures = result && result.ok && result.available && (result.figures || []).length > 0;
+  // A valid postcode that resolved but has no figures (Scotland/NI use separate censuses — England & Wales only).
+  const nation = result && result.area && result.area.country;
+  const unsupportedNation = nation && !['England', 'Wales'].includes(nation);
+  const showNoData = result && result.ok && !result.available;
 
   return (
     <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -195,7 +199,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               className={`min-h-[44px] w-full rounded-xl border px-3 py-2.5 pr-11 text-base uppercase focus:outline-none ${result && !result.ok && (result.kind === 'invalid' || result.kind === 'empty') ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
             />
             {postcode && (
-              <button type="button" onClick={() => { setPostcode(''); setResult(null); }} aria-label="Clear postcode" className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-xl text-gray-400 hover:text-gray-700">×</button>
+              <button type="button" onClick={() => { clearStored(postcode); setPostcode(''); setResult(null); }} aria-label="Clear postcode" className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-xl text-gray-400 hover:text-gray-700">×</button>
             )}
           </div>
         </label>
@@ -223,10 +227,21 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         </div>
       )}
 
+      {/* Resolved postcode but no figures — ALWAYS say something (never a blank screen). Scotland/NI are a
+          separate census, so name the nation; otherwise fall back to the server's reason. */}
+      {showNoData && (
+        <div role="status" className="flex items-start gap-1.5 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-500" />
+          {unsupportedNation
+            ? `Official area figures aren’t available for ${nation} yet.`
+            : (result.reason || 'We have no official figures for this postcode.')}
+        </div>
+      )}
+
       {showFigures && (
         <div className="space-y-2">
           {result.offline && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Saved {fmtDate(result.stored_fetched_at || result.fetchedAt)}, offline copy</div>
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Showing your last saved copy from {fmtDate(result.stored_fetched_at || result.fetchedAt)}</div>
           )}
           {result.freshness === 'out_of_date' && !result.offline && (
             <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> These figures are out of date — couldn’t refresh.</div>

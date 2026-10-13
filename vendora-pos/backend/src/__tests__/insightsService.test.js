@@ -10,7 +10,7 @@ const { isActive, entitlementPatchFor } = require('../services/insightsEntitleme
 const EW = { status: 200, json: { result: { country: 'England', latitude: 51.5, longitude: -0.1, postcode: 'EC1A 1BB', admin_district: 'Islington', codes: { oa: 'E00000001', lsoa: 'E01000001' } } } };
 const SCOT = { status: 200, json: { result: { country: 'Scotland', latitude: 55.95, longitude: -3.19, postcode: 'EH1 1AA', codes: {} } } };
 
-afterEach(() => loc.__setTransport(null));
+afterEach(() => { loc.__setTransport(null); insights.__clearResultCache(); });
 
 describe('insightsService.status / preview (honest, pre-purchase)', () => {
   test('status reports E&W coverage, census source, and data NOT configured by default', () => {
@@ -58,6 +58,16 @@ describe('insightsService.buildProfile — honest with no data provider', () => 
     expect(out.supported).toBe(false);
     expect(out.reason).toMatch(/Scotland/);
     expect(out.profile).toBeUndefined(); // no numbers
+  });
+
+  test('a computed result is cached by (postcode, radius) — a second call makes no further lookups', async () => {
+    let calls = 0;
+    loc.__setTransport(async () => { calls += 1; return SCOT; });
+    await insights.buildProfile({ postcode: 'EH1 1AA', radiusM: 1000 });
+    await insights.buildProfile({ postcode: 'eh1 1aa', radiusM: 1000 }); // same postcode (space/case-insensitive)
+    expect(calls).toBe(1); // second call was a cache hit — no second postcode resolve
+    await insights.buildProfile({ postcode: 'EH1 1AA', radiusM: 2000 }); // different radius → not cached
+    expect(calls).toBe(2);
   });
 
   test('a supported postcode with no data provider → configured:false + labelled preview, no fabricated numbers', async () => {
