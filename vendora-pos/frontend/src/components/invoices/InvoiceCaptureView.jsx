@@ -348,7 +348,8 @@ function ReconcileView({ invoice, onBack }) {
   const candidates = useMemo(() => deliveries.filter((d) => d.status === 'received'
     && (!supKey || (d.supplierName || '').trim().toLowerCase() === supKey)), [deliveries, supKey]);
   const [deliveryId, setDeliveryId] = useState(candidates[0] ? candidates[0].id : '');
-  const [excluded, setExcluded] = useState(() => new Set());
+  // Opt-IN selection (C3): nothing is pre-ticked — the owner chooses which discrepancies to claim.
+  const [selectedIdx, setSelectedIdx] = useState(() => new Set());
   const delivery = candidates.find((d) => d.id === deliveryId) || deliveries.find((d) => d.id === deliveryId) || null;
   // If the delivery was booked against an order, include it so reconcile can also compare ordered qty +
   // agreed price (info only — it never adds claimable amounts, so no double counting).
@@ -357,10 +358,10 @@ function ReconcileView({ invoice, onBack }) {
 
   const claimable = (result ? result.discrepancies : []).filter((d) => d.claimReason);
   const info = (result ? result.discrepancies : []).filter((d) => !d.claimReason);
-  const selected = claimable.filter((_, i) => !excluded.has(i));
+  const selected = claimable.filter((_, i) => selectedIdx.has(i));
   const selectedTotal = selected.reduce((s, d) => s + d.overcharge, 0);
 
-  function toggle(i) { setExcluded((prev) => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; }); }
+  function toggle(i) { setSelectedIdx((prev) => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; }); }
   function raise() {
     const items = discrepanciesToClaimItems(selected);
     if (!items.length) { toast('Nothing selected to claim'); return; }
@@ -386,7 +387,7 @@ function ReconcileView({ invoice, onBack }) {
         <>
           <label className="mb-3 block">
             <span className="mb-1 block text-xs font-medium text-gray-500">Delivery to compare</span>
-            <select value={deliveryId} onChange={(e) => { setDeliveryId(e.target.value); setExcluded(new Set()); }} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
+            <select value={deliveryId} onChange={(e) => { setDeliveryId(e.target.value); setSelectedIdx(new Set()); }} aria-label="Delivery to compare" className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-base focus:border-primary focus:outline-none">
               {candidates.map((d) => <option key={d.id} value={d.id}>{(d.reference || 'Delivery')} · {d.receivedAt ? new Date(d.receivedAt).toLocaleDateString('en-GB') : ''}</option>)}
             </select>
           </label>
@@ -395,11 +396,13 @@ function ReconcileView({ invoice, onBack }) {
             <>
               {claimable.length === 0 && <p className="rounded-xl bg-success-light px-3 py-4 text-center text-sm font-semibold text-success-dark">No chargeable discrepancies — the invoice matches the delivery. ✅</p>}
               {claimable.length > 0 && (
+                <>
+                <p className="mb-2 text-xs text-gray-500">Tick the lines you want to claim.</p>
                 <ul className="space-y-2">
                   {claimable.map((d, i) => (
                     <li key={i} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-                      <label className="flex items-start gap-2">
-                        <input type="checkbox" checked={!excluded.has(i)} onChange={() => toggle(i)} className="mt-0.5 h-4 w-4" />
+                      <label className="flex min-h-[44px] items-center gap-2.5">
+                        <input type="checkbox" checked={selectedIdx.has(i)} onChange={() => toggle(i)} aria-label={`Claim ${d.name}`} className="h-5 w-5 shrink-0" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center justify-between gap-2">
                             <span className="truncate text-sm font-semibold text-gray-900">{d.name}</span>
@@ -412,6 +415,7 @@ function ReconcileView({ invoice, onBack }) {
                     </li>
                   ))}
                 </ul>
+                </>
               )}
 
               {info.length > 0 && (

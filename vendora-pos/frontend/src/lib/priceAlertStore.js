@@ -89,5 +89,10 @@ export function usePriceAlerts() {
   }, []);
 
   const openAlerts = alerts.filter((a) => a.status === 'open');
-  return { alerts, openAlerts, dismiss: (id) => setStatus(id, 'dismissed'), markApproved: (id) => setStatus(id, 'retail_approved') };
+  return {
+    alerts, openAlerts,
+    dismiss: (id) => setStatus(id, 'dismissed'),
+    markApproved: (id) => setStatus(id, 'retail_approved'),
+    reopen: (id) => setStatus(id, 'open'), // Undo — put a resolved alert back on the review list
+  };
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, BadgePercent, ArrowRight, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { BadgePercent, ArrowRight, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { usePriceAlerts } from '../../lib/priceAlertStore';
 import { useInventory } from '../../lib/inventoryStore';
 import ScreenBack from '../common/ScreenBack';
@@ -12,14 +12,22 @@ const pct = (m) => (m == null ? '—' : `${Math.round(m * 100)}%`);
 // margin impact and a suggested retail to hold the old margin. Retail is only ever changed when
 // the owner approves it here — never automatically.
 export default function PriceAlertsView({ onBack }) {
-  const { openAlerts, dismiss, markApproved } = usePriceAlerts();
-  const { updateProduct } = useInventory();
+  const { openAlerts, dismiss, markApproved, reopen } = usePriceAlerts();
+  const { products, updateProduct } = useInventory();
 
   function approve(a) {
     if (a.suggestedRetail == null) { toast('No suggested retail — set a price in Stock'); return; }
+    // Set retail CHANGES the shelf price immediately — capture the old price so Undo can put it back and
+    // re-open the alert for review (C2).
+    const prev = products.find((p) => p.id === a.productId);
+    const oldPrice = prev ? prev.price : null;
     updateProduct(a.productId, { price: a.suggestedRetail, reason: 'retail approved after cost change' });
     markApproved(a.id);
-    toast.success(`Retail set to ${money(a.suggestedRetail)}`);
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Retail {oldPrice != null ? `${money(oldPrice)} → ` : ''}{money(a.suggestedRetail)}.
+        <button type="button" onClick={() => { if (oldPrice != null) updateProduct(a.productId, { price: oldPrice, reason: 'undo retail change' }); reopen(a.id); toast.dismiss(t.id); }} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-primary underline">Undo</button>
+      </span>
+    ), { duration: 6000 });
   }
 
   return (
@@ -55,9 +63,9 @@ export default function PriceAlertsView({ onBack }) {
                 </div>
                 <div className="flex items-center gap-2">
                   {a.suggestedRetail != null && (
-                    <button type="button" onClick={() => approve(a)} className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Set retail {money(a.suggestedRetail)}</button>
+                    <button type="button" onClick={() => approve(a)} aria-label={`Set retail for ${a.name} to ${money(a.suggestedRetail)}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-white active:scale-95"><Check className="h-3.5 w-3.5" /> Set retail {money(a.suggestedRetail)}</button>
                   )}
-                  <button type="button" onClick={() => dismiss(a.id)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95"><X className="h-3.5 w-3.5" /> Keep price</button>
+                  <button type="button" onClick={() => dismiss(a.id)} aria-label={`Keep current price for ${a.name}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95"><X className="h-3.5 w-3.5" /> Keep price</button>
                 </div>
               </li>
             );

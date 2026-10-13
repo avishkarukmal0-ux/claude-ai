@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Receipt, Building2, Share2, Trash2, ChevronRight, AlertTriangle, CalendarClock } from 'lucide-react';
+import { Receipt, Building2, Share2, Trash2, ChevronRight, AlertTriangle, CalendarClock } from 'lucide-react';
 import { useClaims, claimTotals, nextStates, OPEN_CLAIM_STATUSES } from '../../lib/claimStore';
 import { useDeliveries, DELIVERY_ISSUES } from '../../lib/deliveryStore';
 import ScreenBack from '../common/ScreenBack';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const STATUS = {
@@ -27,8 +28,20 @@ async function shareClaim(claim) {
 // Stage 5b — supplier claims. Raise from a delivery's flagged issues (with evidence photos),
 // then track it through to credit actually received. Nothing is sent automatically.
 export default function ClaimsView({ onBack }) {
-  const { claims, createFromDelivery, updateClaim, updateClaimItem, advance, removeClaim } = useClaims();
+  const { claims, createFromDelivery, updateClaim, updateClaimItem, advance, removeClaim, restoreClaim } = useClaims();
   const { deliveries } = useDeliveries();
+  const [confirmClaim, setConfirmClaim] = useState(null); // claim pending delete-confirm
+
+  function doDelete(c) {
+    setConfirmClaim(null);
+    removeClaim(c.id);
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Claim deleted.
+        <button type="button" onClick={() => { restoreClaim(c); toast.dismiss(t.id); }} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-primary underline">Undo</button>
+      </span>
+    ), { duration: 6000 });
+  }
+  const claimLabel = (c) => `${c?.supplierName || 'supplier'}${c?.deliveryRef ? ` · ${c.deliveryRef}` : ''}`;
 
   const claimable = useMemo(() => deliveries.filter((d) => d.status === 'received'
     && (d.lines || []).some((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable)
@@ -60,7 +73,7 @@ export default function ClaimsView({ onBack }) {
                   <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'}{d.reference && ` · ${d.reference}`}</span>
                   <span className="block text-xs text-gray-500">{(d.lines || []).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable).length} issue(s) to claim</span>
                 </span>
-                <button type="button" onClick={() => raise(d)} className="flex shrink-0 items-center gap-1 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
+                <button type="button" onClick={() => raise(d)} aria-label={`Raise claim for ${d.supplierName || 'delivery'}`} className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
               </li>
             ))}
           </ul>
@@ -76,20 +89,30 @@ export default function ClaimsView({ onBack }) {
       ) : (
         <>
           {open.length > 0 && (
-            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} removeClaim={removeClaim} />)}</ul></section>
+            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} onDelete={setConfirmClaim} />)}</ul></section>
           )}
           {done.length > 0 && (
-            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} removeClaim={removeClaim} />)}</ul></section>
+            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} onDelete={setConfirmClaim} />)}</ul></section>
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!confirmClaim}
+        title="Delete this claim?"
+        message={`${claimLabel(confirmClaim)}. Removes the claim and its recorded amounts. You can undo straight after.`}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => doDelete(confirmClaim)}
+        onCancel={() => setConfirmClaim(null)}
+      />
     </div>
   );
 }
 
 // Module-scope so it keeps a stable component identity across parent re-renders — defined inside the
 // parent, every keystroke created a NEW component type and remounted the card, dropping input focus (W9).
-function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
+function ClaimCard({ c, updateClaim, updateClaimItem, advance, onDelete }) {
     const t = claimTotals(c);
     const meta = STATUS[c.status] || STATUS.draft;
     return (
@@ -112,8 +135,8 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
               {i.reason === 'wrong_price' && OPEN_CLAIM_STATUSES.includes(c.status) && (
                 <div className="mt-1 ml-9 flex items-center gap-2 text-xs text-gray-500">
                   <span>billed {money(i.unitBilled)}/u</span>
-                  <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1">agreed £/u
-                    <input value={i.unitAgreed ?? ''} onChange={(e) => updateClaimItem(c.id, i.id, { unitAgreed: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" placeholder="0.00" className="w-14 border-none p-0 text-gray-900 focus:outline-none" />
+                  <label className="flex min-h-[44px] items-center gap-1 rounded-lg border border-gray-200 px-2">agreed £/u
+                    <input value={i.unitAgreed ?? ''} onChange={(e) => updateClaimItem(c.id, i.id, { unitAgreed: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" placeholder="0.00" aria-label={`Agreed price per unit for ${i.name}`} className="w-14 border-none bg-transparent p-0 text-gray-900 focus:outline-none" />
                   </label>
                   {i.unitAgreed == null && <span className="text-warning-dark">enter agreed price to claim the difference</span>}
                 </div>
@@ -131,32 +154,32 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, removeClaim }) {
 
         {(c.status === 'approved' || c.status === 'settled') && (
           <div className="mb-2 grid grid-cols-2 gap-2">
-            <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500">£ approved
-              <input value={c.approvedAmount ?? ''} onChange={(e) => updateClaim(c.id, { approvedAmount: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            <label className="flex min-h-[44px] items-center gap-1 rounded-lg border border-gray-200 px-2 text-xs text-gray-500">£ approved
+              <input value={c.approvedAmount ?? ''} onChange={(e) => updateClaim(c.id, { approvedAmount: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" aria-label="Amount approved" className="w-full border-none bg-transparent p-0 text-sm text-gray-900 focus:outline-none" />
             </label>
-            <label className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500">£ received
-              <input value={c.receivedAmount ?? ''} onChange={(e) => updateClaim(c.id, { receivedAmount: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            <label className="flex min-h-[44px] items-center gap-1 rounded-lg border border-gray-200 px-2 text-xs text-gray-500">£ received
+              <input value={c.receivedAmount ?? ''} onChange={(e) => updateClaim(c.id, { receivedAmount: e.target.value === '' ? null : Number(e.target.value) })} inputMode="decimal" aria-label="Amount received" className="w-full border-none bg-transparent p-0 text-sm text-gray-900 focus:outline-none" />
             </label>
-            <label className="col-span-2 flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500">Credit note
-              <input value={c.creditNoteRef || ''} onChange={(e) => updateClaim(c.id, { creditNoteRef: e.target.value })} placeholder="reference" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            <label className="col-span-2 flex min-h-[44px] items-center gap-1 rounded-lg border border-gray-200 px-2 text-xs text-gray-500">Credit note
+              <input value={c.creditNoteRef || ''} onChange={(e) => updateClaim(c.id, { creditNoteRef: e.target.value })} placeholder="reference" aria-label="Credit note reference" className="w-full border-none bg-transparent p-0 text-sm text-gray-900 focus:outline-none" />
             </label>
           </div>
         )}
         {OPEN_CLAIM_STATUSES.includes(c.status) && c.status !== 'draft' && (
           <div className="mb-2 flex items-center gap-1.5">
-            <label className="flex flex-1 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-gray-500"><CalendarClock className="h-3.5 w-3.5" /> Follow up
-              <input type="date" value={c.followUpDate || ''} onChange={(e) => updateClaim(c.id, { followUpDate: e.target.value })} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            <label className="flex min-h-[44px] flex-1 items-center gap-1 rounded-lg border border-gray-200 px-2 text-xs text-gray-500"><CalendarClock className="h-3.5 w-3.5" /> Follow up
+              <input type="date" value={c.followUpDate || ''} onChange={(e) => updateClaim(c.id, { followUpDate: e.target.value })} aria-label="Follow-up date" className="w-full border-none bg-transparent p-0 text-sm text-gray-900 focus:outline-none" />
             </label>
-            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); updateClaim(c.id, { followUpDate: d.toISOString().slice(0, 10) }); }} className="shrink-0 rounded-lg bg-gray-100 px-2 py-1.5 text-xs font-semibold text-gray-600 active:scale-95">Snooze 1wk</button>
+            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); updateClaim(c.id, { followUpDate: d.toISOString().slice(0, 10) }); }} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95">Snooze 1wk</button>
           </div>
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => shareClaim(c)} className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
+          <button type="button" onClick={() => shareClaim(c)} aria-label={`Share claim for ${c.supplierName || 'supplier'}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
           {nextStates(c.status).map((s) => (
-            <button key={s} type="button" onClick={() => advance(c.id, s)} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
+            <button key={s} type="button" onClick={() => advance(c.id, s)} className={`inline-flex min-h-[44px] items-center rounded-lg px-3 text-xs font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
           ))}
-          <button type="button" onClick={() => { if (confirm('Delete this claim?')) removeClaim(c.id); }} className="ml-auto p-1 text-gray-300 hover:text-danger" aria-label="Delete claim"><Trash2 className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onDelete(c)} className="ml-auto inline-flex h-11 w-11 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete claim for ${c.supplierName || 'supplier'}${c.deliveryRef ? ` ${c.deliveryRef}` : ''}`}><Trash2 className="h-4 w-4" /></button>
         </div>
       </li>
     );

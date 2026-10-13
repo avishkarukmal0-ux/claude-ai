@@ -204,5 +204,13 @@ export function useClaims() {
 
   const removeClaim = useCallback((id) => { persistAll(load().filter((c) => c.id !== id)); }, []);
 
-  return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, applyCredit, removeCredit, advance, removeClaim };
+  // Undo for a removal — re-insert the exact claim (id preserved), no-op if it's already back.
+  const restoreClaim = useCallback((claim) => {
+    if (!claim || !claim.id) return;
+    const cur = load();
+    if (cur.some((c) => c.id === claim.id)) return;
+    persistAll([claim, ...cur]);
+  }, []);
+
+  return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, applyCredit, removeCredit, advance, removeClaim, restoreClaim };
 }
