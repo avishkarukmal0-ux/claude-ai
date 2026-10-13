@@ -16,13 +16,16 @@ const AuthTileLayer = L.TileLayer.extend({
     img.setAttribute('role', 'presentation');
     img.alt = '';
     const fetchTile = this.options.fetchTile || insightsFetchTile;
+    const onTileError = this.options.onTileError;
     fetchTile(coords.z, coords.x, coords.y)
       .then((url) => {
         img.onload = () => { try { URL.revokeObjectURL(url); } catch { /* ignore */ } done(null, img); };
-        img.onerror = (e) => { try { URL.revokeObjectURL(url); } catch { /* ignore */ } done(e, img); };
+        img.onerror = (e) => { try { URL.revokeObjectURL(url); } catch { /* ignore */ } if (onTileError) onTileError(e); done(e, img); };
         img.src = url;
       })
-      .catch((e) => done(e, img));
+      // A tile that can't be fetched OR served from cache (offline, no saved copy) — tell the parent so it can
+      // swap the blank map for the slider-only fallback instead of leaving a grey grid.
+      .catch((e) => { if (onTileError) onTileError(e); done(e, img); });
     return img;
   },
 });
@@ -40,7 +43,7 @@ function inscribedRadiusM(map) {
   return Math.min(halfH, halfW);
 }
 
-export default function RadiusMap({ point, radiusM, fetchTile, followView = false, onViewRadius = null }) {
+export default function RadiusMap({ point, radiusM, fetchTile, followView = false, onViewRadius = null, onTileError = null, ariaLabel = 'Map of the area around your shop with the selected radius' }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const circleRef = useRef(null);
@@ -65,7 +68,7 @@ export default function RadiusMap({ point, radiusM, fetchTile, followView = fals
         minZoom: 3, maxZoom: 19, zoomSnap: 0.25, wheelPxPerZoomLevel: 80,
       }).setView([point.lat, point.lng], 14);
       mapRef.current = map;
-      new AuthTileLayer('{z}/{x}/{y}', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors', fetchTile }).addTo(map);
+      new AuthTileLayer('{z}/{x}/{y}', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors', fetchTile, onTileError }).addTo(map);
       L.circleMarker([point.lat, point.lng], { radius: 6, color: ACCENT, fillColor: ACCENT, fillOpacity: 1, weight: 2 })
         .addTo(map).bindTooltip('Your shop', { direction: 'top' });
       circleRef.current = L.circle([point.lat, point.lng], { radius: radiusM, color: ACCENT, weight: 2, fillColor: ACCENT, fillOpacity: 0.08 }).addTo(map);
@@ -113,5 +116,5 @@ export default function RadiusMap({ point, radiusM, fetchTile, followView = fals
   }, [followView, point && point.lat, point && point.lng]);
 
   if (!point) return null;
-  return <div ref={elRef} className="h-64 w-full overflow-hidden rounded-2xl border border-gray-100" aria-label="Map of the area around your shop with the selected radius" />;
+  return <div ref={elRef} role="img" className="h-64 w-full overflow-hidden rounded-2xl border border-gray-100" aria-label={ariaLabel} />;
 }

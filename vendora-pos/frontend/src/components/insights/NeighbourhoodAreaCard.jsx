@@ -42,6 +42,22 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [whoState, setWhoState] = useState('idle');  // idle | loading | ok | error
   const [radFetching, setRadFetching] = useState(false); // F8: a new radius/postcode fetch is in flight over stale figures
   const [radRetry, setRadRetry] = useState(0); // bump to re-run the radius fetch after a timeout (Retry button)
+  // Map tiles come through /api (which the service worker never caches), so offline — or when a tile fetch fails
+  // and there's no saved copy — the base map draws blank. Track connectivity + tile health so we can hide the map
+  // and fall back to the slider instead of showing a grey grid. `online` seeds from navigator and follows events.
+  const [online, setOnline] = useState(typeof navigator === 'undefined' || navigator.onLine !== false);
+  const [tilesFailed, setTilesFailed] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const goOnline = () => { setOnline(true); setTilesFailed(false); }; // back online → let the map retry tiles
+    const goOffline = () => setOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+  }, []);
+  const mapUsable = online && !tilesFailed;
+  // Offline, the map can't set the radius — fall back to the slider (and hide the "Map zoom" toggle below).
+  useEffect(() => { if (!mapUsable) setRadiusMode((m) => (m === 'map' ? 'slider' : m)); }, [mapUsable]);
 
   // Only drive the catchment map/slider + radius fetch when we actually have figures for the area — an
   // unsupported nation (Scotland/NI) resolves to a point but has no data, so the map and radius are hidden.
@@ -261,9 +277,27 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
           {result.area && result.area.point && !result.offline && (
             <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
-              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={radiusMode} setMode={setRadiusMode} />
-              <div className="mt-2"><RadiusMap point={result.area.point} radiusM={radiusM} fetchTile={fetchTileObjectURL} followView={radiusMode === 'map'} onViewRadius={onViewRadius} /></div>
-              <p className="mt-1 text-xs leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>
+              {/* Offline the map can't set the radius, so hide the "Map zoom" toggle (setMode omitted) and keep the slider. */}
+              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={mapUsable ? radiusMode : 'slider'} setMode={mapUsable ? setRadiusMode : null} />
+              <div className="mt-2">
+                {mapUsable ? (
+                  <RadiusMap
+                    point={result.area.point}
+                    radiusM={radiusM}
+                    fetchTile={fetchTileObjectURL}
+                    followView={radiusMode === 'map'}
+                    onViewRadius={onViewRadius}
+                    onTileError={() => setTilesFailed(true)}
+                    ariaLabel={`Map of your area, radius ${fmtRadius(radiusM, unit)}`}
+                  />
+                ) : (
+                  <div role="img" aria-label={`Map of your area, radius ${fmtRadius(radiusM, unit)}`} className="flex h-64 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-center">
+                    <WifiOff className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    <p className="text-xs font-medium text-gray-500">Map needs a connection. Use the slider to set your radius.</p>
+                  </div>
+                )}
+              </div>
+              {mapUsable && <p className="mt-1 text-xs leading-snug text-gray-400">Map © OpenStreetMap contributors. The {fmtRadius(radiusM, unit)} circle is drawn around your shop.</p>}
 
               {radFetching && radProfile && (
                 <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-gray-400" aria-live="polite">

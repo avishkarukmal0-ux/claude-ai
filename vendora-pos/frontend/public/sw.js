@@ -5,7 +5,10 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v38';
+const CACHE_VERSION = 'vendora-v39';
+// Caches owned by the PAGE (not this worker) that must survive a version bump. The neighbourhood map keeps its
+// last-viewed tiles here (Cache API, page-managed) so the catchment map still draws offline — don't purge it.
+const KEEP_PREFIXES = ['vendora-tiles'];
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -85,7 +88,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => !k.startsWith(CACHE_VERSION))
+            .filter((k) => !k.startsWith(CACHE_VERSION) && !KEEP_PREFIXES.some((p) => k.startsWith(p)))
             .map((k) => caches.delete(k))
         )
       )

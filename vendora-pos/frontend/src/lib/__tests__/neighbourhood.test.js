@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getArea, getStored, getRadiusProfile, __setFetch } from '../neighbourhoodClient';
+import { getArea, getStored, getRadiusProfile, fetchTileObjectURL, __setFetch } from '../neighbourhoodClient';
 import { setActiveWorkspace, LOCAL_WORKSPACE, __resetMemForTest } from '../storage';
 
 // FIXTURE (test-only): a mocked backend response. No sample/mock data exists in any production path.
@@ -133,6 +133,53 @@ describe('neighbourhoodClient — online + offline fallback', () => {
     expect(out.available).toBe(true);
     expect(calls.some((c) => c.method === 'POST')).toBe(true);          // tried POST first
     expect(calls.some((c) => c.method === 'GET' && /postcode=/.test(c.url))).toBe(true); // then GET fallback
+  });
+});
+
+describe('fetchTileObjectURL — offline map tiles (Cache API)', () => {
+  // A minimal in-memory Cache API so the offline-tile path is testable (jsdom has none). Insertion-ordered keys,
+  // mirroring the real API, so the LRU prune can delete the oldest.
+  function makeFakeCaches() {
+    const buckets = new Map();
+    return {
+      open: async (name) => {
+        if (!buckets.has(name)) buckets.set(name, new Map());
+        const m = buckets.get(name);
+        return {
+          put: async (url, res) => { m.delete(url); m.set(url, res); },
+          match: async (url) => m.get(url),
+          delete: async (url) => m.delete(url),
+          keys: async () => [...m.keys()],
+        };
+      },
+      _bucket: (name) => buckets.get(name),
+    };
+  }
+  let prevCaches; let prevCreate;
+  beforeEach(() => {
+    prevCaches = globalThis.caches; prevCreate = URL.createObjectURL;
+    globalThis.caches = makeFakeCaches();
+    URL.createObjectURL = () => 'blob:fake';
+  });
+  afterEach(() => {
+    if (prevCaches === undefined) delete globalThis.caches; else globalThis.caches = prevCaches;
+    URL.createObjectURL = prevCreate;
+  });
+
+  it('caches a fetched tile and serves it from cache when the network later fails (offline)', async () => {
+    __setFetch(async () => ({ ok: true, status: 200, blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }) }));
+    const url = await fetchTileObjectURL(14, 1, 2);
+    expect(url).toBe('blob:fake');
+    // Now offline: the network throws, but the tile was cached, so it still draws.
+    __setFetch(async () => { throw new Error('offline'); });
+    const again = await fetchTileObjectURL(14, 1, 2);
+    expect(again).toBe('blob:fake');
+    expect(globalThis.caches._bucket('vendora-tiles-v1').size).toBe(1);
+  });
+
+  it('throws when the tile is neither reachable nor cached (nothing to draw)', async () => {
+    __setFetch(async () => { throw new Error('offline'); });
+    await expect(fetchTileObjectURL(14, 9, 9)).rejects.toThrow();
   });
 });
 

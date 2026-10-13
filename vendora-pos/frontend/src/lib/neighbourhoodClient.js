@@ -69,10 +69,53 @@ export async function getRadiusProfile({ postcode, radiusM, full = false, signal
 }
 
 export function tileUrl(z, x, y) { return `${BASE}/tiles/${z}/${x}/${y}.png`; }
+
+// Last-viewed map tiles are kept in the Cache API (NOT the service worker — the SW deliberately never touches
+// /api) so the catchment map still draws the last area the owner looked at when they're offline. Best-effort and
+// fully guarded: a missing/disabled Cache API (older browsers, tests) just means no offline tiles, never an error.
+// Capped (LRU by insertion order) and expired after a week so stale map imagery is dropped. The cache name is
+// exempt from the SW's version purge (see public/sw.js) so bumping the app version doesn't wipe it.
+const TILE_CACHE = 'vendora-tiles-v1';
+const TILE_MAX = 50;                         // cap — plenty for one area at a couple of zooms, small on disk
+const TILE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // a week; map bases change slowly
+const STAMP = 'x-tile-cached-at';
+async function openTileCache() {
+  try { if (typeof caches === 'undefined') return null; return await caches.open(TILE_CACHE); } catch { return null; }
+}
+async function tileCachePut(url, blob) {
+  try {
+    const cache = await openTileCache(); if (!cache) return;
+    await cache.put(url, new Response(blob, { headers: { [STAMP]: String(Date.now()), 'Content-Type': blob.type || 'image/png' } }));
+    const keys = await cache.keys();
+    if (keys.length > TILE_MAX) { for (const k of keys.slice(0, keys.length - TILE_MAX)) { try { await cache.delete(k); } catch { /* ignore */ } } }
+  } catch { /* best effort — caching a tile must never surface an error */ }
+}
+async function tileCacheGet(url) {
+  try {
+    const cache = await openTileCache(); if (!cache) return null;
+    const res = await cache.match(url); if (!res) return null;
+    const at = Number(res.headers.get(STAMP) || 0);
+    if (!at || Date.now() - at > TILE_TTL_MS) { try { await cache.delete(url); } catch { /* ignore */ } return null; }
+    return await res.blob();
+  } catch { return null; }
+}
+
+// Fetch a map tile as a blob URL (authed). On success, cache the bytes for offline; on a network failure, fall
+// back to the cached copy if we have a fresh one so the last viewed area still draws. Throws only when the tile
+// is neither reachable nor cached — the map layer shows that tile as blank and the card hides the map offline.
 export async function fetchTileObjectURL(z, x, y) {
-  const res = await _fetch(tileUrl(z, x, y), { headers: authHeader() });
-  if (!res.ok) throw new Error(`tile ${res.status}`);
-  return URL.createObjectURL(await res.blob());
+  const url = tileUrl(z, x, y);
+  try {
+    const res = await _fetch(url, { headers: authHeader() });
+    if (!res.ok) throw new Error(`tile ${res.status}`);
+    const blob = await res.blob();
+    tileCachePut(url, blob); // fire-and-forget; same blob is safe to reuse below
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    const cached = await tileCacheGet(url);
+    if (cached) return URL.createObjectURL(cached);
+    throw e;
+  }
 }
 
 // One /area request. PREFERRED is POST with the postcode in the BODY (keeps it out of URLs/logs). GET is a
