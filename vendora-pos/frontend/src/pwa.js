@@ -47,7 +47,7 @@ function promptRefresh(waitingWorker) {
         {
           type: 'button',
           onClick: () => { _userAskedRefresh = true; toast.dismiss(t.id); try { waitingWorker.postMessage('SKIP_WAITING'); } catch { /* ignore */ } },
-          className: 'shrink-0 rounded-lg bg-primary px-3 py-1 text-sm font-semibold text-white',
+          className: 'shrink-0 inline-flex min-h-[44px] items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white active:scale-95',
         },
         'Refresh',
       ),

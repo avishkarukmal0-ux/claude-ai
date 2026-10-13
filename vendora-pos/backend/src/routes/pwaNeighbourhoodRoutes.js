@@ -5,6 +5,7 @@
 // rate limits, the ONS User-Agent and the secret Nomis UID all stay server-side. Owner/manager only; it is
 // NOT the paid add-on and carries no entitlement gate — it's a single real figure for the shop's own area.
 const express = require('express');
+const crypto = require('crypto');
 
 const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
@@ -13,6 +14,14 @@ const insights = require('../services/insightsService');
 const insightsTiles = require('../services/insightsTiles');
 const config = require('../config');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
+
+// Threshold (ms) above which a /radius request is logged at WARN so a slow Nomis aggregation stands out in the
+// logs. The client aborts at 30s, so anything near that is the stall we're chasing.
+const RADIUS_SLOW_MS = 8000;
+// Correlate log lines for the same postcode WITHOUT putting the postcode in the logs (privacy): a short,
+// non-reversible tag of the normalised postcode.
+function pcTag(pc) { try { return crypto.createHash('sha1').update(String(pc || '').toUpperCase().replace(/\s+/g, '')).digest('hex').slice(0, 8); } catch { return '--------'; } }
 
 router.use(async (req, res, next) => {
   try {
@@ -86,7 +95,21 @@ async function radiusHandler(req, res, next) {
     // full profile with the community breakdowns (country of birth, ethnic group, main language) — fetched only
     // when the owner opens that section, so the headline stays fast.
     const full = src.full === '1' || src.full === 'true' || src.full === true || src.full === 1;
+    const startedAt = Date.now();
     const out = await insights.buildProfile({ postcode, radiusM, headlineOnly: !full });
+    const durationMs = Date.now() - startedAt;
+    // One structured line per /radius so a slow aggregation is visible in the Render logs without the postcode.
+    // WARN when it crosses the slow threshold (the intermittent cold-OA-fetch stall), INFO otherwise. The diag
+    // (OAs found / with census data) tells rate-limiting/latency apart from a dataset/centroid gap.
+    const diag = out && out.diag ? out.diag : {};
+    logger.log(durationMs >= RADIUS_SLOW_MS ? 'warn' : 'info', 'pwa-neighbourhood /radius', {
+      pc: pcTag(postcode), radiusM: Math.round(radiusM) || null, full,
+      durationMs, configured: !!(out && out.configured), supported: !!(out && out.supported),
+      outputAreas: (out && out.profile && out.profile.outputAreas) || null,
+      oaCount: diag.oaCount != null ? diag.oaCount : null,
+      oasWithPopulation: diag.oasWithPopulation != null ? diag.oasWithPopulation : null,
+      slow: durationMs >= RADIUS_SLOW_MS,
+    });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
     // Note: no `testUnlock` flag in the response — it's an internal gate (INSIGHTS_TEST_UNLOCK), not client data.
     res.json({ success: true, ...out });

@@ -287,10 +287,16 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               </button>
             )}
           </div>
-          {/* The catchment shows when we have a point AND either live figures, or a saved radius copy to show offline. */}
-          {result.area && result.area.point && (!catchmentReadOnly || offlineRadiusRec) && (
+          {result.area && result.area.point && (
             <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
+              {catchmentReadOnly && !offlineRadiusRec ? (
+                // Offline with NOTHING saved for this postcode yet — nothing to read-only show, so just say so.
+                <div role="status" className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+                  <WifiOff className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" /> Needs a connection to work out your catchment — we’ll show it here once you’re back online.
+                </div>
+              ) : (
+              <>
               {/* Offline the map can't set the radius, so hide the "Map zoom" toggle (setMode omitted), keep the
                   slider, and disable it — the figures are a read-only saved copy until the connection returns. */}
               <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={mapUsable ? radiusMode : 'slider'} setMode={mapUsable ? setRadiusMode : null} disabled={catchmentReadOnly} />
@@ -308,7 +314,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
                 ) : (
                   <div role="img" aria-label={`Map of your area, radius ${fmtRadius(radiusM, unit)}`} className="flex h-64 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-center">
                     <WifiOff className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                    <p className="text-xs font-medium text-gray-500">Map needs a connection. Use the slider to set your radius.</p>
+                    {/* Offline the slider is disabled (read-only saved copy), so don't tell them to use it. */}
+                    <p className="text-xs font-medium text-gray-500">{catchmentReadOnly ? 'Map needs a connection.' : 'Map needs a connection. Use the slider to set your radius.'}</p>
                   </div>
                 )}
               </div>
@@ -339,6 +346,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
                   </button>
                   {whoOpen && <RadiusCommunity state={whoState} profile={whoProfile} />}
                 </div>
+              )}
+              </>
               )}
             </section>
           )}

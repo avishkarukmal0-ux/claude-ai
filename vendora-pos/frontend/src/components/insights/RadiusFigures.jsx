@@ -7,6 +7,9 @@ import { fmtRadius } from '../../lib/radiusUnits';
 // state + HTTP code so the owner can see what's happening without DevTools. The whole card is owner/manager-only
 // (the /area + /radius routes are role-gated), so this line is never shown to staff.
 const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-GB');
+// The owner/manager diagnostic line ("radius: ok (200) · … OA w/ data · sample E…") is a dev aid only — never
+// shown in a production build. Vite replaces import.meta.env.DEV with false in `npm run build`, so this folds away.
+const DEBUG_DIAG = (() => { try { return !!import.meta.env.DEV; } catch { return false; } })();
 
 export default function RadiusFigures({ state, http, diag, profile, radiusM, unit, onRetry, savedAt = null }) {
   const fmtSaved = (v) => { try { return new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
@@ -49,12 +52,14 @@ export default function RadiusFigures({ state, http, diag, profile, radiusM, uni
       {state === 'error' && (
         <p className="mt-2 text-xs leading-snug text-gray-400">Couldn’t load the radius figures right now. The figures below are for your immediate area (LSOA).</p>
       )}
-      {/* Small diagnostic (owner/manager card only). Tells us the request state + whether Nomis actually returned
-          data for the OAs (oasWithPopulation/oaCount) without DevTools. Remove/flag-gate later. */}
-      <p className="mt-1 text-xs leading-snug text-gray-300">
-        radius: {state}{http != null ? ` (${http})` : ''}
-        {diag ? ` · ${diag.oasWithPopulation}/${diag.oaCount} OA w/ data · sample ${diag.sampleOa || '—'} age:${diag.sampleAgeCats} hh:${diag.sampleHhCats}` : ''}
-      </p>
+      {/* Small diagnostic — DEV builds only (never shown in production). Tells us the request state + whether Nomis
+          actually returned data for the OAs (oasWithPopulation/oaCount) without DevTools. */}
+      {DEBUG_DIAG && (
+        <p className="mt-1 text-xs leading-snug text-gray-300">
+          radius: {state}{http != null ? ` (${http})` : ''}
+          {diag ? ` · ${diag.oasWithPopulation}/${diag.oaCount} OA w/ data · sample ${diag.sampleOa || '—'} age:${diag.sampleAgeCats} hh:${diag.sampleHhCats}` : ''}
+        </p>
+      )}
     </>
   );
 }
