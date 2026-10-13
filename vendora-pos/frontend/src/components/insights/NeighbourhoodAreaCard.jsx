@@ -43,7 +43,9 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [radFetching, setRadFetching] = useState(false); // F8: a new radius/postcode fetch is in flight over stale figures
   const [radRetry, setRadRetry] = useState(0); // bump to re-run the radius fetch after a timeout (Retry button)
 
-  const point = result && result.area && result.area.point;
+  // Only drive the catchment map/slider + radius fetch when we actually have figures for the area — an
+  // unsupported nation (Scotland/NI) resolves to a point but has no data, so the map and radius are hidden.
+  const point = result && result.ok && result.available && result.area && result.area.point ? result.area.point : null;
   const radPostcode = (result && result.postcode) || postcode;
   const prevRadPostcode = useRef(radPostcode); // F8: detect a postcode change so stale figures aren't shown for it
   const prevWhoKey = useRef(null); // R8/round3 R7: detect an area/radius change so a stale community isn't shown

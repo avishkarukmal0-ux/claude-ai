@@ -32,6 +32,7 @@ const CATEGORIES = [
 // Nomis. This makes repeat visits instant AND, crucially, makes a Retry fast: the first request may exceed the
 // client's 30s timeout, but Node keeps computing and caches the result, so the user's Retry is a cache hit.
 const _resultCache = new Map(); // key -> { at, out }
+const _inflight = new Map();    // key -> Promise (coalesce concurrent identical computations, e.g. first + Retry)
 const RESULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — census doesn't change
 const RESULT_MAX = 500;
 const normPc = (pc) => String(pc || '').toUpperCase().replace(/\s+/g, '');
@@ -146,6 +147,15 @@ async function buildProfile({ postcode, radiusM, headlineOnly = false }) {
   const cached = cacheGet(ck);
   if (cached) return cached;
 
+  // In-flight coalescing: if an identical request is already computing (e.g. the user hit Retry while the first
+  // slow request is still running server-side), share that one computation instead of starting a second.
+  if (_inflight.has(ck)) return _inflight.get(ck);
+  const p = computeProfile({ postcode, radiusM: r, headlineOnly }, ck);
+  _inflight.set(ck, p);
+  try { return await p; } finally { _inflight.delete(ck); }
+}
+
+async function computeProfile({ postcode, radiusM: r, headlineOnly }, ck) {
   const location = await loc.resolvePostcode(postcode);
   if (!location.ok) return { ok: false, reason: location.reason };
   if (!location.supported) {

@@ -73,6 +73,19 @@ function __setTransport(t) { _transport = t || fetchJson; }
 
 function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
 
+// Run `fn` over items with at most `limit` in flight — so a dense postcode's many OA batches fetch in parallel
+// (fast) without firing all ~14 at Nomis at once (rate-limit safe). Preserves input order in the result.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) { const i = next; next += 1; results[i] = await fn(items[i], i); }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+const FETCH_CONCURRENCY = 6;
+
 // Fields that are never the breakdown dimension when auto-detecting.
 const NON_DIMENSION = new Set(['geography', 'obs_value', 'measures', 'time', 'date', 'freq']);
 
@@ -123,12 +136,15 @@ async function fetchTable(def, oaCodes) {
   // Reuse the server-side Nomis UID (same account as the free neighbourhood feature) when set — some datasets /
   // larger requests need it, and the working feature always sends it.
   const uid = config.neighbourhood && config.neighbourhood.nomisUid ? `&uid=${encodeURIComponent(config.neighbourhood.nomisUid)}` : '';
-  for (const batch of chunk(oaCodes, 150)) {
+  const sel = def.select ? `&${def.select}` : '';
+  // Fetch the OA batches IN PARALLEL (bounded) instead of one-after-another — a dense postcode can have ~14
+  // batches, and serial fetches are what tipped some first-time lookups past 30s.
+  const parsedBatches = await mapLimit(chunk(oaCodes, 150), FETCH_CONCURRENCY, async (batch) => {
     const geogParam = encodeURIComponent(batch.join(','));
-    const sel = def.select ? `&${def.select}` : '';
     const url = `${DATA().nomisBase}/dataset/${def.dataset}.data.json?geography=${geogParam}&measures=${def.measures}${sel}${uid}`;
-    const json = await _transport(url);
-    const parsed = parseObs(json, def.dimension);
+    return parseObs(await _transport(url), def.dimension);
+  });
+  for (const parsed of parsedBatches) {
     for (const [oa, counts] of Object.entries(parsed)) {
       merged[oa] = merged[oa] || {};
       for (const [label, n] of Object.entries(counts)) merged[oa][label] = (merged[oa][label] || 0) + n;

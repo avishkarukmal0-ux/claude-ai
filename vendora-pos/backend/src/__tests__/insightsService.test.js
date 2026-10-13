@@ -70,6 +70,18 @@ describe('insightsService.buildProfile — honest with no data provider', () => 
     expect(calls).toBe(2);
   });
 
+  test('concurrent identical requests are coalesced — computed once (e.g. a Retry during a slow first call)', async () => {
+    let calls = 0;
+    loc.__setTransport(async () => { calls += 1; await new Promise((r) => setTimeout(r, 25)); return SCOT; });
+    const [a, b] = await Promise.all([
+      insights.buildProfile({ postcode: 'EH1 1AA', radiusM: 1000 }),
+      insights.buildProfile({ postcode: 'EH1 1AA', radiusM: 1000 }),
+    ]);
+    expect(calls).toBe(1); // both awaited the same in-flight computation
+    expect(a.supported).toBe(false);
+    expect(b.supported).toBe(false);
+  });
+
   test('a supported postcode with no data provider → configured:false + labelled preview, no fabricated numbers', async () => {
     loc.__setTransport(async () => EW);
     const out = await insights.buildProfile({ postcode: 'EC1A 1BB', radiusM: 1000 });

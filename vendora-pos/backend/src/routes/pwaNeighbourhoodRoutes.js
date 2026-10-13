@@ -88,7 +88,8 @@ async function radiusHandler(req, res, next) {
     const full = src.full === '1' || src.full === 'true' || src.full === true || src.full === 1;
     const out = await insights.buildProfile({ postcode, radiusM, headlineOnly: !full });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
-    res.json({ success: true, testUnlock: true, ...out });
+    // Note: no `testUnlock` flag in the response — it's an internal gate (INSIGHTS_TEST_UNLOCK), not client data.
+    res.json({ success: true, ...out });
   } catch (err) {
     if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, err.code || 'RADIUS'));
     next(err);

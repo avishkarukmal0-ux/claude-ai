@@ -122,7 +122,11 @@ export async function getArea(postcode, { timeoutMs = TIMEOUT_MS, force = false 
       }
     }
     let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
-    if (res.ok) { putStored(pc, body); return { ...body, ok: true, offline: false }; }
+    if (res.ok) {
+      // Only save REAL figures for offline — never cache a "no figures"/unsupported-nation answer as if it were data.
+      if (body && body.available === true) putStored(pc, body);
+      return { ...body, ok: true, offline: false };
+    }
     if (res.status === 400) return { ok: false, kind: 'invalid' };
     if (res.status === 401 || res.status === 403) return { ok: false, kind: 'auth' };
     if (res.status === 404) return { ok: false, kind: 'no_data' };
