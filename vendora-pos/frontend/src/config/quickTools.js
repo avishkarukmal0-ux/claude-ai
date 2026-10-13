@@ -164,13 +164,17 @@ export const QUICK_TOOLS = {
     id: 'recall-log', label: 'Recall log', tagline: 'Safety alerts you acted on',
     icon: AlertOctagon, component: RecallLogTool, families: ['mobile-value'],
   },
+  // Pet-selling tools belong to the Pet shop member only — a Discount/Pound or Market trader shouldn't see
+  // Animal licence / Vet medicines even if "sells live animals" was answered yes for another member earlier.
   'animal-licence': {
     id: 'animal-licence', label: 'Animal licence', tagline: 'Pet-selling licence & rules',
-    icon: PawPrint, component: AnimalLicenceTool, families: ['mobile-value'], gate: sellsAnimals,
+    icon: PawPrint, component: AnimalLicenceTool, families: ['mobile-value'],
+    hideForMembers: ['market-trader', 'discount-pound'], gate: sellsAnimals,
   },
   'vet-meds': {
     id: 'vet-meds', label: 'Vet medicines', tagline: 'AVM-GSL / NFA-VPS / POM-VPS',
-    icon: Syringe, component: VetMedCheck, families: ['mobile-value'], gate: sellsAnimals,
+    icon: Syringe, component: VetMedCheck, families: ['mobile-value'],
+    hideForMembers: ['market-trader', 'discount-pound'], gate: sellsAnimals,
   },
 };
 

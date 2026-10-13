@@ -79,6 +79,18 @@ export function saveBusinessProfile(patch) {
   return writeJSON(NAME, next);
 }
 
+// The niche-specific answers — scoped to a shop type, so they're cleared when the shop type changes (the
+// shop-wide facts entity/turnoverBand/region/employees50 are NOT in here and persist).
+export const NICHE_PROFILE_FIELDS = ['sellsAnimals', 'importsFood', 'festivalsOn'];
+
+/** Reset the niche-specific answers to "not told us yet" (so they're re-asked for the new shop type). */
+export function clearNicheAnswers() {
+  const cur = getBusinessProfile();
+  const patch = {};
+  for (const k of NICHE_PROFILE_FIELDS) patch[k] = null;
+  return writeJSON(NAME, normalise({ ...cur, ...patch }));
+}
+
 export function useBusinessProfile() {
   const [profile, setProfile] = useState(getBusinessProfile);
   useEffect(() => {

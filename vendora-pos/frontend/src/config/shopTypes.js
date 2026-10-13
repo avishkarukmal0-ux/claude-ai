@@ -15,6 +15,7 @@ import {
   ShieldCheck, ClipboardList, ClipboardCheck, CalendarHeart, AlertTriangle, Banknote, ShoppingCart, Coins, Hourglass, Users, Inbox, PackageOpen, Receipt,
 } from 'lucide-react';
 import { read as storageRead, write as storageWrite } from '../lib/storage';
+import { clearNicheAnswers } from '../lib/businessProfile';
 
 export const SHOP_FAMILIES = [
   {
@@ -174,7 +175,18 @@ export function getSavedShopType() {
   return { familyId, memberId: resolveMemberId(familyId, rawMemberId) };
 }
 
-/** Remember the picked shop type for the active workspace. memberId is optional. */
+/** Remember the picked shop type for the active workspace. memberId is optional.
+ *  When the type actually changes, clear the NICHE-SPECIFIC onboarding answers (sellsAnimals / importsFood /
+ *  festivalsOn) so a stale "yes" from the old shop type can't leak compliance tools into the new one (e.g. a
+ *  Pet shop's "sells live animals: yes" showing Animal licence after switching to Discount). The shop-wide
+ *  facts (entity, turnover, region, 50+ employees) are kept — they don't change with the shop type. */
 export function saveShopType(familyId, memberId = null) {
-  return storageWrite(SHOP_TYPE_NAME, memberId ? `${familyId}:${memberId}` : familyId);
+  const nextRaw = memberId ? `${familyId}:${memberId}` : familyId;
+  const prevRaw = storageRead(SHOP_TYPE_NAME, null);
+  // Clear niche answers only when the FAMILY changes — not when adding/switching a member within the same
+  // family (that must not wipe an answer the owner just gave at the family step). Intra-family member
+  // differences (e.g. Pet vs Discount) are handled by per-member tool gating (hideForMembers), not by clearing.
+  const prevFamily = prevRaw ? prevRaw.split(':')[0] : null;
+  if (prevFamily && prevFamily !== familyId) clearNicheAnswers();
+  return storageWrite(SHOP_TYPE_NAME, nextRaw);
 }
