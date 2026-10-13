@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft, Globe2, ChevronDown } from 'lucide-react';
-import { getArea, fetchTileObjectURL, getRadiusProfile, isValidUkPostcode, clearStored } from '../../lib/neighbourhoodClient';
+import { getArea, fetchTileObjectURL, getRadiusProfile, isValidUkPostcode, clearStored, getStoredRadius, putStoredRadius } from '../../lib/neighbourhoodClient';
 import { currentSession } from '../../lib/account';
 import ScreenBack from '../common/ScreenBack';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
@@ -55,7 +55,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     window.addEventListener('offline', goOffline);
     return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
   }, []);
-  const mapUsable = online && !tilesFailed;
+  // The map needs the network (tiles come through /api) AND live figures — never show it over a saved copy.
+  const mapUsable = online && !tilesFailed && !(result && result.offline);
   // Offline, the map can't set the radius — fall back to the slider (and hide the "Map zoom" toggle below).
   useEffect(() => { if (!mapUsable) setRadiusMode((m) => (m === 'map' ? 'slider' : m)); }, [mapUsable]);
 
@@ -63,6 +64,15 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   // unsupported nation (Scotland/NI) resolves to a point but has no data, so the map and radius are hidden.
   const point = result && result.ok && result.available && result.area && result.area.point ? result.area.point : null;
   const radPostcode = (result && result.postcode) || postcode;
+  // Offline, or when the area itself is a saved copy, the catchment is READ-ONLY: never call /radius (it would
+  // just error), show the last saved radius result for this postcode (dated), and disable the slider.
+  const catchmentReadOnly = !online || !!(result && result.offline);
+  const offlineRadiusRec = point && catchmentReadOnly ? getStoredRadius(radPostcode) : null;
+  // Reflect the saved radius on the (disabled) control so the circle/figures line up with what was saved.
+  useEffect(() => {
+    if (offlineRadiusRec && offlineRadiusRec.radiusM) setRadiusM((m) => (m !== offlineRadiusRec.radiusM ? offlineRadiusRec.radiusM : m));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catchmentReadOnly, offlineRadiusRec && offlineRadiusRec.radiusM]);
   const prevRadPostcode = useRef(radPostcode); // F8: detect a postcode change so stale figures aren't shown for it
   const prevWhoKey = useRef(null); // R8/round3 R7: detect an area/radius change so a stale community isn't shown
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
@@ -84,6 +94,9 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   // doesn't fire a request per step. Never fabricates: configured:false → an honest note.
   useEffect(() => {
     if (!point || !radPostcode || !radPostcode.trim()) { setRadState('idle'); return undefined; }
+    // READ-ONLY (offline / saved copy): don't hit the network — the figures come from the durable cache and are
+    // rendered directly from offlineRadiusRec, so just stand down here.
+    if (catchmentReadOnly) { setRadFetching(false); return undefined; }
     // F8 (round 2): if the POSTCODE changed, clear the old area's figures immediately — never show one area's
     // numbers under another's name while the new fetch is in flight.
     const postcodeChanged = prevRadPostcode.current !== radPostcode;
@@ -108,7 +121,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         setRadFetching(false);
         const diag = out && out.diag ? out.diag : null;
         setRadHttp(200); setRadDiag(diag);
-        if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); radCache.current.set(key, { state: 'ok', profile: out.profile, http: 200, diag }); }
+        if (out && out.configured && out.profile) { setRadProfile(out.profile); setRadState('ok'); radCache.current.set(key, { state: 'ok', profile: out.profile, http: 200, diag }); putStoredRadius(radPostcode, { radiusM, profile: out.profile, diag }); }
         else { setRadProfile(null); setRadState('unconfigured'); radCache.current.set(key, { state: 'unconfigured', profile: null, http: 200, diag }); }
       } catch (e) {
         if (!live) return; // a cleanup-abort lands here with live=false and is ignored; only a real failure/timeout shows
@@ -124,14 +137,14 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     }, radiusMode === 'map' ? 300 : 650);
     return () => { live = false; clearTimeout(id); ac.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode, radRetry]);
+  }, [radiusM, point && point.lat, point && point.lng, radPostcode, radiusMode, radRetry, catchmentReadOnly]);
 
   // "Who lives here" community breakdown (country of birth, ethnic group, main language) — fetched on demand when
   // the owner opens the section (not while locked/idle). It asks the server for the FULL profile (full=1), which
   // costs the extra census tables — hence on demand, so the headline stays fast. Cached per {postcode, radius} for
   // the session; re-fetches when the radius changes while open. Honest states: unconfigured → a note, not an error.
   useEffect(() => {
-    if (!whoOpen || !point || !radPostcode || !radPostcode.trim() || radState === 'locked' || radState === 'idle') return undefined;
+    if (!whoOpen || !point || !radPostcode || !radPostcode.trim() || radState === 'locked' || radState === 'idle' || catchmentReadOnly) return undefined;
     const key = `${radPostcode}:${Math.round(radiusM)}`;
     const keyChanged = prevWhoKey.current !== key;
     prevWhoKey.current = key;
@@ -158,7 +171,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     }, 400);
     return () => { live = false; clearTimeout(id); ac.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [whoOpen, radState, radiusM, point && point.lat, point && point.lng, radPostcode]);
+  }, [whoOpen, radState, radiusM, point && point.lat, point && point.lng, radPostcode, catchmentReadOnly]);
 
   if (!NEIGHBOURHOOD_ENABLED) return null;
 
@@ -274,11 +287,13 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               </button>
             )}
           </div>
-          {result.area && result.area.point && !result.offline && (
+          {/* The catchment shows when we have a point AND either live figures, or a saved radius copy to show offline. */}
+          {result.area && result.area.point && (!catchmentReadOnly || offlineRadiusRec) && (
             <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your catchment</h4>
-              {/* Offline the map can't set the radius, so hide the "Map zoom" toggle (setMode omitted) and keep the slider. */}
-              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={mapUsable ? radiusMode : 'slider'} setMode={mapUsable ? setRadiusMode : null} />
+              {/* Offline the map can't set the radius, so hide the "Map zoom" toggle (setMode omitted), keep the
+                  slider, and disable it — the figures are a read-only saved copy until the connection returns. */}
+              <RadiusControl unit={unit} setUnit={setUnit} radiusM={radiusM} setRadiusM={setRadiusM} bounds={RADIUS_BOUNDS} mode={mapUsable ? radiusMode : 'slider'} setMode={mapUsable ? setRadiusMode : null} disabled={catchmentReadOnly} />
               <div className="mt-2">
                 {mapUsable ? (
                   <RadiusMap
@@ -304,12 +319,19 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
                   <Loader2 className="h-3 w-3 animate-spin" /> Updating for the new view — figures below are for the previous radius.
                 </div>
               )}
-              <RadiusFigures state={radState} http={radHttp} diag={radDiag} profile={radProfile} radiusM={radiusM} unit={unit} onRetry={() => { setRadState('loading'); setRadRetry((n) => n + 1); }} />
+              <RadiusFigures
+                state={catchmentReadOnly ? 'cached' : radState}
+                http={radHttp} diag={radDiag}
+                profile={catchmentReadOnly ? (offlineRadiusRec && offlineRadiusRec.profile) : radProfile}
+                savedAt={catchmentReadOnly ? (offlineRadiusRec && offlineRadiusRec.fetched_at) : null}
+                radiusM={radiusM} unit={unit}
+                onRetry={() => { setRadState('loading'); setRadRetry((n) => n + 1); }}
+              />
 
               {/* On-demand "Who lives here" — country of birth, ethnic group, main language — so the owner can stock
                   for the local community. Shown whenever the radius feature is available (hidden only when the data
-                  is locked to the paid add-on, or before a postcode is entered); opening it loads the breakdowns. */}
-              {radState !== 'locked' && radState !== 'idle' && (
+                  is locked to the paid add-on, offline/read-only, or before a postcode is entered). */}
+              {radState !== 'locked' && radState !== 'idle' && !catchmentReadOnly && (
                 <div className="mt-2 border-t border-gray-100 pt-2">
                   <button type="button" onClick={() => setWhoOpen((v) => !v)} aria-expanded={whoOpen} className="flex min-h-[44px] w-full items-center justify-between text-left text-xs font-semibold text-primary">
                     <span className="flex items-center gap-1.5"><Globe2 className="h-3.5 w-3.5" /> Who lives here — stock for your community</span>

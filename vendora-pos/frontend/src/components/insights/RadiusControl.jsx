@@ -7,7 +7,7 @@ import { UNITS, clamp, fmtRadius } from '../../lib/radiusUnits';
 // Optional "manual mode" toggle (only shown when the parent passes `setMode`): the radius can be set either with
 // the slider ('slider') or by zooming the map in and out ('map' — the parent drives `radiusM` from the map view).
 // In 'map' mode the slider/presets are hidden (the map is the control) and a short hint explains it.
-export default function RadiusControl({ unit, setUnit, radiusM, setRadiusM, bounds, mode = 'slider', setMode = null }) {
+export default function RadiusControl({ unit, setUnit, radiusM, setRadiusM, bounds, mode = 'slider', setMode = null, disabled = false }) {
   const U = UNITS[unit];
   const mapMode = mode === 'map';
   return (
@@ -37,14 +37,14 @@ export default function RadiusControl({ unit, setUnit, radiusM, setRadiusM, boun
               const m = Math.round(clamp(p * U.factor, bounds.min, bounds.max));
               const active = Math.abs(m - radiusM) < 1;
               return (
-                <button key={p} type="button" onClick={() => setRadiusM(m)} className={`inline-flex min-h-[44px] items-center rounded-xl border px-3 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}>{p} {U.abbr}</button>
+                <button key={p} type="button" disabled={disabled} onClick={() => setRadiusM(m)} className={`inline-flex min-h-[44px] items-center rounded-xl border px-3 text-xs font-semibold active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}>{p} {U.abbr}</button>
               );
             })}
           </div>
           <input
             type="range" min={bounds.min} max={bounds.max} step={Math.round(U.step * U.factor)}
-            value={radiusM} onChange={(e) => setRadiusM(Number(e.target.value))}
-            aria-label={`Radius in ${U.label}`} className="w-full accent-primary"
+            value={radiusM} disabled={disabled} onChange={(e) => setRadiusM(Number(e.target.value))}
+            aria-label={`Radius in ${U.label}`} className="w-full accent-primary disabled:opacity-50"
           />
           <div className="flex justify-between text-xs text-gray-400"><span>{fmtRadius(bounds.min, unit)}</span><span>{fmtRadius(bounds.max, unit)}</span></div>
         </>

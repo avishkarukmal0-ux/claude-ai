@@ -7,6 +7,7 @@ import { currentSession } from './account';
 const API_BASE = (() => { try { return (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, ''); } catch { return ''; } })();
 const BASE = `${API_BASE}/api/pwa-neighbourhood`;
 const STORE_KEY = 'neighbourhood_v1';      // { [postcode]: { data, fetched_at } } — local-only, workspace-scoped (per shop)
+const RADIUS_STORE_KEY = 'neighbourhood_radius_v1'; // { [postcode]: { radiusM, profile, diag, fetched_at } } — last radius result per postcode
 const TIMEOUT_MS = 30000;                   // hard cap: abort after 30s (the UI warns about a cold start at 5s)
 
 function norm(pc) { return String(pc || '').toUpperCase().replace(/\s+/g, ''); }
@@ -25,6 +26,24 @@ function putStored(postcode, data) {
 /** Delete the saved area copy for a postcode (used by "Clear postcode" so clearing really removes the data). */
 export function clearStored(postcode) {
   try { const all = readCache(); if (all[norm(postcode)]) { delete all[norm(postcode)]; writeJSON(STORE_KEY, all); } } catch { /* best effort */ }
+  // Clearing the postcode must also drop its saved catchment/radius figures — otherwise a cleared postcode could
+  // still show stale "Saved <date>" radius numbers offline.
+  try { const all = readJSON(RADIUS_STORE_KEY, {}) || {}; if (all[norm(postcode)]) { delete all[norm(postcode)]; writeJSON(RADIUS_STORE_KEY, all); } } catch { /* best effort */ }
+}
+
+// Durable per-postcode cache of the LAST radius (catchment) result, so the figures + Slider still show offline —
+// clearly labelled "Saved <date>" and read-only (the control is disabled offline). Workspace-scoped like the area
+// copy, so it follows the shop, not the device. Only a REAL (configured) result is ever saved.
+export function getStoredRadius(postcode) {
+  try { const rec = (readJSON(RADIUS_STORE_KEY, {}) || {})[norm(postcode)]; return rec && rec.profile ? rec : null; } catch { return null; }
+}
+export function putStoredRadius(postcode, { radiusM, profile, diag = null }) {
+  try {
+    if (!profile) return;
+    const all = readJSON(RADIUS_STORE_KEY, {}) || {};
+    all[norm(postcode)] = { radiusM: Math.round(radiusM), profile, diag, fetched_at: Date.now() };
+    writeJSON(RADIUS_STORE_KEY, all);
+  } catch { /* best effort */ }
 }
 
 // Pluggable transport for tests.

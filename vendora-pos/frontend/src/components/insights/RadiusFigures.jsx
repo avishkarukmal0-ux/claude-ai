@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Loader2, RefreshCw, WifiOff } from 'lucide-react';
 import { fmtRadius } from '../../lib/radiusUnits';
 
 // Radius-aggregated figures block for the "Your area" catchment. Purely presentational — the parent owns the
@@ -8,13 +8,18 @@ import { fmtRadius } from '../../lib/radiusUnits';
 // (the /area + /radius routes are role-gated), so this line is never shown to staff.
 const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-GB');
 
-export default function RadiusFigures({ state, http, diag, profile, radiusM, unit, onRetry }) {
+export default function RadiusFigures({ state, http, diag, profile, radiusM, unit, onRetry, savedAt = null }) {
+  const fmtSaved = (v) => { try { return new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
+  const cached = state === 'cached';
   return (
     <>
       {state === 'loading' && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-gray-400"><Loader2 className="h-3 w-3 animate-spin" /> Counting people in this radius…</p>
       )}
-      {state === 'ok' && profile && (
+      {cached && profile && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Showing your last saved catchment{savedAt ? ` from ${fmtSaved(savedAt)}` : ''}</div>
+      )}
+      {(state === 'ok' || cached) && profile && (
         <>
           {/* Label with the radius these figures were actually computed for (profile.radiusM), so a just-changed
               radius never mislabels the previous result while the new one is still loading (audit F8). */}
@@ -22,7 +27,7 @@ export default function RadiusFigures({ state, http, diag, profile, radiusM, uni
             <div className="rounded-xl bg-gray-50 p-2.5"><span className="block text-xs text-gray-400">People in {fmtRadius(profile.radiusM != null ? profile.radiusM : radiusM, unit)} (est.)</span><span className="block text-lg font-extrabold tabular-nums text-gray-900">{fmtNum(profile.population)}</span></div>
             <div className="rounded-xl bg-gray-50 p-2.5"><span className="block text-xs text-gray-400">Households (est.)</span><span className="block text-lg font-extrabold tabular-nums text-gray-900">{fmtNum(profile.households)}</span></div>
           </div>
-          <p className="mt-1 text-xs leading-snug text-gray-400">Estimated — whole census areas whose centre is inside the circle ({fmtNum(profile.outputAreas)} areas). Re-sums as you move the radius. {profile.attribution || ''}</p>
+          <p className="mt-1 text-xs leading-snug text-gray-400">Estimated — whole census areas whose centre is inside the circle ({fmtNum(profile.outputAreas)} areas). {cached ? 'Saved copy — reconnect to update as you move the radius.' : 'Re-sums as you move the radius.'} {profile.attribution || ''}</p>
         </>
       )}
       {state === 'unconfigured' && (

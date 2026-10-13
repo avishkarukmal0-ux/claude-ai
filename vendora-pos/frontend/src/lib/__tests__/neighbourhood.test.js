@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getArea, getStored, getRadiusProfile, fetchTileObjectURL, __setFetch } from '../neighbourhoodClient';
+import { getArea, getStored, getRadiusProfile, fetchTileObjectURL, getStoredRadius, putStoredRadius, clearStored, __setFetch } from '../neighbourhoodClient';
 import { setActiveWorkspace, LOCAL_WORKSPACE, __resetMemForTest } from '../storage';
 
 // FIXTURE (test-only): a mocked backend response. No sample/mock data exists in any production path.
@@ -133,6 +133,30 @@ describe('neighbourhoodClient — online + offline fallback', () => {
     expect(out.available).toBe(true);
     expect(calls.some((c) => c.method === 'POST')).toBe(true);          // tried POST first
     expect(calls.some((c) => c.method === 'GET' && /postcode=/.test(c.url))).toBe(true); // then GET fallback
+  });
+});
+
+describe('neighbourhoodClient — durable radius (catchment) cache', () => {
+  const PROFILE = { population: 1200, households: 500, outputAreas: 7, radiusM: 1000 };
+  it('stores and reads back the last radius result per postcode (space/case-insensitive)', () => {
+    putStoredRadius('RM10 8AA', { radiusM: 1000, profile: PROFILE, diag: { oaCount: 7 } });
+    const rec = getStoredRadius('rm108aa');
+    expect(rec).toBeTruthy();
+    expect(rec.radiusM).toBe(1000);
+    expect(rec.profile.population).toBe(1200);
+    expect(rec.fetched_at).toBeTruthy();
+  });
+
+  it('never stores a result with no profile', () => {
+    putStoredRadius('RM10 8AA', { radiusM: 1000, profile: null });
+    expect(getStoredRadius('RM10 8AA')).toBeNull();
+  });
+
+  it('clearStored also deletes the saved catchment for that postcode', () => {
+    putStoredRadius('RM10 8AA', { radiusM: 1000, profile: PROFILE });
+    expect(getStoredRadius('RM10 8AA')).toBeTruthy();
+    clearStored('RM10 8AA');
+    expect(getStoredRadius('RM10 8AA')).toBeNull();
   });
 });
 
