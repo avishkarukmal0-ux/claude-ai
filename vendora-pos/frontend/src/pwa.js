@@ -14,6 +14,10 @@ import toast from 'react-hot-toast';
 // (possibly mid-form) must keep their page. This module flag records that THIS tab consented.
 let _userAskedRefresh = false;
 
+// Audit F2: show the "new version" banner ONCE per new version, not repeatedly during normal use. Each new
+// build is a distinct waiting-worker object, so we remember the one we've already prompted for and skip it.
+let _promptedWorker = null;
+
 // Post the exact hashed JS/CSS this page loaded to a worker so it can precache them for offline use.
 function warmAssets(sw) {
   if (!sw) return;
@@ -29,6 +33,10 @@ function warmAssets(sw) {
 // transform. Tapping Refresh tells the waiting worker to take over; controllerchange then reloads.
 function promptRefresh(waitingWorker) {
   if (!waitingWorker) return;
+  // F2: only once per new version. A repeat call for the SAME waiting worker (e.g. registration.update() on a
+  // later load finding the same build) is ignored, so the banner doesn't re-nag during normal use.
+  if (_promptedWorker === waitingWorker) return;
+  _promptedWorker = waitingWorker;
   toast(
     (t) => React.createElement(
       'div',
