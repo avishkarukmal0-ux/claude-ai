@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, ScanLine, Keyboard, PackageCheck, Package2, Minus, Plus, Check, PackagePlus, Sparkles, Loader2,
+  ArrowLeft, ScanLine, PackageCheck, Package2, Minus, Plus, Check, PackagePlus, Sparkles, Loader2,
 } from 'lucide-react';
 import BarcodeScanner, { barcodeScanSupported } from './BarcodeScanner';
 import ScreenBack from '../common/ScreenBack';
@@ -9,7 +9,7 @@ import { useInventory, margin, worstExpiry } from '../../lib/inventoryStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse } from '../../config/categories';
 import { lookupBarcode } from '../../lib/productLookup';
-import { isBarcode } from '../../lib/barcode';
+import TypedBarcodeEntry from './TypedBarcodeEntry';
 import ProductImage from '../common/ProductImage';
 
 // Scan → identify. Scan (or type) a barcode and see exactly what it is: the product, its category, price,
@@ -21,7 +21,6 @@ export default function ScanIdentifyView({ onBack }) {
   const [mode, setMode] = useState('idle');     // 'idle' | 'camera' | 'result' | 'add' | 'rapid'
   const [match, setMatch] = useState(null);     // { product, unit, multiplier }
   const [unknownCode, setUnknownCode] = useState('');
-  const [typed, setTyped] = useState('');
   const [rapidLog, setRapidLog] = useState([]); // [{ name, added, at }] during rapid book-in
   const rapidMissRef = React.useRef(new Set());
 
@@ -41,7 +40,7 @@ export default function ScanIdentifyView({ onBack }) {
     else { setUnknownCode(c); setMode('add'); }
   }
 
-  function reset() { setMatch(null); setUnknownCode(''); setTyped(''); setMode('idle'); }
+  function reset() { setMatch(null); setUnknownCode(''); setMode('idle'); }
 
   function startRapid() { setRapidLog([]); rapidMissRef.current = new Set(); setMode('rapid'); }
 
@@ -64,12 +63,20 @@ export default function ScanIdentifyView({ onBack }) {
       <ScreenBack onBack={onBack} label="Back" />
 
       {mode === 'camera' && (
-        <BarcodeScanner onScan={(code) => resolve(code)} onClose={() => setMode('idle')} />
+        <div>
+          <BarcodeScanner onScan={(code) => resolve(code)} onClose={() => setMode('idle')} />
+          {/* Typed fallback stays visible so a blocked/erroring camera never leaves the user stuck (A1). */}
+          <p className="mb-1.5 mt-3 text-xs text-gray-400">Camera not working? Type the barcode:</p>
+          <TypedBarcodeEntry onSubmit={(code) => resolve(code)} />
+        </div>
       )}
 
       {mode === 'rapid' && (
         <div>
           <BarcodeScanner continuous onScan={handleRapid} onClose={reset} />
+          {/* Typed entry in rapid book-in too (A1) — add a unit by hand when a code won't scan. */}
+          <p className="mb-1.5 mt-3 text-xs text-gray-400">Type a barcode to add it by hand:</p>
+          <TypedBarcodeEntry onSubmit={(code) => handleRapid(code)} label="Add" clearOnSubmit />
           <div className="mt-3 flex items-center justify-between">
             <h3 className="text-sm font-bold text-gray-900">Booking in…</h3>
             <span className="text-xs text-gray-400">{rapidLog.reduce((n, r) => n + r.added, 0)} units · {rapidLog.length} scans</span>
@@ -109,14 +116,7 @@ export default function ScanIdentifyView({ onBack }) {
           ) : (
             <p className="mb-3 rounded-xl bg-warning-light px-3 py-2 text-xs text-warning-dark">This browser can’t use the camera scanner — type the barcode below instead.</p>
           )}
-          <form onSubmit={(e) => { e.preventDefault(); if (isBarcode(typed)) resolve(typed); }} className="flex gap-2">
-            <div className="relative flex-1">
-              <Keyboard className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input value={typed} onChange={(e) => setTyped(e.target.value)} inputMode="numeric" placeholder="Type a barcode" aria-label="Type a barcode" className={`min-h-[44px] w-full rounded-xl border py-2.5 pl-9 pr-3 text-base focus:outline-none ${typed.trim() && !isBarcode(typed) ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`} />
-            </div>
-            <button type="submit" disabled={!isBarcode(typed)} className="inline-flex min-h-[44px] items-center rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white disabled:opacity-40">Check</button>
-          </form>
-          {typed.trim() && !isBarcode(typed) && <p className="mt-1 text-xs font-medium text-danger-dark">A barcode is 8–14 digits.</p>}
+          <TypedBarcodeEntry onSubmit={(code) => resolve(code)} />
         </div>
       )}
 
@@ -302,21 +302,21 @@ function AddUnknown({ code, categorySuggestions, onSave, onCancel }) {
         <p className="mb-2 flex items-center justify-center gap-1.5 text-xs text-primary"><Sparkles className="h-3.5 w-3.5" /> Found online — please check it’s right. You still set the price &amp; stock.</p>
       )}
       <div className="rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
-        <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.category} onChange={set('category')} list="vendora-scan-cats" placeholder="Category" aria-label="Category" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+        <input value={f.category} onChange={set('category')} list="vendora-scan-cats" placeholder="Category" aria-label="Category" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <datalist id="vendora-scan-cats">{categorySuggestions.map((c) => <option key={c} value={c} />)}</datalist>
         <div className="mb-2 grid grid-cols-3 gap-2">
-          <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-          <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-          <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+          <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+          <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+          <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         </div>
         <div className="mb-2 grid grid-cols-2 gap-2">
-          <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-          <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+          <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+          <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         </div>
         <div className="flex gap-2">
-          <button type="button" disabled={!canSave} onClick={() => onSave(f)} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save & identify</button>
-          <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
+          <button type="button" disabled={!canSave} onClick={() => onSave(f)} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-primary px-3 text-sm font-semibold text-white disabled:opacity-40">Save &amp; identify</button>
+          <button type="button" onClick={onCancel} className="inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-600">Cancel</button>
         </div>
       </div>
     </div>
@@ -328,11 +328,11 @@ function Stepper({ label, value, setValue }) {
     <div className="flex items-center justify-between">
       <span className="text-sm text-gray-600">{label}</span>
       <div className="flex items-center gap-3">
-        <button type="button" onClick={() => setValue((v) => Math.max(1, v - 1))} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label="Decrease">
+        <button type="button" onClick={() => setValue((v) => Math.max(1, v - 1))} className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95" aria-label={`Decrease ${label}`}>
           <Minus className="h-4 w-4" />
         </button>
         <span className="w-8 text-center text-base font-bold tabular-nums text-gray-900">{value}</span>
-        <button type="button" onClick={() => setValue((v) => v + 1)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label="Increase">
+        <button type="button" onClick={() => setValue((v) => v + 1)} className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary-50 text-primary active:scale-95" aria-label={`Increase ${label}`}>
           <Plus className="h-4 w-4" />
         </button>
       </div>

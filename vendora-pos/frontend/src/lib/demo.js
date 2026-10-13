@@ -19,7 +19,23 @@ export function demoCatalogue(familyId, memberId) {
   const day = 86400000;
   const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
   const base = { extraBarcodes: [], supplierAliases: [], shelfQty: null, countedAt: null, createdAt: now, lastSoldAt: null, updatedAt: now, batches: [] };
-  const P = (id, p) => ({ ...base, id: `demo-${id}`, ...p });
+  // Demo products need REAL (numeric) barcodes so the typed-lookup path (8–14 digits) can find them — the old
+  // D-COLA style codes aren't valid EANs. Derive a stable EAN-13 from the id (prefix "20" = in-store range,
+  // then a hash, then the EAN-13 check digit). Deterministic, so the same demo product keeps the same code.
+  const demoEan = (seed) => {
+    let h = 5381;
+    for (let i = 0; i < seed.length; i++) h = ((h << 5) + h + seed.charCodeAt(i)) >>> 0;
+    const body = ('20' + String(h).padStart(10, '0')).slice(0, 12);
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += Number(body[i]) * (i % 2 === 0 ? 1 : 3);
+    return body + ((10 - (sum % 10)) % 10);
+  };
+  const numeric = (v) => /^\d{8,14}$/.test(String(v || ''));
+  const P = (id, p) => {
+    const out = { ...base, id: `demo-${id}`, ...p, barcode: numeric(p.barcode) ? p.barcode : demoEan(`demo-${id}`) };
+    if (p.caseBarcode != null) out.caseBarcode = numeric(p.caseBarcode) ? p.caseBarcode : demoEan(`demo-${id}-case`);
+    return out;
+  };
 
   const SETS = {
     'grocery-age': {

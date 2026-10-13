@@ -139,8 +139,8 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
         <p className="text-sm font-semibold text-gray-900">Use your camera to scan barcodes?</p>
         <p className="mx-auto mt-1 max-w-xs text-xs text-gray-500">Vendora only reads barcodes on your device — it never records or uploads video. You can also type codes by hand.</p>
         <div className="mt-3 flex justify-center gap-2">
-          <button type="button" onClick={allowCamera} className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white active:scale-95">Turn on camera</button>
-          <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600">Not now</button>
+          <button type="button" onClick={allowCamera} className="inline-flex min-h-[44px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:scale-95">Turn on camera</button>
+          <button type="button" onClick={onClose} className="inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 px-4 text-sm font-medium text-gray-600">Not now</button>
         </div>
       </div>
     );
@@ -155,7 +155,7 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
             ? 'Camera permission was blocked. Type the barcode below instead.'
             : 'Camera scanning needs Chrome or an Android device. Type the barcode below instead.'}
         </p>
-        <button type="button" onClick={onClose} className="mt-3 text-sm font-semibold text-primary hover:underline">
+        <button type="button" onClick={onClose} className="mt-3 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-gray-200 px-4 text-sm font-semibold text-primary active:scale-95">
           Close camera
         </button>
       </div>
@@ -174,11 +174,11 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
         </span>
         <div className="flex items-center gap-1">
           {torchAvailable && (
-            <button type="button" onClick={toggleTorch} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40" aria-label={torchOn ? 'Turn torch off' : 'Turn torch on'}>
+            <button type="button" onClick={toggleTorch} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/40" aria-label={torchOn ? 'Turn torch off' : 'Turn torch on'}>
               {torchOn ? <FlashlightOff className="h-4 w-4" /> : <Flashlight className="h-4 w-4" />}
             </button>
           )}
-          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-black/40" aria-label="Close camera">
+          <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/40" aria-label="Close camera">
             <X className="h-4 w-4" />
           </button>
         </div>
