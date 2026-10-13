@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, UserPlus, Loader2, ShieldCheck, Trash2, KeyRound, Users, UserX, UserCheck,
+  UserPlus, Loader2, ShieldCheck, Trash2, KeyRound, Users, UserX, UserCheck,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { listStaff, addStaff, updateStaff, removeStaff } from '../../lib/staffAdmin';
 import { roleLabel } from '../../lib/permissions';
 
@@ -72,9 +73,7 @@ export default function StaffView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} label="Back" />
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Users className="h-5 w-5" /></span>
         <div>

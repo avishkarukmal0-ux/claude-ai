@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Store, LogIn, UserPlus, Loader2, ShieldCheck, LogOut } from 'lucide-react';
+import { Store, LogIn, UserPlus, Loader2, ShieldCheck, LogOut } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import {
   login, register, guestDataExists, shopHasData, migrateGuestIntoShop, currentShop, useSession,
 } from '../../lib/account';
@@ -42,11 +43,8 @@ export default function AccountView({ onDone, onBack }) {
     const pending = pendingCount();
     return (
       <div>
-        {onBack && (
-          <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-        )}
+        {onBack && <ScreenBack onBack={onBack} label="Back" />}
+        <h1 className="mb-3 text-base font-bold text-gray-900">Your shop account</h1>
         <div className="mb-4 flex items-center gap-2">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Store className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -148,11 +146,7 @@ export default function AccountView({ onDone, onBack }) {
 
   return (
     <div>
-      {onBack && (
-        <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
-      )}
+      {onBack && <ScreenBack onBack={onBack} label="Back" />}
       <div className="mb-4 flex items-center gap-2">
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Store className="h-5 w-5" /></span>
         <div>

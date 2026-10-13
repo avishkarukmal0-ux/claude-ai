@@ -39,22 +39,34 @@ router.get('/status', ownerOrManager, (req, res) => {
   });
 });
 
-// POST /area { postcode: "SW1A1AA", force?: true } → one real figure for the store's area + full provenance +
-// freshness. POST (not GET) so the store's postcode travels in the request BODY, never in the URL — keeping it
-// out of access logs, proxy logs and browser history. `force` bypasses the server cache (owner/manager only).
-router.post('/area', ownerOrManager, async (req, res, next) => {
+// /area → one real figure for the store's area + full provenance + freshness.
+// Mounted on BOTH methods so a client and server deployed out of step still line up:
+//   • POST { postcode, force? } — PREFERRED: the postcode travels in the request BODY, so it never lands in
+//     access logs, proxy logs or browser history.
+//   • GET  ?postcode=&force=1   — legacy fallback for an older client whose POST would 404 on an un-updated
+//     server; the client only uses it when POST isn't available.
+// Distinct statuses so the UI can tell cases apart: 400 invalid postcode · 404 no data ({error:"no_data"}) ·
+// 401 not signed in (auth middleware) · 5xx upstream failure.
+async function areaHandler(req, res, next) {
   try {
-    const body = req.body || {};
-    const postcode = (body.postcode || '').toString();
+    const src = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+    const postcode = (src.postcode || '').toString();
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
-    const force = body.force === true || body.force === 1 || body.force === '1' || body.force === 'true';
+    const force = src.force === true || src.force === 1 || src.force === '1' || src.force === 'true';
     const out = await neighbourhood.getAreaProfile(postcode, { force });
     res.json({ success: true, ...out });
   } catch (err) {
-    if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, 'NEIGHBOURHOOD'));
+    if (err && err.statusCode) {
+      // A genuine "postcode not found" is a 404 — give it a machine-readable body so the UI shows the right
+      // "no official figures" message rather than a generic failure.
+      if (err.statusCode === 404) return res.status(404).json({ success: false, error: 'no_data', message: err.message });
+      return next(new AppError(err.message, err.statusCode, err.code || 'NEIGHBOURHOOD'));
+    }
     next(err);
   }
-});
+}
+router.post('/area', ownerOrManager, areaHandler);
+router.get('/area', ownerOrManager, areaHandler);
 
 // GET /radius?postcode=&radiusM= → radius-aggregated census figures for the catchment circle, so the numbers on
 // the "Your area" card re-sum as the radius changes. This is the PAID Neighbourhood Insights aggregation; here it

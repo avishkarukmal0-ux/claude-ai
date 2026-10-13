@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, CloudCog, RotateCcw, Loader2, RefreshCw } from 'lucide-react';
+import { CloudCog, RotateCcw, Loader2, RefreshCw } from 'lucide-react';
 import { getCloudHistory, restoreCloudVersion } from '../../lib/cloudBackup';
 import { syncNow } from '../../lib/sync';
+import ScreenBack from '../common/ScreenBack';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 const STORE_LABEL = {
   inventory_v1: 'Stock', suppliers_v1: 'Suppliers', buylist_v1: 'Buy list', waste_v1: 'Waste',
@@ -15,6 +17,22 @@ const STORE_LABEL = {
 const label = (n) => STORE_LABEL[n] || n.replace(/_v1$/, '');
 const when = (ts) => { try { return new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
 
+// Internal keys that aren't user-facing "data to roll back" — don't list them (e.g. the shop-type marker).
+const HIDE_STORES = new Set(['shop_type']);
+
+// Collapse versions saved within the same MINUTE into one row (keep the newest rev of that minute) — a burst of
+// edits shouldn't flood the list with near-identical entries.
+function mergeByMinute(list = []) {
+  const byMin = new Map();
+  for (const h of list) {
+    const t = h.mtime || h.at || 0;
+    const key = Math.floor(new Date(t).getTime() / 60000); // minute bucket
+    const prev = byMin.get(key);
+    if (!prev || (h.rev || 0) > (prev.rev || 0)) byMin.set(key, h); // keep the latest rev in the minute
+  }
+  return [...byMin.values()].sort((a, b) => (b.rev || 0) - (a.rev || 0));
+}
+
 /**
  * Cloud version history + restore (Phase 1.3b). Lists the recent server-kept revisions of each store and
  * lets the owner/manager roll one back after a bad change — recovering from an overwrite that cross-device
@@ -24,6 +42,7 @@ const when = (ts) => { try { return new Date(ts).toLocaleString('en-GB', { day: 
 export default function CloudBackups({ onBack }) {
   const [state, setState] = useState({ loading: true, enabled: false, history: {}, error: null });
   const [restoring, setRestoring] = useState(null); // `${name}:${rev}` in progress
+  const [confirmRestore, setConfirmRestore] = useState(null); // { name, rev, h } pending confirm
 
   async function load() {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -37,7 +56,7 @@ export default function CloudBackups({ onBack }) {
   useEffect(() => { load(); }, []);
 
   async function restore(name, rev) {
-    if (!window.confirm(`Restore ${label(name)} to version ${rev}?\n\nThis replaces the current ${label(name)} on every device. The current version stays in history, so you can undo.`)) return;
+    setConfirmRestore(null);
     setRestoring(`${name}:${rev}`);
     try {
       await restoreCloudVersion(name, rev);
@@ -51,15 +70,13 @@ export default function CloudBackups({ onBack }) {
     }
   }
 
-  const stores = Object.keys(state.history).sort((a, b) => label(a).localeCompare(label(b)));
+  const stores = Object.keys(state.history)
+    .filter((n) => !HIDE_STORES.has(n))
+    .sort((a, b) => label(a).localeCompare(label(b)));
 
   return (
     <div>
-      {onBack && (
-        <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
-      )}
+      {onBack && <ScreenBack onBack={onBack} label="Back" />}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><CloudCog className="h-5 w-5" /></span>
@@ -68,7 +85,7 @@ export default function CloudBackups({ onBack }) {
             <p className="text-xs text-gray-400">Roll a store back to an earlier saved version</p>
           </div>
         </div>
-        <button type="button" onClick={load} className="flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500" aria-label="Refresh">
+        <button type="button" onClick={load} className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500" aria-label="Refresh version history">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>
@@ -92,7 +109,7 @@ export default function CloudBackups({ onBack }) {
             <div key={name}>
               <h3 className="mb-1.5 px-1 text-xs font-bold uppercase tracking-wide text-gray-400">{label(name)}</h3>
               <ul className="space-y-2">
-                {state.history[name].map((h) => (
+                {mergeByMinute(state.history[name]).map((h) => (
                   <li key={h.rev} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-gray-900">
@@ -102,9 +119,10 @@ export default function CloudBackups({ onBack }) {
                     </div>
                     <button
                       type="button"
-                      onClick={() => restore(name, h.rev)}
+                      onClick={() => setConfirmRestore({ name, rev: h.rev, h })}
                       disabled={!!restoring}
-                      className="flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 active:scale-95 disabled:opacity-50"
+                      aria-label={`Restore version ${h.rev}, ${when(h.mtime || h.at)}`}
+                      className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 active:scale-95 disabled:opacity-50"
                     >
                       {restoring === `${name}:${h.rev}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Restore
                     </button>
@@ -115,6 +133,16 @@ export default function CloudBackups({ onBack }) {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmRestore}
+        title={`Restore ${confirmRestore ? label(confirmRestore.name) : ''}?`}
+        message={confirmRestore ? `This replaces the current ${label(confirmRestore.name)} on every signed-in device with the version from ${when(confirmRestore.h.mtime || confirmRestore.h.at)} (version ${confirmRestore.rev}). The current version stays in history, so you can undo.` : ''}
+        confirmLabel="Restore"
+        tone="danger"
+        onConfirm={() => restore(confirmRestore.name, confirmRestore.rev)}
+        onCancel={() => setConfirmRestore(null)}
+      />
     </div>
   );
 }

@@ -6,10 +6,15 @@ import { currentSession } from './account';
 
 const API_BASE = (() => { try { return (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, ''); } catch { return ''; } })();
 const BASE = `${API_BASE}/api/pwa-neighbourhood`;
-const STORE_KEY = 'neighbourhood_v1';      // { [postcode]: { data, fetched_at } } — local-only (never synced)
-const COLD_START_MS = 55000;               // Render free tier can take ~50s to wake; don't hang forever
+const STORE_KEY = 'neighbourhood_v1';      // { [postcode]: { data, fetched_at } } — local-only, workspace-scoped (per shop)
+const TIMEOUT_MS = 30000;                   // hard cap: abort after 30s (the UI warns about a cold start at 5s)
 
 function norm(pc) { return String(pc || '').toUpperCase().replace(/\s+/g, ''); }
+
+// Client-side UK postcode check (trimmed, uppercased, space-insensitive) so we never send obvious rubbish and can
+// show "check the postcode" before any request. Mirrors the server's acceptance; not a full PAF validation.
+const UK_POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/;
+export function isValidUkPostcode(pc) { return UK_POSTCODE_RE.test(norm(pc)); }
 function authHeader() { const s = currentSession(); return s && s.token ? { Authorization: `Bearer ${s.token}` } : {}; }
 
 function readCache() { try { return readJSON(STORE_KEY, {}) || {}; } catch { return {}; } }
@@ -43,32 +48,63 @@ export async function fetchTileObjectURL(z, x, y) {
   return URL.createObjectURL(await res.blob());
 }
 
+// One /area request. PREFERRED is POST with the postcode in the BODY (keeps it out of URLs/logs). GET is a
+// fallback for a server deployed out of step (one that only has GET /area) so the feature still works there.
+function requestArea(pc, force, signal, method) {
+  if (method === 'GET') {
+    const qs = `postcode=${encodeURIComponent(pc)}${force ? '&force=1' : ''}`;
+    return _fetch(`${BASE}/area?${qs}`, { headers: authHeader(), signal });
+  }
+  return _fetch(`${BASE}/area`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+    body: JSON.stringify({ postcode: pc, force: !!force }),
+    signal,
+  });
+}
+
 /**
- * Get the area figure for a store postcode. Online → fresh data (and caches it); offline / timeout / error →
- * the last stored copy flagged `offline:true`; nothing stored → { available:false, unavailable:true }.
- * Never throws for the "no data" case, so the UI can always render something sensible.
+ * Get the area figure for a store postcode. Returns a TYPED outcome the UI maps to a distinct message:
+ *   success:            { ok:true,  offline:false, ...body }           (body.available + figures)
+ *   stored copy shown:  { ok:true,  offline:true,  kind:'offline'|'network', stored_fetched_at, ...storedBody }
+ *   invalid postcode:   { ok:false, kind:'invalid' }    (400)
+ *   no official data:   { ok:false, kind:'no_data' }    (404 {error:'no_data'})
+ *   not signed in:      { ok:false, kind:'auth' }        (401/403)
+ *   couldn't reach it:  { ok:false, kind:'network' }     (5xx / timeout / offline with nothing stored)
+ * Never throws — the UI always has something sensible to render. Caches a successful body per shop (storage.js
+ * is workspace-scoped), so the saved copy follows the shop, not the device.
  */
-export async function getArea(postcode, { timeoutMs = COLD_START_MS, force = false } = {}) {
+export async function getArea(postcode, { timeoutMs = TIMEOUT_MS, force = false } = {}) {
   const pc = norm(postcode);
+  // Offline: serve the last saved copy (clearly flagged) or an honest "nothing saved".
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    const stored = getStored(pc);
+    return stored ? { ...stored.data, ok: true, offline: true, kind: 'offline', stored_fetched_at: stored.fetched_at } : { ok: false, kind: 'offline' };
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    // POST with the postcode in the BODY (never the URL) so the store's postcode stays out of access/proxy logs
-    // and browser history. `force` asks the backend to bypass its cache and re-fetch now (owner/manager only; the
-    // route enforces the role) — used by the card's "Refresh" action so an owner needn't wait for the TTL.
-    const res = await _fetch(`${BASE}/area`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ postcode: pc, force: !!force }),
-      signal: controller.signal,
-    });
+    let res = await requestArea(pc, force, controller.signal, 'POST');
+    // Deploy-mismatch fallback: a server with only GET /area returns a plain 404 for POST (no {error:'no_data'}).
+    // Retry once with GET so the feature works until the backend's POST route is deployed.
+    if (res.status === 404) {
+      let b = null; try { b = await res.clone().json(); } catch { /* non-JSON 404 = method not found */ }
+      if (!(b && b.error === 'no_data')) {
+        const getRes = await requestArea(pc, force, controller.signal, 'GET');
+        if (getRes.ok || getRes.status !== 404) res = getRes;
+      }
+    }
     let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
-    if (!res.ok) throw Object.assign(new Error((body && body.message) || `Request failed (${res.status})`), { status: res.status });
-    putStored(pc, body);
-    return { ...body, offline: false };
-  } catch (err) {
+    if (res.ok) { putStored(pc, body); return { ...body, ok: true, offline: false }; }
+    if (res.status === 400) return { ok: false, kind: 'invalid' };
+    if (res.status === 401 || res.status === 403) return { ok: false, kind: 'auth' };
+    if (res.status === 404) return { ok: false, kind: 'no_data' };
+    // 5xx / unexpected → fall back to a saved copy if we have one, else a network error.
     const stored = getStored(pc);
-    if (stored) return { ...stored.data, offline: true, stored_fetched_at: stored.fetched_at, error: err.message };
-    return { available: false, unavailable: true, offline: typeof navigator !== 'undefined' && navigator.onLine === false, error: err.message };
+    return stored ? { ...stored.data, ok: true, offline: true, kind: 'network', stored_fetched_at: stored.fetched_at } : { ok: false, kind: 'network' };
+  } catch {
+    // Abort (timeout) or a dropped connection → saved copy if any, else a network error with Retry.
+    const stored = getStored(pc);
+    return stored ? { ...stored.data, ok: true, offline: true, kind: 'network', stored_fetched_at: stored.fetched_at } : { ok: false, kind: 'network' };
   } finally { clearTimeout(timer); }
 }

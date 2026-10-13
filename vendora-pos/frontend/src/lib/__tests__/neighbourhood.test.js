@@ -60,20 +60,57 @@ describe('neighbourhoodClient — online + offline fallback', () => {
     expect(out.stored_fetched_at).toBeTruthy();
   });
 
-  it('offline with nothing stored: honest unavailable (never invented numbers)', async () => {
+  it('network error with nothing stored: typed network failure (never invented numbers)', async () => {
     __setFetch(async () => { throw new Error('network down'); });
-    const out = await getArea('SW1A 1AA');
-    expect(out.available).toBe(false);
-    expect(out.unavailable).toBe(true);
+    const out = await getArea('RM10 8AA');
+    expect(out.ok).toBe(false);
+    expect(out.kind).toBe('network');
     expect(out.figures).toBeUndefined();
   });
 
-  it('a non-OK response falls back to stored (not treated as data)', async () => {
+  it('a 5xx response falls back to stored (not treated as data)', async () => {
     __setFetch(async () => ({ ok: true, status: 200, json: async () => SAMPLE }));
     await getArea('RM10 8AA');
     __setFetch(async () => ({ ok: false, status: 502, json: async () => ({ message: 'upstream down' }) }));
     const out = await getArea('RM10 8AA');
     expect(out.offline).toBe(true);
+    expect(out.ok).toBe(true);
     expect(out.available).toBe(true);
+  });
+
+  it('maps status codes to distinct typed outcomes', async () => {
+    __setFetch(async () => ({ ok: false, status: 400, json: async () => ({ error: 'invalid' }) }));
+    expect((await getArea('ZZ99 9ZZ')).kind).toBe('invalid');
+    __setFetch(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+    expect((await getArea('RM10 8AA')).kind).toBe('auth');
+    __setFetch(async () => ({ ok: false, status: 404, json: async () => ({ error: 'no_data' }) }));
+    expect((await getArea('RM10 8AA')).kind).toBe('no_data');
+  });
+
+  it('falls back to GET when POST 404s on an out-of-step server (deploy mismatch)', async () => {
+    const calls = [];
+    __setFetch(async (url, opts) => {
+      calls.push({ url, method: (opts && opts.method) || 'GET' });
+      if (!opts || opts.method !== 'POST') return { ok: true, status: 200, json: async () => SAMPLE }; // GET works
+      return { ok: false, status: 404, json: async () => { throw new Error('html'); } };                // POST not found
+    });
+    const out = await getArea('RM10 8AA');
+    expect(out.ok).toBe(true);
+    expect(out.available).toBe(true);
+    expect(calls.some((c) => c.method === 'POST')).toBe(true);          // tried POST first
+    expect(calls.some((c) => c.method === 'GET' && /postcode=/.test(c.url))).toBe(true); // then GET fallback
+  });
+});
+
+describe('isValidUkPostcode', () => {
+  it('accepts valid UK formats (space-insensitive) and rejects rubbish', async () => {
+    const { isValidUkPostcode } = await import('../neighbourhoodClient');
+    expect(isValidUkPostcode('RM10 8AA')).toBe(true);
+    expect(isValidUkPostcode('rm108aa')).toBe(true);
+    expect(isValidUkPostcode('SW1A 1AA')).toBe(true);
+    expect(isValidUkPostcode('M1 1AE')).toBe(true);
+    expect(isValidUkPostcode('')).toBe(false);
+    expect(isValidUkPostcode('NOPE')).toBe(false);
+    expect(isValidUkPostcode('12345')).toBe(false);
   });
 });

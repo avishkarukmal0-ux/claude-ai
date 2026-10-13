@@ -34,7 +34,7 @@ export default function SyncStatus() {
     <button
       type="button"
       onClick={() => syncNow()}
-      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium"
+      className="flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-xs font-medium"
       aria-label="Cross-device sync status — tap to sync now"
     >
       <Icon className={`h-3.5 w-3.5 ${tone} ${s.status === 'syncing' ? 'animate-spin' : ''}`} />

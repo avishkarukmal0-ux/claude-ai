@@ -545,8 +545,8 @@ function EmptyState({ onAdd, onImport }) {
       <p className="text-sm font-semibold text-gray-900">No stock yet</p>
       <p className="mt-1 max-w-xs text-sm text-gray-500">Add your first product, scan a delivery, or import your list from an old till/spreadsheet.</p>
       <div className="mt-4 flex gap-2">
-        <button type="button" onClick={onAdd} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white">Add a product</button>
-        {onImport && <button type="button" onClick={onImport} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-600">Import CSV</button>}
+        <button type="button" onClick={onAdd} className="inline-flex min-h-[44px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-white">Add a product</button>
+        {onImport && <button type="button" onClick={onImport} className="inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 px-4 text-sm font-semibold text-gray-600">Import CSV</button>}
       </div>
     </div>
   );

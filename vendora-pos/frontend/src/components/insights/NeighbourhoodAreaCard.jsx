@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Users, Loader2, RefreshCw, WifiOff, Info, AlertTriangle, ArrowLeft, Globe2, ChevronDown } from 'lucide-react';
-import { getArea, fetchTileObjectURL, getRadiusProfile } from '../../lib/neighbourhoodClient';
+import { getArea, fetchTileObjectURL, getRadiusProfile, isValidUkPostcode } from '../../lib/neighbourhoodClient';
 import { currentSession } from '../../lib/account';
 import ScreenBack from '../common/ScreenBack';
 import { NEIGHBOURHOOD_ENABLED } from '../../lib/features';
@@ -28,6 +28,7 @@ const fmtNum = (n) => (Number(n) || 0).toLocaleString('en-GB');
 export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = null }) {
   const [postcode, setPostcode] = useState(defaultPostcode);
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false); // after ~5s, hint that the server may be waking up
   const [result, setResult] = useState(null);
   const [unit, setUnit] = useState('mi');
   const [radiusM, setRadiusM] = useState(1000);
@@ -140,24 +141,31 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   if (!NEIGHBOURHOOD_ENABLED) return null;
 
   async function load(force = false) {
-    if (!postcode.trim()) { toast.error('Enter your shop postcode'); return; }
-    // The area API needs a signed-in account; in demo/sample mode there's no token, so calling it just 401s
-    // after a long cold start. Short-circuit with a clear prompt instead of making the owner wait.
-    if (!currentSession()?.token) { setResult({ available: false, needSignIn: true }); return; }
-    setBusy(true);
+    const pc = postcode.trim();
+    // Validate client-side first, so obvious rubbish never leaves the device and the message is instant.
+    if (!pc) { setResult({ ok: false, kind: 'empty' }); return; }
+    if (!isValidUkPostcode(pc)) { setResult({ ok: false, kind: 'invalid' }); return; }
+    // The area API needs a signed-in account; in demo/sample mode there's no token, so short-circuit.
+    if (!currentSession()?.token) { setResult({ ok: false, kind: 'auth' }); return; }
+    setBusy(true); setSlow(false);
+    const slowTimer = setTimeout(() => setSlow(true), 5000); // cold-start hint
     try {
-      const res = await getArea(postcode.trim(), { force });
+      const res = await getArea(pc, { force });
       setResult(res);
-      // Audit F9 (round 2): only announce "Refreshed" when we actually got FRESH online data. Previously an
-      // explicit refresh toasted "Refreshed" even when the result was unavailable, offline or a stale fallback.
-      if (force) {
-        const fresh = res && res.available && !res.offline && res.freshness !== 'out_of_date';
-        if (fresh) toast.success('Refreshed');
-        else if (res && res.offline) toast.error('Still offline — showing the last saved copy');
-        else toast.error((res && res.reason) || 'Couldn’t refresh — area data is unavailable right now');
-      }
-    } finally { setBusy(false); }
+      if (force && res.ok && res.available && !res.offline && res.freshness !== 'out_of_date') toast.success('Refreshed');
+    } finally { clearTimeout(slowTimer); setBusy(false); setSlow(false); }
   }
+
+  // Distinct, screen-reader-announced message per failure case (role="alert" region below).
+  const ERROR_MSG = {
+    empty: 'Enter your shop postcode.',
+    invalid: 'Check the postcode and try again.',
+    no_data: 'We have no official figures for this postcode.',
+    network: 'Couldn’t reach the service. Try again.',
+    offline: 'No saved copy yet — connect to get figures.',
+    auth: 'Sign in to see local figures.',
+  };
+  const showFigures = result && result.ok && result.available && (result.figures || []).length > 0;
 
   return (
     <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -165,32 +173,54 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
       <h3 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-900"><MapPin className="h-4 w-4 text-primary" /> Your area — official figures</h3>
       <p className="mb-3 text-xs text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
 
-      <div className="mb-3 flex gap-2">
-        <input value={postcode} onChange={(e) => setPostcode(e.target.value)} placeholder="Shop postcode e.g. RM10 8AA" aria-label="Shop postcode" className="min-h-[44px] flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-base uppercase focus:border-primary focus:outline-none" />
-        <button type="button" disabled={busy} onClick={() => load()} aria-label="Get area figures" className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-white active:scale-95 disabled:opacity-50">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {busy ? 'Loading…' : 'Get'}
+      <div className="mb-1 flex items-end gap-2">
+        <label className="min-w-0 flex-1">
+          <span className="mb-1 block text-xs font-medium text-gray-500">Shop postcode</span>
+          <div className="relative">
+            <input
+              value={postcode}
+              onChange={(e) => setPostcode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') load(); }}
+              placeholder="e.g. AB1 2CD"
+              aria-label="Shop postcode"
+              autoComplete="postal-code"
+              autoCapitalize="characters"
+              inputMode="text"
+              className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 pr-9 text-base uppercase focus:border-primary focus:outline-none"
+            />
+            {postcode && (
+              <button type="button" onClick={() => { setPostcode(''); setResult(null); }} aria-label="Clear postcode" className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:text-gray-700">×</button>
+            )}
+          </div>
+        </label>
+        <button type="button" disabled={busy} aria-busy={busy} onClick={() => load()} aria-label="Get area figures" className="inline-flex min-h-[44px] min-w-[72px] items-center justify-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-bold text-white active:scale-95 disabled:opacity-50">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} {busy ? 'Looking up…' : 'Get'}
         </button>
       </div>
-      {busy && <p className="mb-2 text-xs text-gray-400">First load can take up to a minute while the server wakes…</p>}
+      <p className="mb-3 text-xs text-gray-400">Used only to look up your area’s figures. Saved on this device for your shop; change or clear it any time.</p>
 
-      {result && result.needSignIn && (
-        <div className="rounded-xl border border-primary/20 bg-primary-50 p-3 text-[12px] text-gray-700">
-          <Info className="mb-0.5 mr-1 inline h-3.5 w-3.5 text-primary" />
-          Sign in to see local figures — official area data is tied to your shop account.
+      {busy && (
+        <p className="mb-2 text-xs text-gray-400" aria-live="polite">
+          Looking up…{slow ? ' The server may be waking up (up to 30s).' : ''}
+        </p>
+      )}
+
+      {result && !result.ok && (
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-700">
+          <span className="flex items-center gap-1.5">
+            {result.kind === 'auth' ? <Info className="h-3.5 w-3.5 text-primary" /> : <AlertTriangle className="h-3.5 w-3.5 text-gray-500" />}
+            {ERROR_MSG[result.kind] || 'Couldn’t load area figures.'}
+          </span>
+          {result.kind === 'network' && (
+            <button type="button" onClick={() => load()} className="inline-flex min-h-[44px] items-center rounded-lg bg-primary px-3 text-xs font-semibold text-white active:scale-95">Try again</button>
+          )}
         </div>
       )}
 
-      {result && !result.available && !result.needSignIn && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-[12px] text-gray-600">
-          <AlertTriangle className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
-          {result.unavailable ? (result.offline ? 'You’re offline and there’s no saved copy for this postcode yet.' : (result.reason || 'Area data is unavailable right now.')) : (result.reason || 'No figure for this area yet.')}
-        </div>
-      )}
-
-      {result && result.available && (result.figures || []).length > 0 && (
+      {showFigures && (
         <div className="space-y-2">
           {result.offline && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Offline — last updated {fmtDate(result.stored_fetched_at || result.fetchedAt)}</div>
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><WifiOff className="h-3.5 w-3.5" /> Saved {fmtDate(result.stored_fetched_at || result.fetchedAt)}, offline copy</div>
           )}
           {result.freshness === 'out_of_date' && !result.offline && (
             <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> These figures are out of date — couldn’t refresh.</div>
@@ -233,7 +263,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
               )}
             </section>
           )}
-          {(result.figures || []).map((f) => {
+          {(result.figures || []).filter((f) => f.source).map((f) => {
+            // Never show a figure without a source (#6) — every figure carries its provenance + "as at" date.
             if (f.kind === 'breakdown') return <BreakdownFigure key={f.key} f={f} />;
             if (f.kind === 'imd') return <DeprivationFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
             return <CountFigure key={f.key} f={f} fallbackDate={result.fetchedAt} />;
