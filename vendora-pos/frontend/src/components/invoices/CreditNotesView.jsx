@@ -7,6 +7,7 @@ import { useClaims } from '../../lib/claimStore';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useRecoveryGuard } from '../../lib/recoveryGuard';
 import ScreenBack from '../common/ScreenBack';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 // Supplier credit notes (Phase 2). Enter a credit note, see which claims it likely covers, and ALLOCATE
 // it (partial, or across several claims) with explicit confirmation — each allocation records money as
@@ -21,6 +22,8 @@ export default function CreditNotesView({ onBack }) {
   const recovery = useRecoveryGuard();
   const [adding, setAdding] = useState(false);
   const [allocating, setAllocating] = useState(null); // note id being allocated
+  const [confirmDelNote, setConfirmDelNote] = useState(null); // credit note pending delete-confirm
+  const [dupPending, setDupPending] = useState(null); // { note, dup } awaiting "save duplicate anyway"
 
   // Audit R9 (round 3): deleting a note removed its claim-side credits with forEach and IGNORED the results, then
   // deleted the note unconditionally — a failed claim write left the note gone while the claim still credited the
@@ -47,7 +50,7 @@ export default function CreditNotesView({ onBack }) {
   }
 
   function deleteNote(cn) {
-    if (!window.confirm('Delete this credit note? (claim credits from it will be removed)')) return;
+    setConfirmDelNote(null);
     // V2: a note left in pending-repair is blocked until the owner reloads and checks it.
     if (noteBlocked(cn)) { toast.error('This note needs checking after a failed save — reload and verify its claims before changing it.'); return; }
     const removed = [];
@@ -90,7 +93,7 @@ export default function CreditNotesView({ onBack }) {
       )}
       {adding && <AddForm suppliers={suppliers} onCancel={() => setAdding(false)} onSave={(d) => {
         const dup = findDuplicate(d);
-        if (dup && !window.confirm(`This looks like a duplicate of a credit note you already have (${dup.supplierName || 'supplier'} · ${dup.reference || 'no ref'} · £${(Number(dup.amount) || 0).toFixed(2)}). Save it anyway?`)) return;
+        if (dup) { setDupPending({ note: d, dup }); return; } // confirm via accessible dialog, not window.confirm
         const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save');
       }} />}
 
@@ -113,7 +116,7 @@ export default function CreditNotesView({ onBack }) {
                     {left > 0.005 && <span className="mt-1 inline-block rounded-full bg-warning-light px-2 py-0.5 text-xs font-semibold text-warning-dark">{gbp(left)} unallocated</span>}
                     {left <= 0.005 && cn.amount > 0 && <span className="mt-1 inline-block rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success-dark">fully allocated</span>}
                   </div>
-                  <button type="button" onClick={() => deleteNote(cn)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setConfirmDelNote(cn)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete credit note ${cn.reference || cn.supplierName || ''}`.trim()}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 <button type="button" onClick={() => setAllocating(allocating === cn.id ? null : cn.id)} className="mt-2 flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 active:scale-95">
                   <Link2 className="h-3.5 w-3.5" /> {allocating === cn.id ? 'Close' : 'Match to claims'}
@@ -190,6 +193,24 @@ export default function CreditNotesView({ onBack }) {
           })}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelNote}
+        title="Delete this credit note?"
+        message={`${confirmDelNote?.supplierName || 'Credit note'}${confirmDelNote?.reference ? ` · ${confirmDelNote.reference}` : ''}. Any claim credits recorded from it will be removed.`}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => deleteNote(confirmDelNote)}
+        onCancel={() => setConfirmDelNote(null)}
+      />
+      <ConfirmDialog
+        open={!!dupPending}
+        title="Possible duplicate"
+        message={`This looks like a credit note you already have (${dupPending?.dup?.supplierName || 'supplier'} · ${dupPending?.dup?.reference || 'no ref'} · ${gbp(dupPending?.dup?.amount)}). Save it anyway?`}
+        confirmLabel="Save anyway"
+        onConfirm={() => { const d = dupPending.note; setDupPending(null); const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save'); }}
+        onCancel={() => setDupPending(null)}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { categoriesForFamily, categoriesInUse } from '../../config/categories';
 import { lookupBarcode } from '../../lib/productLookup';
 import TypedBarcodeEntry from './TypedBarcodeEntry';
 import ProductImage from '../common/ProductImage';
+import ConfirmDialog from '../common/ConfirmDialog';
 
 // Scan → identify. Scan (or type) a barcode and see exactly what it is: the product, its category, price,
 // margin and stock — and whether the scan was a SINGLE or a whole CASE. Book stock in (a case books in
@@ -151,6 +152,19 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
   const { product: p, unit, multiplier } = match;
   const [cases, setCases] = useState(1);
   const [singles, setSingles] = useState(1);
+  const [askBestBefore, setAskBestBefore] = useState(false);
+
+  function doSell() {
+    const r = inv.sellUnits(p.id, 1);
+    if (r.ok) onSold(); else toast.error(r.error || 'Nothing in stock');
+  }
+  function sellOne() {
+    // Expiry safety (audit W3): never quietly sell a past use-by item; warn on a past best-before.
+    const ei = worstExpiry(p);
+    if (ei && ei.mustPull) { toast.error('Past use-by — pull from sale, don’t sell it'); return; }
+    if (ei && ei.status === 'expired') { setAskBestBefore(true); return; } // accessible confirm, not window.confirm
+    doSell();
+  }
   const m = margin(p);
   const isCaseScan = unit === 'case';
   // Units per case = the PRODUCT's pack size (the scan's multiplier is 1 for a single-barcode scan, which
@@ -240,20 +254,24 @@ function ResultCard({ match, inv, onBookedIn, onSold, onScanNext, onDone }) {
       </div>
 
       {/* Sell one (quick) */}
-      <button type="button" onClick={() => {
-        // Expiry safety (audit W3): never quietly sell a past use-by item; warn on a past best-before.
-        const ei = worstExpiry(p);
-        if (ei && ei.mustPull) { toast.error('Past use-by — pull from sale, don’t sell it'); return; }
-        if (ei && ei.status === 'expired' && !window.confirm('This is past its best-before date. Sell anyway?')) return;
-        const r = inv.sellUnits(p.id, 1); if (r.ok) onSold(); else toast.error(r.error || 'Nothing in stock');
-      }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 active:scale-[0.99]">
+      <button type="button" onClick={sellOne} className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-700 active:scale-[0.99]">
         <Minus className="h-4 w-4" /> Sell 1
       </button>
 
       <div className="mt-4 flex gap-2">
-        <button type="button" onClick={onScanNext} className="flex-1 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white active:scale-[0.99]">Scan next</button>
-        <button type="button" onClick={onDone} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-medium text-gray-600">Done</button>
+        <button type="button" onClick={onScanNext} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-gray-900 px-4 text-sm font-semibold text-white active:scale-[0.99]">Scan next</button>
+        <button type="button" onClick={onDone} className="inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 px-4 text-sm font-medium text-gray-600">Done</button>
       </div>
+
+      <ConfirmDialog
+        open={askBestBefore}
+        title="Past best-before date"
+        message={`${p.name} is past its best-before date. Sell anyway?`}
+        confirmLabel="Sell anyway"
+        tone="danger"
+        onConfirm={() => { setAskBestBefore(false); doSell(); }}
+        onCancel={() => setAskBestBefore(false)}
+      />
     </div>
   );
 }

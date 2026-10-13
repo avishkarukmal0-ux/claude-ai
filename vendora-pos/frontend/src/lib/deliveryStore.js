@@ -78,7 +78,7 @@ function blankLine(over = {}) {
     packSize: 1, qtyMode: 'units',
     orderedQty: '', deliveredQty: 1, acceptedQty: '',
     unitCost: '', caseCost: '',
-    issue: null, note: '', photo: null,
+    issue: null, issueQty: '', note: '', photo: null,
     ...over,
   };
 }

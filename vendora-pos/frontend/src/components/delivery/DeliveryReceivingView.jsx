@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   Camera, Plus, Minus, Trash2, PackageCheck, Keyboard, Building2, Repeat,
@@ -63,10 +63,23 @@ export default function DeliveryReceivingView({ onBack }) {
     () => deliveries.filter((d) => d.status === 'received').sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 8),
     [deliveries],
   );
-  const openDrafts = useMemo(() => deliveries.filter((d) => d.status === 'draft'), [deliveries]);
+  // Only show drafts that actually have lines — empty ones are pruned (B4), so they never clutter the list.
+  const openDrafts = useMemo(() => deliveries.filter((d) => d.status === 'draft' && (d.lines || []).length > 0), [deliveries]);
 
   function edit(d) { setDraft(d); setDraftId(d.id); }
   function commit(nextDraft) { setDraft(nextDraft); updateDraft(nextDraft.id, nextDraft); }
+  // Leaving a draft with no lines discards it, so empty "Delivery · 0 lines" entries don't pile up (B4).
+  function leaveDraft() {
+    if (draft && (draft.lines || []).length === 0) removeDelivery(draft.id);
+    setDraft(null); setDraftId(null);
+  }
+
+  // Prune any empty drafts left behind by a previous session (e.g. app closed before adding a line) (B4).
+  useEffect(() => {
+    const empties = deliveries.filter((d) => d.status === 'draft' && (d.lines || []).length === 0 && d.id !== draftId);
+    empties.forEach((d) => removeDelivery(d.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deliveries.length]);
 
   function start() { edit(createDraft({})); }
   function repeat(id) { const d = repeatFrom(id); if (d) { edit(d); toast('Copied — review quantities & prices before receiving', { icon: '📝' }); } }
@@ -91,6 +104,15 @@ export default function DeliveryReceivingView({ onBack }) {
     commit({ ...draft, lines: draft.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) });
   }
   function removeLine(key) { commit({ ...draft, lines: draft.lines.filter((l) => l.key !== key) }); }
+
+  // Selecting an issue seeds a sensible AFFECTED quantity (so a claim is for the affected units, not the whole
+  // line). Missing defaults to the short-vs-ordered amount; damaged/wrong-price default to 1. Re-tapping clears.
+  function selectIssue(l, k) {
+    if (l.issue === k) { setLine(l.key, { issue: null }); return; }
+    const du = deliveredUnits(l); const ou = orderedUnits(l);
+    const suggested = k === 'missing' ? Math.max(1, ou - du) : 1;
+    setLine(l.key, { issue: k, issueQty: String(suggested) });
+  }
 
   async function attachPhoto(key, file) {
     if (!file) return;
@@ -178,7 +200,7 @@ export default function DeliveryReceivingView({ onBack }) {
                     <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'} {d.reference && `· ${d.reference}`}</span>
                     <span className="block text-xs text-gray-500">{d.lines.length} line{d.lines.length === 1 ? '' : 's'} · saved {new Date(d.updatedAt).toLocaleDateString('en-GB')}</span>
                   </button>
-                  <button type="button" onClick={() => removeDelivery(d.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Discard draft"><Trash2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => removeDelivery(d.id)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Discard draft ${d.supplierName || 'delivery'}`}><Trash2 className="h-4 w-4" /></button>
                 </li>
               ))}
             </ul>
@@ -198,7 +220,7 @@ export default function DeliveryReceivingView({ onBack }) {
                       <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'} {d.reference && `· ${d.reference}`}</span>
                       <span className="block text-xs text-gray-500">{t.acceptedUnits} units · {money(t.cost)}{t.discrepancies > 0 ? ` · ${t.discrepancies} issue${t.discrepancies === 1 ? '' : 's'}` : ''} · {new Date(d.receivedAt).toLocaleDateString('en-GB')}</span>
                     </span>
-                    <button type="button" onClick={() => repeat(d.id)} className="flex shrink-0 items-center gap-1 rounded-lg bg-primary-50 px-2 py-1 text-xs font-semibold text-primary active:scale-95">
+                    <button type="button" onClick={() => repeat(d.id)} aria-label={`Repeat delivery ${d.supplierName || ''}`.trim()} className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95">
                       <Repeat className="h-3.5 w-3.5" /> Repeat
                     </button>
                   </li>
@@ -215,7 +237,7 @@ export default function DeliveryReceivingView({ onBack }) {
   const totals = deliveryTotals(draft);
   return (
     <div>
-      <button type="button" onClick={() => { setDraft(null); setDraftId(null); }} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+      <button type="button" onClick={() => leaveDraft()} className="mb-3 inline-flex min-h-[44px] items-center gap-1 text-sm font-medium text-primary hover:underline" aria-label="Back to deliveries">
         <ChevronLeft className="h-4 w-4" /> Deliveries
       </button>
 
@@ -286,9 +308,9 @@ export default function DeliveryReceivingView({ onBack }) {
             const puc = perUnitCost(l);
             return (
               <li key={l.key} className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <input value={l.name} onChange={(e) => setLine(l.key, { name: e.target.value })} placeholder="Item name" className="min-w-0 flex-1 border-none p-0 text-sm font-semibold text-gray-900 placeholder-gray-400 focus:outline-none" />
-                  <button type="button" onClick={() => removeLine(l.key)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove line"><Trash2 className="h-4 w-4" /></button>
+                <div className="flex items-center justify-between gap-2">
+                  <input value={l.name} onChange={(e) => setLine(l.key, { name: e.target.value })} placeholder="Item name" aria-label="Item name" className="min-h-[44px] min-w-0 flex-1 border-none p-0 text-base font-semibold text-gray-900 placeholder-gray-400 focus:outline-none" />
+                  <button type="button" onClick={() => removeLine(l.key)} className="inline-flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Remove line${l.name ? ` ${l.name}` : ''}`}><Trash2 className="h-4 w-4" /></button>
                 </div>
                 {l.barcode && <div className="font-mono text-xs text-gray-400">{l.barcode}</div>}
 
@@ -296,12 +318,12 @@ export default function DeliveryReceivingView({ onBack }) {
                 <div className="mt-2 flex items-center gap-2 text-xs">
                   <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
                     {['units', 'cases'].map((m) => (
-                      <button key={m} type="button" onClick={() => setLine(l.key, { qtyMode: m })} className={`px-2.5 py-1 text-xs font-semibold ${l.qtyMode === m ? 'bg-primary text-white' : 'bg-white text-gray-500'}`}>{m}</button>
+                      <button key={m} type="button" onClick={() => setLine(l.key, { qtyMode: m })} aria-pressed={l.qtyMode === m} className={`inline-flex min-h-[44px] items-center px-3 text-xs font-semibold ${l.qtyMode === m ? 'bg-primary text-white' : 'bg-white text-gray-500'}`}>{m}</button>
                     ))}
                   </div>
                   {l.qtyMode === 'cases' && (
-                    <label className="flex items-center gap-1 text-gray-500">×
-                      <input value={l.packSize} onChange={(e) => setLine(l.key, { packSize: e.target.value })} inputMode="numeric" className="w-12 rounded-lg border border-gray-200 px-2 py-1 text-center" aria-label="Pack size" />
+                    <label className="flex min-h-[44px] items-center gap-1 text-gray-500">×
+                      <input value={l.packSize} onChange={(e) => setLine(l.key, { packSize: e.target.value })} inputMode="numeric" className="min-h-[44px] w-14 rounded-lg border border-gray-200 px-2 text-center text-base" aria-label={`Pack size for ${l.name || 'line'}`} />
                       per case
                     </label>
                   )}
@@ -310,25 +332,25 @@ export default function DeliveryReceivingView({ onBack }) {
                 {/* ordered / delivered / accepted */}
                 <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-gray-500">
                   <label className="flex flex-col gap-0.5">Ordered
-                    <input value={l.orderedQty} onChange={(e) => setLine(l.key, { orderedQty: e.target.value })} inputMode="numeric" placeholder="—" className="rounded-lg border border-gray-200 px-2 py-1 text-center text-sm text-gray-900" />
+                    <input value={l.orderedQty} onChange={(e) => setLine(l.key, { orderedQty: e.target.value })} inputMode="numeric" placeholder="—" aria-label={`Ordered quantity for ${l.name || 'line'}`} className="min-h-[44px] rounded-lg border border-gray-200 px-2 text-center text-base text-gray-900" />
                   </label>
                   <label className="flex flex-col gap-0.5">Delivered
-                    <input value={l.deliveredQty} onChange={(e) => setLine(l.key, { deliveredQty: e.target.value })} inputMode="numeric" className="rounded-lg border border-gray-200 px-2 py-1 text-center text-sm font-semibold text-gray-900" />
+                    <input value={l.deliveredQty} onChange={(e) => setLine(l.key, { deliveredQty: e.target.value })} inputMode="numeric" aria-label={`Delivered quantity for ${l.name || 'line'}`} className="min-h-[44px] rounded-lg border border-gray-200 px-2 text-center text-base font-semibold text-gray-900" />
                   </label>
                   <label className="flex flex-col gap-0.5">Accepted
-                    <input value={l.acceptedQty} onChange={(e) => setLine(l.key, { acceptedQty: e.target.value })} inputMode="numeric" placeholder={String(l.deliveredQty)} className="rounded-lg border border-gray-200 px-2 py-1 text-center text-sm text-gray-900" />
+                    <input value={l.acceptedQty} onChange={(e) => setLine(l.key, { acceptedQty: e.target.value })} inputMode="numeric" placeholder={String(l.deliveredQty)} aria-label={`Accepted quantity for ${l.name || 'line'}`} className="min-h-[44px] rounded-lg border border-gray-200 px-2 text-center text-base text-gray-900" />
                   </label>
                 </div>
 
                 {/* cost */}
                 <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
                   {l.qtyMode === 'cases' ? (
-                    <label className="flex items-center gap-1">Case cost £
-                      <input value={l.caseCost} onChange={(e) => setLine(l.key, { caseCost: e.target.value })} inputMode="decimal" placeholder="0.00" className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900" />
+                    <label className="flex min-h-[44px] items-center gap-1">Case cost £
+                      <input value={l.caseCost} onChange={(e) => setLine(l.key, { caseCost: e.target.value })} inputMode="decimal" placeholder="0.00" aria-label={`Case cost for ${l.name || 'line'}`} className="min-h-[44px] w-20 rounded-lg border border-gray-200 px-2 text-base text-gray-900" />
                     </label>
                   ) : (
-                    <label className="flex items-center gap-1">Unit cost £
-                      <input value={l.unitCost} onChange={(e) => setLine(l.key, { unitCost: e.target.value })} inputMode="decimal" placeholder="0.00" className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900" />
+                    <label className="flex min-h-[44px] items-center gap-1">Unit cost £
+                      <input value={l.unitCost} onChange={(e) => setLine(l.key, { unitCost: e.target.value })} inputMode="decimal" placeholder="0.00" aria-label={`Unit cost for ${l.name || 'line'}`} className="min-h-[44px] w-20 rounded-lg border border-gray-200 px-2 text-base text-gray-900" />
                     </label>
                   )}
                   <span className="text-gray-400">= {money(puc)}/unit</span>
@@ -341,20 +363,40 @@ export default function DeliveryReceivingView({ onBack }) {
                   {shortfall && <span className="text-danger"> · short {ou - du} vs ordered</span>}
                 </div>
 
+                {/* Auto-surface a shortfall as a one-tap Missing claim (B3) — no need to hunt the chip. */}
+                {shortfall && l.issue !== 'missing' && (
+                  <button type="button" onClick={() => setLine(l.key, { issue: 'missing', issueQty: String(ou - du) })} className="mt-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-warning-light px-3 text-xs font-semibold text-warning-dark active:scale-95">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Short {ou - du} vs ordered — claim as missing
+                  </button>
+                )}
+
                 {/* issues */}
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {Object.entries(DELIVERY_ISSUES).map(([k, v]) => (
-                    <button key={k} type="button" onClick={() => setLine(l.key, { issue: l.issue === k ? null : k })} className={`rounded-full px-2 py-0.5 text-xs font-semibold ${l.issue === k ? 'bg-danger text-white' : 'bg-gray-100 text-gray-500'}`}>{v.label}</button>
+                    <button key={k} type="button" onClick={() => selectIssue(l, k)} aria-pressed={l.issue === k} aria-label={`${v.label} — ${l.name || 'line'}`} className={`inline-flex min-h-[44px] items-center rounded-full px-3 text-xs font-semibold ${l.issue === k ? 'bg-danger text-white' : 'bg-gray-100 text-gray-500'}`}>{v.label}</button>
                   ))}
                 </div>
 
-                {/* note + photo */}
+                {/* Affected quantity for the selected claimable issue (B3) — the claim is valued on THIS many
+                    units × the unit cost, not the whole line. Max = delivered. */}
+                {l.issue && DELIVERY_ISSUES[l.issue]?.claimable && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-danger/5 px-2 py-2">
+                    <label className="flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-gray-600">How many units?
+                      <input value={l.issueQty ?? ''} onChange={(e) => setLine(l.key, { issueQty: e.target.value })} inputMode="numeric" min="1" max={du || undefined} aria-label={`Affected units for ${l.name || 'line'}`} className="min-h-[44px] w-16 rounded-lg border border-gray-200 px-2 text-center text-base text-gray-900 focus:border-primary focus:outline-none" />
+                    </label>
+                    {l.issue !== 'missing' && du > 0 && Number(l.issueQty) > du && (
+                      <span className="text-xs font-medium text-danger-dark">Only {du} delivered.</span>
+                    )}
+                  </div>
+                )}
+
+                {/* note (reason) + photo */}
                 <div className="mt-2 flex items-center gap-2">
-                  <input value={l.note} onChange={(e) => setLine(l.key, { note: e.target.value })} placeholder="Note (optional)" className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-primary focus:outline-none" />
+                  <input value={l.note} onChange={(e) => setLine(l.key, { note: e.target.value })} placeholder={l.issue ? 'Reason (e.g. crushed, leaking)' : 'Note (optional)'} aria-label="Reason or note" className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 px-2 text-base text-gray-900 focus:border-primary focus:outline-none" />
                   {l.photo ? (
-                    <img src={l.photo} alt="evidence" className="h-8 w-8 rounded object-cover" />
+                    <img src={l.photo} alt="evidence" className="h-11 w-11 rounded object-cover" />
                   ) : (
-                    <button type="button" onClick={() => photoInputs.current[l.key]?.click()} className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500" aria-label="Add photo"><ImagePlus className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => photoInputs.current[l.key]?.click()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500" aria-label={`Add photo for ${l.name || 'line'}`}><ImagePlus className="h-4 w-4" /></button>
                   )}
                   <input ref={(el) => { photoInputs.current[l.key] = el; }} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { attachPhoto(l.key, e.target.files?.[0]); e.target.value = ''; }} />
                 </div>

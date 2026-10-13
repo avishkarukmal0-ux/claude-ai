@@ -49,10 +49,21 @@ export function claimItemsFromDelivery(delivery) {
   return (delivery.lines || [])
     .filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable)
     .map((l) => {
+      // Affected quantity drives the claim VALUE (affected × unit cost), so it must be the units actually
+      // affected — not the whole line. The owner sets it per issue in the delivery form (l.issueQty); when
+      // that's present we use it (clamped to what was delivered). Otherwise fall back to a sensible default.
+      const delivered = deliveredUnits(l);
+      const explicit = Number(l.issueQty);
+      const hasExplicit = Number.isFinite(explicit) && explicit > 0;
       let affected;
-      if (l.issue === 'damaged') affected = Math.max(0, deliveredUnits(l) - acceptedUnits(l)) || deliveredUnits(l);
-      else if (l.issue === 'missing') affected = Math.max(0, orderedUnits(l) - deliveredUnits(l));
-      else affected = acceptedUnits(l); // wrong_price
+      if (l.issue === 'missing') {
+        // Missing = short vs ordered; default to the shortfall, but honour an explicit figure.
+        affected = hasExplicit ? explicit : Math.max(0, orderedUnits(l) - delivered);
+      } else if (l.issue === 'damaged') {
+        affected = hasExplicit ? Math.min(explicit, delivered) : (Math.max(0, delivered - acceptedUnits(l)) || 1);
+      } else { // wrong_price
+        affected = hasExplicit ? Math.min(explicit, delivered || explicit) : acceptedUnits(l);
+      }
       const base = {
         id: newId('ci'), name: l.name, barcode: l.barcode || '', productId: l.productId || null,
         qty: affected, reason: l.issue, photo: l.photo || null,

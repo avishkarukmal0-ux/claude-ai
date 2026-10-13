@@ -54,6 +54,7 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
   const [ocr, setOcr] = useState({ busy: false, text: null });
   const [reconcileId, setReconcileId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null); // invoice pending delete-confirm
+  const [confirmFile, setConfirmFile] = useState(null); // invoice whose stored scan is pending delete
   const fileRef = useRef(null);
 
   function doDeleteInvoice(inv) {
@@ -197,7 +198,7 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
                 )}
                 <button type="button" onClick={() => { setReconcileId(inv.id); setMode('reconcile'); }} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-700 active:scale-95">Check vs delivery</button>
                 {inv.fileId && (
-                  <button type="button" onClick={() => { if (window.confirm('Delete the stored scan/photo but keep the invoice record?')) { deleteFile(inv.id); toast.success('Stored file deleted'); } }} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-500 active:scale-95">Delete file</button>
+                  <button type="button" onClick={() => setConfirmFile(inv)} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-500 active:scale-95">Delete file</button>
                 )}
                 {backupOk && inv.fileId && (() => {
                   const st = backedUp.has(inv.fileId) ? 'uploaded' : (bkState[inv.fileId]?.status || 'none');
@@ -217,11 +218,20 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
       <ConfirmDialog
         open={!!confirmDel}
         title="Delete this invoice?"
-        message={`${confirmDel?.supplierName || 'Invoice'}${confirmDel?.reference ? ` · ${confirmDel.reference}` : ''}. Removes the record${confirmDel?.fileId ? ' and its stored scan' : ''}. You can undo straight after.`}
+        message={`${confirmDel?.supplierName || 'Invoice'}${confirmDel?.reference ? ` · ${confirmDel.reference}` : ''}. Removes the record${confirmDel?.fileId ? ' and its stored scan' : ''}.${confirmDel?.status === 'committed' ? ' This invoice is committed — deleting it also affects Payments due and Price history.' : ''} You can undo straight after.`}
         confirmLabel="Delete"
         tone="danger"
         onConfirm={() => doDeleteInvoice(confirmDel)}
         onCancel={() => setConfirmDel(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmFile}
+        title="Delete the stored scan?"
+        message="Removes the stored scan/photo but keeps the invoice record and its figures."
+        confirmLabel="Delete file"
+        tone="danger"
+        onConfirm={() => { deleteFile(confirmFile.id); setConfirmFile(null); toast.success('Stored file deleted'); }}
+        onCancel={() => setConfirmFile(null)}
       />
     </div>
   );

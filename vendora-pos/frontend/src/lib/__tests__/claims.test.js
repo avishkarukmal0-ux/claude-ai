@@ -32,6 +32,23 @@ describe('claims — build from delivery issues with evidence', () => {
     expect(missing.qty).toBe(3);        // 10 ordered − 7 delivered
     expect(missing.amount).toBeCloseTo(1.2); // 3 × 0.4
   });
+
+  it('honours an explicit affected quantity (issueQty) and caps it at delivered (B3)', () => {
+    const delivery = {
+      id: 'dq', status: 'received', supplierName: 'Booker',
+      lines: [
+        // 5 delivered, all accepted, but only 1 damaged → claim 1 unit, not the whole 5.
+        blankLine({ name: 'Eggs', barcode: '9', qtyMode: 'units', deliveredQty: 5, acceptedQty: 5, unitCost: 2.5, issue: 'damaged', issueQty: '1' }),
+      ],
+    };
+    const [item] = claimItemsFromDelivery(delivery);
+    expect(item.qty).toBe(1);
+    expect(item.amount).toBeCloseTo(2.5); // 1 × 2.50, not 12.50
+
+    // An over-stated figure is capped at what was delivered.
+    const capped = claimItemsFromDelivery({ ...delivery, lines: [blankLine({ name: 'Eggs', qtyMode: 'units', deliveredQty: 5, acceptedQty: 5, unitCost: 2.5, issue: 'damaged', issueQty: '99' })] });
+    expect(capped[0].qty).toBe(5);
+  });
 });
 
 describe('claims — lifecycle & honest amounts', () => {

@@ -27,19 +27,19 @@ describe('CreditNotesView — delete aborts (keeps the note) when a claim-side w
       credits: [{ creditNoteId: 'cn1', amount: 10 }], history: [],
     }]);
 
-    const { getAllByLabelText, container } = render(<CreditNotesView onBack={() => {}} />);
-    expect(getAllByLabelText('Delete')).toHaveLength(1);
+    const { getByLabelText, getByText, container } = render(<CreditNotesView onBack={() => {}} />);
+    expect(getByLabelText(/Delete credit note/)).toBeTruthy();
     expect(container.textContent).toContain('Bookerzz');
 
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    // Make the claim-side correction fail; the note delete must then NOT happen.
+    // Open the accessible confirm dialog, then confirm with the claim-side write failing.
+    fireEvent.click(getByLabelText(/Delete credit note/));
     const orig = storageNs.writeJSON;
     const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'claims_v1' ? { ok: false, error: 'quota' } : orig(name, value, ws)));
-    fireEvent.click(getAllByLabelText('Delete')[0]);
+    fireEvent.click(getByText('Delete')); // dialog confirm
     spy.mockRestore();
 
     // The note survives (pre-fix it would have been deleted while the claim still credited £10).
-    expect(getAllByLabelText('Delete')).toHaveLength(1);
+    expect(getByLabelText(/Delete credit note/)).toBeTruthy();
     expect(container.textContent).toContain('Bookerzz');
   });
 
@@ -55,12 +55,12 @@ describe('CreditNotesView — delete aborts (keeps the note) when a claim-side w
       credits: [{ creditNoteId: 'cn2', amount: 10 }], history: [],
     }]);
 
-    const { getAllByLabelText } = render(<CreditNotesView onBack={() => {}} />);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { getByLabelText, getByText } = render(<CreditNotesView onBack={() => {}} />);
+    fireEvent.click(getByLabelText(/Delete credit note/));
     // The claim-side removal (claims_v1) succeeds; only the NOTE write (credit_notes_v1) fails.
     const orig = storageNs.writeJSON;
     const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => (name === 'credit_notes_v1' ? { ok: false, error: 'quota' } : orig(name, value, ws)));
-    fireEvent.click(getAllByLabelText('Delete')[0]);
+    fireEvent.click(getByText('Delete')); // dialog confirm
     spy.mockRestore();
 
     // Note kept (its write failed) AND the claim credit was restored — not left split at claim £0.
@@ -82,8 +82,8 @@ describe('CreditNotesView — delete aborts (keeps the note) when a claim-side w
       id: 'cl3', supplierName: 'Splitco2', status: 'approved', approvedAmount: 10, receivedAmount: 10,
       credits: [{ creditNoteId: 'cn3', amount: 10 }], history: [],
     }]);
-    const { getAllByLabelText } = render(<CreditNotesView onBack={() => {}} />);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { getByLabelText, getByText } = render(<CreditNotesView onBack={() => {}} />);
+    fireEvent.click(getByLabelText(/Delete credit note/));
     const orig = storageNs.writeJSON;
     let claimsCalls = 0; // removeCredit (1st claims write) succeeds; the compensating applyCredit (2nd) fails
     const spy = vi.spyOn(storageNs, 'writeJSON').mockImplementation((name, value, ws) => {
@@ -91,7 +91,7 @@ describe('CreditNotesView — delete aborts (keeps the note) when a claim-side w
       if (name === 'credit_notes_v1') return { ok: false, error: 'quota' }; // the note write fails
       return orig(name, value, ws);
     });
-    fireEvent.click(getAllByLabelText('Delete')[0]);
+    fireEvent.click(getByText('Delete')); // dialog confirm
     spy.mockRestore();
     expect(hasRecovery('creditnote:cn3')).toBe(true); // round 4 recorded nothing here
   });
