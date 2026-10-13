@@ -19,6 +19,10 @@ const ALLOWED = new Set([
   'suggestions_v1', 'stocktake_v1', 'stocktake_history_v1', 'deliveries_v1', 'orders_v1', 'claims_v1',
   'price_alerts_v1', 'tasks_v1', 'handovers_v1', 'requests_v1', 'sales_imports_v1', 'invoices_v1',
   'credit_notes_v1', 'markdowns_v1', 'trials_v1',
+  // Business profile (onboarding) + the compliance/operational tool stores the PWA added later. These must be
+  // in sync lockstep with the client's STORE_NAMES — a client store missing here used to 422 the WHOLE push.
+  'business_profile_v1', 'temperature_log_v1', 'refusals_log_v1', 'refusals_signoff_v1', 'scale_checks_v1',
+  'food_registration_v1', 'licence_log_v1', 'trading_permits_v1', 'animal_licence_v1', 'recall_log_v1',
 ]);
 
 const MAX_VALUE_BYTES = 2 * 1024 * 1024; // 2 MB per store — generous for a single shop, bounds abuse
@@ -144,10 +148,12 @@ async function push(accountId, changes, role) {
 
   for (const c of changes) {
     const name = c && c.name;
-    if (!ALLOWED.has(name)) throw AppError.validation(`Unknown store: ${name}`);
+    // Per-store rejects, NOT a thrown 422: one unknown or oversized store must never wedge the whole sync (a
+    // client that's ahead of the server would otherwise block every store). The client re-adopts rejected ones.
+    if (!ALLOWED.has(name)) { rejected.push({ name, reason: 'unknown' }); continue; }
     if (!canWriteStore(role, name)) { rejected.push({ name, reason: 'forbidden' }); continue; }
     const value = typeof c.value === 'string' ? c.value : '';
-    if (Buffer.byteLength(value, 'utf8') > MAX_VALUE_BYTES) throw AppError.validation(`${name} is too large to sync`);
+    if (Buffer.byteLength(value, 'utf8') > MAX_VALUE_BYTES) { rejected.push({ name, reason: 'too_large' }); continue; }
     const baseRev = Number(c.baseRev) || 0;
     const mtime = Number(c.mtime) || 0;
 

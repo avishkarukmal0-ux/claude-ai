@@ -31,6 +31,8 @@ export const LOCAL_WORKSPACE = 'local'; // the guest / on-device (no account) wo
 
 // Logical store names (stable). Scoped key = `vendora:<workspace>:<name>`.
 // Legacy (pre-scoping) key = `vendora_<name>`.
+// Every name here that should sync across devices MUST also be in the backend's ALLOWED set
+// (backend/src/services/pwaSyncService.js) — a client store the server doesn't allow is rejected on push.
 export const STORE_NAMES = [
   'shop_type',
   'inventory_v1',
