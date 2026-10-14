@@ -7,6 +7,7 @@
 //  - Nomis `.data.json` parsing sums the breakdown and drops the Total row
 const nomis = require('../services/insightsData/nomis');
 const centroids = require('../services/insightsData/centroids');
+const oaStore = require('../services/insightsData/oaStore');
 const geo = require('../services/insightsGeo');
 const insights = require('../services/insightsService');
 
@@ -45,8 +46,10 @@ function stubTransport() {
   };
 }
 
-beforeEach(() => { centroids.__setForTest(CENTROIDS); nomis.__setTransport(stubTransport()); nomis.clearCache(); });
-afterEach(() => { centroids.__setForTest(null); nomis.__setTransport(null); nomis.clearCache(); });
+// oaStore has a process-wide in-memory layer (L1 in front of Mongo) that persists across calls — reset it per
+// test so one test's cached OAs don't suppress another's Nomis fetches (which the dataset-count assertions rely on).
+beforeEach(() => { centroids.__setForTest(CENTROIDS); nomis.__setTransport(stubTransport()); nomis.clearCache(); oaStore.__reset(); });
+afterEach(() => { centroids.__setForTest(null); nomis.__setTransport(null); nomis.clearCache(); oaStore.__reset(); });
 
 describe('nomis.parseObs', () => {
   test('sums a dimension by description and drops the Total row', () => {
@@ -119,7 +122,7 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     expect(Object.keys(oa.categories.language)).toHaveLength(0);
   });
 
-  test('a headline cache is NOT reused for a full request (the full profile still fetches all 4 tables)', async () => {
+  test('a headline cache is NOT reused for a full request (the full profile still gets every breakdown)', async () => {
     const seen = [];
     const base = stubTransport();
     nomis.__setTransport(async (url) => { seen.push((url.match(/dataset\/([^.]+)\.data\.json/) || [])[1]); return base(url); });
@@ -127,8 +130,12 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     seen.length = 0;
     const full = await nomis.fetchAreaProfiles(POINT, 500);            // must NOT read the headline cache
     const datasets = [...new Set(seen)].sort();
-    // all breakdown tables fetched: age + household + country of birth + ethnic group + language + econ activity + quals
-    expect(datasets).toEqual(['NM_2020_1', 'NM_2023_1', 'NM_2024_1', 'NM_2041_1', 'NM_2045_1', 'NM_2083_1', 'NM_2084_1']);
+    // The five breakdown tables are fetched on the full request (the invariant: a headline cache never satisfies a
+    // full one). Age + household are NOT re-fetched here — the per-OA oaStore already has them from the headline
+    // call — but their data is still present in the result (served from that cache).
+    expect(datasets).toEqual(['NM_2024_1', 'NM_2041_1', 'NM_2045_1', 'NM_2083_1', 'NM_2084_1']);
+    expect(full[0].population).toBe(80);                                            // age served from the OA cache
+    expect(full[0].households).toBe(35);                                            // household served from the OA cache
     expect(Object.keys(full[0].categories.ethnicGroup).length).toBeGreaterThan(0);  // full breakdowns present
     expect(Object.keys(full[0].categories.countryOfBirth).length).toBeGreaterThan(0); // incl. country of birth
     expect(Object.keys(full[0].categories.economicActivity).length).toBeGreaterThan(0); // incl. economic activity
@@ -173,6 +180,54 @@ describe('nomis.fetchAreaProfiles — centroid-in-radius', () => {
     const tiny = geo.combineAreaProfile([{ oa: 'X', population: 5, households: 2, categories: { ethnicGroup: { Other: 3 } } }], { radiusM: 500 });
     expect(tiny.categories.ethnicGroup[0].suppressed).toBe(true);
     expect(tiny.categories.ethnicGroup[0].display).toMatch(/fewer than/);
+  });
+});
+
+describe('oaStore + per-OA durable cache (fetch-only-missing + timings)', () => {
+  const T = nomis.DEFAULT_TABLES;
+
+  test('oaStore.put/get round-trips per (dataset, oa) in memory; empty counts still count as "known"', async () => {
+    await oaStore.put('NM_X', new Map([['E1', { a: 1 }], ['E2', {}]]));
+    const got = await oaStore.get('NM_X', ['E1', 'E2', 'E3']);
+    expect(got.get('E1')).toEqual({ a: 1 });
+    expect(got.has('E2')).toBe(true);  // an OA Nomis returned nothing for is remembered → not re-queried
+    expect(got.has('E3')).toBe(false); // never stored → the caller must fetch it
+  });
+
+  test('fetchTable asks Nomis for each OA only once, then serves it from the store (only missing OAs refetched)', async () => {
+    const asked = [];
+    const base = stubTransport();
+    nomis.__setTransport(async (url) => {
+      const oas = decodeURIComponent((url.match(/geography=([^&]+)/) || [])[1] || '').split(',').filter(Boolean);
+      asked.push(...oas);
+      return base(url);
+    });
+    const r1 = {};
+    await nomis.fetchTable(T.age, ['E00000A', 'E00000B'], r1);
+    expect(asked.sort()).toEqual(['E00000A', 'E00000B']);
+    expect(r1.oaFetched).toBe(2);
+    expect(r1.dataset).toBe('NM_2020_1');
+    expect(typeof r1.ms).toBe('number');
+    asked.length = 0;
+    const r2 = {};
+    const out = await nomis.fetchTable(T.age, ['E00000A', 'E00000B', 'E00000C'], r2); // A,B cached → only C new
+    expect(asked).toEqual(['E00000C']);
+    expect(r2.oaFromMem).toBe(2);
+    expect(r2.oaFetched).toBe(1);
+    expect(out.E00000A['Aged 16 to 64 years']).toBe(60); // A still returned, from the cache
+    expect(out.E00000C['Aged 16 to 64 years']).toBe(60); // C freshly fetched
+  });
+
+  test('fetchAreaProfiles records per-step timings (centroid load, OA select, per-table)', async () => {
+    await nomis.fetchAreaProfiles(POINT, 500, { headlineOnly: true });
+    const tm = nomis.lastTimings();
+    expect(tm).toBeTruthy();
+    expect(typeof tm.centroidsLoadMs).toBe('number');
+    expect(tm.oaSelected).toBeGreaterThan(0);
+    expect(Array.isArray(tm.tables)).toBe(true);
+    expect(tm.tables).toHaveLength(2); // headline = age + household composition
+    expect(tm.tables[0].dataset).toBeTruthy();
+    expect(typeof tm.nomisTotalMs).toBe('number');
   });
 });
 

@@ -103,10 +103,25 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // Connect to MongoDB and Redis in the background — never block or crash on failure
-connectDB().catch((err) => {
-  // connectDB already retries internally — this catch is a safety net only
-  logger.error(`Initial DB connect error (will keep retrying): ${err.message}`);
-});
+connectDB()
+  .then(() => {
+    // Warm the OA centroids into memory once the DB is up, so the FIRST /radius request doesn't pay the
+    // ~190k-row load (the biggest single chunk of the cold-path time). Fire-and-forget, insights-gated, never
+    // fatal. Only when centroids come from Mongo (no file path) and a census data provider is configured.
+    try {
+      const ni = config.neighbourhoodInsights;
+      if (ni && ni.enabled && ni.dataProvider && !(ni.data && ni.data.centroidsPath)) {
+        require('./src/services/insightsData/centroids')
+          .load()
+          .then((r) => logger.info(`Insights: OA centroids warmed into memory (${(r && r.count) || 0})`))
+          .catch((e) => logger.warn(`Insights: centroid warm failed (${e.message}) — first /radius will load them`));
+      }
+    } catch { /* never block startup on the warm */ }
+  })
+  .catch((err) => {
+    // connectDB already retries internally — this catch is a safety net only
+    logger.error(`Initial DB connect error (will keep retrying): ${err.message}`);
+  });
 
 connectRedis();
 

@@ -102,6 +102,15 @@ async function radiusHandler(req, res, next) {
     // WARN when it crosses the slow threshold (the intermittent cold-OA-fetch stall), INFO otherwise. The diag
     // (OAs found / with census data) tells rate-limiting/latency apart from a dataset/centroid gap.
     const diag = out && out.diag ? out.diag : {};
+    const timing = diag.timing || {};
+    // Per-Nomis-table summary (dataset, OAs requested, how many came from cache vs were fetched, ms, HTTP status,
+    // Retry-After) so a slow cold call shows exactly where the time went and whether Nomis rate-limited us.
+    const tables = Array.isArray(timing.tables) ? timing.tables.map((tbl) => ({
+      t: tbl.table || null, ds: tbl.dataset || null, req: tbl.oaRequested || 0,
+      mem: tbl.oaFromMem || 0, mongo: tbl.oaFromMongo || 0, fetched: tbl.oaFetched || 0,
+      ms: tbl.ms != null ? tbl.ms : null, status: tbl.status != null ? tbl.status : null,
+      retryAfter: tbl.retryAfter || null,
+    })) : undefined;
     logger.log(durationMs >= RADIUS_SLOW_MS ? 'warn' : 'info', 'pwa-neighbourhood /radius', {
       pc: pcTag(postcode), radiusM: Math.round(radiusM) || null, full,
       durationMs, configured: !!(out && out.configured), supported: !!(out && out.supported),
@@ -109,6 +118,20 @@ async function radiusHandler(req, res, next) {
       oaCount: diag.oaCount != null ? diag.oaCount : null,
       oasWithPopulation: diag.oasWithPopulation != null ? diag.oasWithPopulation : null,
       slow: durationMs >= RADIUS_SLOW_MS,
+      // Per-step cold-path breakdown (ms): postcode resolve, centroid load (+ whether already warm), OA select,
+      // Nomis total, aggregation — plus the per-table detail above.
+      step: {
+        resolveMs: timing.resolveMs != null ? timing.resolveMs : null,
+        centroidsLoadMs: timing.centroidsLoadMs != null ? timing.centroidsLoadMs : null,
+        centroidsWarm: timing.centroidsAlreadyLoaded != null ? timing.centroidsAlreadyLoaded : null,
+        centroidCount: timing.centroidCount != null ? timing.centroidCount : null,
+        selectMs: timing.selectMs != null ? timing.selectMs : null,
+        oaSelected: timing.oaSelected != null ? timing.oaSelected : null,
+        nomisTotalMs: timing.nomisTotalMs != null ? timing.nomisTotalMs : null,
+        aggregateMs: timing.aggregateMs != null ? timing.aggregateMs : null,
+        profileCacheHit: timing.profileCacheHit || null,
+      },
+      tables,
     });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
     // Note: no `testUnlock` flag in the response — it's an internal gate (INSIGHTS_TEST_UNLOCK), not client data.

@@ -156,7 +156,10 @@ async function buildProfile({ postcode, radiusM, headlineOnly = false }) {
 }
 
 async function computeProfile({ postcode, radiusM: r, headlineOnly }, ck) {
+  const startedAt = Date.now();
+  const resolveT = Date.now();
   const location = await loc.resolvePostcode(postcode);
+  const resolveMs = Date.now() - resolveT;
   if (!location.ok) return { ok: false, reason: location.reason };
   if (!location.supported) {
     const out = { ok: true, supported: false, country: location.country, reason: location.reason, ...BASE_META() };
@@ -188,7 +191,13 @@ async function computeProfile({ postcode, radiusM: r, headlineOnly }, ck) {
     try { const dep = await radiusDeprivation(areas); if (dep) profile.deprivation = dep; } catch { /* best-effort */ }
   }
 
-  const diag = (provider.lastDiag && provider.lastDiag()) || undefined; // testing aid: OAs that actually got data
+  const baseDiag = (provider.lastDiag && provider.lastDiag()) || null; // testing aid: OAs that actually got data
+  // Per-step cold-path timings (centroid load, OA selection, each Nomis table with cache hit/miss, aggregation)
+  // merged with the orchestration times, so the /radius route can log ONE line showing exactly where time went.
+  const providerTimings = (provider.lastTimings && provider.lastTimings()) || null;
+  const diag = (baseDiag || providerTimings)
+    ? { ...(baseDiag || {}), timing: { resolveMs, totalMs: Date.now() - startedAt, ...(providerTimings || {}) } }
+    : undefined;
   const out = { ok: true, supported: true, configured: true, location: locOut, profile, ...(diag ? { diag } : {}) };
   cacheSet(ck, out); // a real computed profile is static census data — cache it (makes Retry + repeat instant)
   return out;
