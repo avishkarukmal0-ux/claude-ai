@@ -37,7 +37,7 @@ const connectRedis = () => {
   // of trying to reach localhost:6379 in production and spamming connection errors. Add REDIS_URL later
   // to switch it back on.
   if (!process.env.REDIS_URL) {
-    logger.warn('Redis: REDIS_URL not set — running without Redis (caching and token blacklisting disabled)');
+    logger.warn('Redis: REDIS_URL not set — running without Redis (Redis caching disabled; refresh-token revocation now uses the durable Mongo TTL blacklist)');
     return null;
   }
 

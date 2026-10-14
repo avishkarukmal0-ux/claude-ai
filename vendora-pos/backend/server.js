@@ -111,10 +111,12 @@ connectDB()
     try {
       const ni = config.neighbourhoodInsights;
       if (ni && ni.enabled && ni.dataProvider && !(ni.data && ni.data.centroidsPath)) {
+        const warmStart = Date.now();
+        logger.info('Insights: warming OA centroids into memory…');
         require('./src/services/insightsData/centroids')
           .load()
-          .then((r) => logger.info(`Insights: OA centroids warmed into memory (${(r && r.count) || 0})`))
-          .catch((e) => logger.warn(`Insights: centroid warm failed (${e.message}) — first /radius will load them`));
+          .then((r) => logger.info(`Insights: OA centroids warmed into memory (${(r && r.count) || 0}) in ${Date.now() - warmStart}ms`))
+          .catch((e) => logger.warn(`Insights: centroid warm failed after ${Date.now() - warmStart}ms (${e.message}) — first /radius will load them`));
       }
     } catch { /* never block startup on the warm */ }
   })

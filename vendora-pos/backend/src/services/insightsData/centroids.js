@@ -144,13 +144,19 @@ async function loadFromMongo() {
  * Load centroids ONCE into memory (cached). Prefers a configured file (INSIGHTS_CENTROIDS_PATH, back-compat);
  * otherwise loads from MongoDB. Idempotent — re-reads only on force or a changed source.
  */
+let _loading = null; // in-flight load promise — shared so concurrent callers never start a second DB pull
 async function load({ force = false } = {}) {
   const path = config.neighbourhoodInsights.data.centroidsPath;
   if (_cache && !force) {
     if (path && _cache.source === 'file' && _cache.path === path) return { loaded: _cache.count > 0, count: _cache.count };
     if (!path && _cache.source === 'mongo') return { loaded: _cache.count > 0, count: _cache.count };
   }
-  return path ? loadFromFile(path) : loadFromMongo();
+  // Coalesce concurrent loads: the boot warm-up and any /radius that arrives during the ~25–30s centroid load
+  // share ONE promise (and ONE ~190k-row Mongo read) instead of each pulling its own copy. The request simply
+  // awaits the load already in progress and then proceeds — no duplicate work, no second connection spike.
+  if (_loading && !force) return _loading;
+  _loading = (path ? loadFromFile(path) : loadFromMongo()).finally(() => { _loading = null; });
+  return _loading;
 }
 
 /** Fast check of how many centroids exist WITHOUT loading them all into memory (for the status indicator). */
