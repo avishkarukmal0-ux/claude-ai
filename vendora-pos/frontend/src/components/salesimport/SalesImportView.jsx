@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, FileSpreadsheet, Upload, TrendingUp, Check, AlertTriangle, Undo2, Info,
+  FileSpreadsheet, Upload, TrendingUp, Check, AlertTriangle, Undo2, Info,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory } from '../../lib/inventoryStore';
 import {
   useSalesImport, parseCSV, guessMapping, buildImport, MAX_AGE_DAYS,
@@ -103,9 +104,7 @@ export default function SalesImportView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Import till sales</h2>
       <p className="mb-4 text-xs text-gray-400">
         Optional. Upload a sales export from your till/EPOS to turn estimated sell-through into

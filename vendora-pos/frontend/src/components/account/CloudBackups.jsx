@@ -85,7 +85,7 @@ export default function CloudBackups({ onBack }) {
             <p className="text-xs text-gray-400">Roll a store back to an earlier saved version</p>
           </div>
         </div>
-        <button type="button" onClick={load} className="flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500" aria-label="Refresh version history">
+        <button type="button" onClick={load} className="flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500" aria-label="Refresh version history">
           <RefreshCw className="h-4 w-4" />
         </button>
       </div>

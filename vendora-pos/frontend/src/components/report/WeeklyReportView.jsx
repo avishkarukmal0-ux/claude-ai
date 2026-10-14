@@ -41,7 +41,7 @@ export default function WeeklyReportView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
           <h2 className="text-base font-bold text-gray-900">Weekly report</h2>

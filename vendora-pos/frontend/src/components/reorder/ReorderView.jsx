@@ -145,7 +145,7 @@ export default function ReorderView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Buy list</h2>
       <p className="mb-3 text-xs text-gray-400">Low stock becomes your cash-&-carry list. Tick items off as you shop.</p>

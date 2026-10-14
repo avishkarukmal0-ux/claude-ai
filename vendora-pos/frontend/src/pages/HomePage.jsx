@@ -195,7 +195,22 @@ export default function HomePage() {
   const ToolComponent = activeTool?.component || null;
   // One sr-only <h1> per view, reflecting the open screen or the active tab (a11y — the page was heading-less).
   const TAB_TITLES = { today: 'Today', scan: 'Scan & check', stock: 'Stock', buy: 'Buy & suppliers', more: 'More' };
-  const pageTitle = screen ? screen.replace(/-/g, ' ') : (TAB_TITLES[tab] || 'Home');
+  // Human screen titles for the sr-only <h1> — so screen readers announce the visible screen name
+  // ("This month") rather than the raw internal key ("outcomes"). Keep keys in sync with setScreen() calls.
+  const SCREEN_TITLES = {
+    'scan-identify': 'Scan to identify', receive: 'Receive a delivery', stocktake: 'Count stock',
+    waste: 'Expiry & waste', refill: 'Refill', deadstock: 'Slow stock', 'category-insights': 'Category insights',
+    journey: 'Buying journey', reorder: 'Buy list', orders: 'Orders', suppliers: 'Suppliers',
+    invoices: 'Supplier invoices', claims: 'Supplier claims', 'credit-notes': 'Credit notes',
+    'price-alerts': 'Price changes', 'price-history': 'Price history', 'supplier-insights': 'Compare suppliers',
+    payments: 'Payments due', insights: 'Neighbourhood Insights', area: 'Your area', requests: 'Customer requests',
+    takings: 'Takings & cash-up', overview: 'Owner glance', outcomes: 'This month', 'weekly-report': 'Weekly report',
+    tasks: 'Team tasks', worker: 'Staff view', suggestions: 'From the team', 'sales-import': 'Import till sales',
+    'cloud-backups': 'Cloud version history', recovered: 'Recovered changes', 'credit-recovery': 'Credit note repair',
+    notifications: 'Notifications', support: 'Help & diagnostics', 'staff-admin': 'Staff access',
+  };
+  const titleCase = (s) => s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const pageTitle = screen ? (SCREEN_TITLES[screen] || titleCase(screen)) : (TAB_TITLES[tab] || 'Home');
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
@@ -245,7 +260,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto px-4 pb-24 pt-4 focus:outline-none">
+      <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 pb-24 pt-4 focus:outline-none">
         {/* Screen-level error recovery: a crash in any one screen shows a recovery card (and "Back to
             home") instead of blanking the whole app. Keyed by screen/tab so navigating away clears it. */}
         <ErrorBoundary key={screen || `tab:${tab}`} onReset={() => setScreen(null)}>

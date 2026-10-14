@@ -65,7 +65,7 @@ export default function RequestsView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Customer requests</h2>
       <p className="mb-4 text-xs text-gray-400">Log what customers ask for. The more a line is asked for, the higher it climbs.</p>
 

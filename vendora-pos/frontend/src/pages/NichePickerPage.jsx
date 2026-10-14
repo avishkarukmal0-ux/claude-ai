@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, Check, ChevronLeft, ArrowRight } from 'lucide-react';
+import { Sparkles, Check, ArrowRight } from 'lucide-react';
+import ScreenBack from '../components/common/ScreenBack';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
 import { useBusinessProfile, ENTITIES, TURNOVER_BANDS, REGIONS } from '../lib/businessProfile';
 import { onboardingQuestionsFor } from '../config/niche';
@@ -70,6 +71,7 @@ export default function NichePickerPage() {
           )}
         </header>
 
+        <main className="flex flex-1 flex-col">
         {/* STEP 1 — the 4 families. Centre vertically so a short list doesn't leave a big gap above the footer
             on tall phones (welcome-audit fix 4); the footer stays pinned to the bottom. */}
         {!family && (
@@ -109,13 +111,7 @@ export default function NichePickerPage() {
         {/* STEP 2 — optional sub-type within the chosen family */}
         {family && (
           <div className="mt-6">
-            <button
-              type="button"
-              onClick={back}
-              className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-            >
-              <ChevronLeft className="h-4 w-4" /> All shop types
-            </button>
+            <ScreenBack onBack={back} />
 
             <div className="mb-4 flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary-50 p-4">
               <span
@@ -248,6 +244,7 @@ export default function NichePickerPage() {
             </Link>
           </div>
         </div>
+        </main>
       </div>
     </div>
   );

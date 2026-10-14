@@ -158,7 +158,7 @@ export default function InvoiceCaptureView({ onBack, onReconcile }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Supplier invoices</h2>
       <p className="mb-4 text-xs text-gray-400">Capture an invoice, check it against your delivery, and claim any discrepancy.</p>
 
@@ -387,7 +387,7 @@ function ReconcileView({ invoice, onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Check vs delivery</h2>
       <p className="mb-3 text-xs text-gray-400">{invoice.supplierName || 'Invoice'}{invoice.reference ? ` · ${invoice.reference}` : ''} · {gbp(invoiceTotal(invoice))}</p>
 

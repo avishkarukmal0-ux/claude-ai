@@ -61,7 +61,7 @@ export default function MupCalculator() {
         {[['scotland', 'Scotland'], ['wales', 'Wales']].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setJurisdiction(id)}
             aria-pressed={jurisdiction === id}
-            className={`flex-1 rounded-lg py-2 ${jurisdiction === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+            className={`flex min-h-[44px] flex-1 items-center justify-center rounded-lg ${jurisdiction === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {label}
           </button>
         ))}
@@ -110,7 +110,7 @@ function Field({ label, value, onChange, placeholder }) {
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-gray-500">{label}</span>
       <input type="number" inputMode="decimal" min="0" step="0.01" value={value} onChange={onChange} placeholder={placeholder}
-        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+        className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
     </label>
   );
 }

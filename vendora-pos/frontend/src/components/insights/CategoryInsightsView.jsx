@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { ArrowLeft, Tags, TrendingUp, PoundSterling } from 'lucide-react';
+import { Tags, TrendingUp, PoundSterling } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory } from '../../lib/inventoryStore';
 import { categoryBreakdown } from '../../lib/insights';
 import { readJSON } from '../../lib/storage';
@@ -19,9 +20,7 @@ export default function CategoryInsightsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} />
 
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Tags className="h-5 w-5" /></span>

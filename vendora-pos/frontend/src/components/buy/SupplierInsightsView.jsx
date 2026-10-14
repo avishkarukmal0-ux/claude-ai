@@ -30,7 +30,7 @@ export default function SupplierInsightsView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Compare suppliers</h2>
       <p className="mb-4 text-xs text-gray-400">Equivalent per-unit costs from your committed invoices, plus how each supplier has performed. Costs only — add delivery charges yourself where they matter.</p>
 

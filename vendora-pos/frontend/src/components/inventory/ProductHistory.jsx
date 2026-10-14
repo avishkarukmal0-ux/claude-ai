@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import {
-  ArrowLeft, PackagePlus, ShoppingBag, Trash2, ClipboardCheck, ArrowLeftRight, RotateCcw, Undo2,
+  PackagePlus, ShoppingBag, Trash2, ClipboardCheck, ArrowLeftRight, RotateCcw, Undo2,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useMovements, movementHistory, reconcileQty, MOVEMENT_TYPES } from '../../lib/movementStore';
 
 const TYPE_META = {
@@ -32,9 +33,7 @@ export default function ProductHistory({ product, onBack }) {
   return (
     <div>
       {onBack && (
-        <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
+        <ScreenBack onBack={onBack} />
       )}
       <h2 className="text-base font-bold text-gray-900">{product.name}</h2>
       <p className="mb-3 text-xs text-gray-400">Stock movement history</p>

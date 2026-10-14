@@ -58,11 +58,11 @@ export default function VapeProductCheck() {
         {singleUse && <p className="mt-2 text-xs font-semibold text-danger-dark">Single-use (disposable) vapes cannot be sold — illegal since 1 June 2025. Don’t stock this.</p>}
       </div>
 
-      <label className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
-        <span className="text-sm text-gray-700">On the MHRA notified-products list? <a href={VAPE_LIMITS.mhraUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">check</a></span>
+      <label className="mt-3 flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+        <span className="text-sm text-gray-700">On the MHRA notified-products list? <a href={VAPE_LIMITS.mhraUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex min-h-[44px] items-center text-primary underline">check</a></span>
         <input type="checkbox" checked={onMhra} onChange={(e) => setOnMhra(e.target.checked)} className="h-5 w-5" />
       </label>
-      <label className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+      <label className="mt-2 flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
         <span className="text-sm text-gray-700">Supplier evidence kept on file?</span>
         <input type="checkbox" checked={evidence} onChange={(e) => setEvidence(e.target.checked)} className="h-5 w-5" />
       </label>
@@ -81,7 +81,7 @@ function Field({ label, value, onChange, placeholder }) {
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-gray-500">{label}</span>
       <input type="number" inputMode="decimal" min="0" step="0.1" value={value} onChange={onChange} placeholder={placeholder}
-        className="w-full rounded-xl border border-gray-200 px-2 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+        className="min-h-[44px] w-full rounded-xl border border-gray-200 px-2 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
     </label>
   );
 }

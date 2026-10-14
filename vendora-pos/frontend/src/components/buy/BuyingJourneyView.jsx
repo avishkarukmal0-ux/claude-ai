@@ -96,7 +96,7 @@ export default function BuyingJourneyView({ onBack, onGo }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Buying journey</h2>
       <p className="mb-4 text-xs text-gray-400">Follow each purchase from order to credit. Each step opens the normal screen — the shortcuts in Buy still work.</p>
 
@@ -105,7 +105,7 @@ export default function BuyingJourneyView({ onBack, onGo }) {
           <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 text-primary"><Route className="h-7 w-7" strokeWidth={1.75} /></span>
           <p className="text-sm font-semibold text-gray-900">No purchases in progress</p>
           <p className="mt-1 max-w-xs text-sm text-gray-500">Record an order or receive a delivery and it’ll show here, with the next step to take.</p>
-          <button type="button" onClick={() => onGo({ screen: 'receive' })} className="mt-4 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white active:scale-95">Receive a delivery</button>
+          <button type="button" onClick={() => onGo({ screen: 'receive' })} className="mt-4 inline-flex min-h-[44px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:scale-95">Receive a delivery</button>
         </div>
       ) : (
         <>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Hourglass, Minus, Plus, Trash2 } from 'lucide-react';
+import { Hourglass, Minus, Plus, Trash2 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory, isSlowStock, daysSinceMovement } from '../../lib/inventoryStore';
 
 // Slow / dead stock — capital tied up in lines that aren't moving. The opposite of
@@ -18,9 +19,7 @@ export default function DeadStockView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Slow stock</h2>
       <p className="mb-4 text-xs text-gray-400">Lines that aren’t selling — money sitting on the shelf. Mark down or clear.</p>
@@ -29,8 +28,8 @@ export default function DeadStockView({ onBack }) {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex gap-1">
           {THRESHOLDS.map((d) => (
-            <button key={d} type="button" onClick={() => setDays(d)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${days === d ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>
+            <button key={d} type="button" onClick={() => setDays(d)} aria-pressed={days === d} aria-label={`Not sold in ${d}+ days`}
+              className={`inline-flex min-h-[44px] items-center rounded-lg px-3 text-xs font-semibold ${days === d ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>
               {d}d+
             </button>
           ))}

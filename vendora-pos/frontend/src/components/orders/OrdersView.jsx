@@ -119,7 +119,7 @@ export default function OrdersView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Orders</h2>
       <p className="mb-4 text-xs text-gray-400">Recording an order just tracks it here — it does <strong>not</strong> message the supplier, and ticking lines <strong>doesn’t change stock</strong>. On a <strong>draft</strong> order, tap <strong>“Mark as sent”</strong> (or <strong>“Share”</strong>) once you’ve placed it; then book deliveries in on the Scan tab.</p>
 

@@ -31,7 +31,7 @@ export default function WorkerBoard({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Staff view</h2>
       <p className="mb-4 text-xs text-gray-400">What needs doing on shift — and flag anything to the owner.</p>

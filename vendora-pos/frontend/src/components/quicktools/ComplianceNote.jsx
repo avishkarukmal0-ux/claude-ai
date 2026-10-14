@@ -7,15 +7,20 @@ import { ExternalLink } from 'lucide-react';
 export default function ComplianceNote({ verified, href, label = 'Official guidance', children }) {
   const when = verified ? new Date(verified).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
   return (
-    <p className="mt-4 text-xs leading-snug text-gray-400">
-      {children}
-      {children ? ' ' : ''}
-      {when && <>Last verified {when}. </>}
+    <div className="mt-4 text-xs leading-snug text-gray-400">
+      {(children || when) && (
+        <p>
+          {children}
+          {children ? ' ' : ''}
+          {when && <>Last verified {when}.</>}
+        </p>
+      )}
       {href && (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-medium text-primary underline">
-          {label}<ExternalLink className="h-3 w-3" aria-hidden="true" />
+        // The source link is its own ≥44px tappable row (WCAG 2.5.8) with 12px text — not a tiny inline link.
+        <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex min-h-[44px] items-center gap-1 font-medium text-primary underline">
+          {label}<ExternalLink className="h-4 w-4" aria-hidden="true" />
         </a>
       )}
-    </p>
+    </div>
   );
 }

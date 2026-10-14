@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, ClipboardCheck, Camera, Search, Check, Play, X,
+  ClipboardCheck, Camera, Search, Check, Play, X,
   AlertTriangle, TrendingDown, TrendingUp, History, ChevronRight,
 } from 'lucide-react';
 import ScreenBack from '../common/ScreenBack';
@@ -152,9 +152,7 @@ export default function StocktakeView({ onBack }) {
   if (reviewing) {
     return (
       <div>
-        <button type="button" onClick={() => setReviewing(false)} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back to counting
-        </button>
+        <ScreenBack onBack={() => setReviewing(false)} label="Back to counting" />
         <h2 className="mb-1 text-base font-bold text-gray-900">Count summary</h2>
         <p className="mb-4 text-xs text-gray-400">{summary.itemsCounted} items counted · {summary.discrepancyCount} don’t match.</p>
 
@@ -342,6 +340,6 @@ function CatChip({ label, active, onClick }) {
 
 function BackLink({ onBack }) {
   return (
-    <ScreenBack onBack={onBack} label="Home" />
+    <ScreenBack onBack={onBack} />
   );
 }

@@ -30,7 +30,7 @@ export default function TakingsView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Takings &amp; cash-up</h2>
       <p className="mb-4 text-xs text-gray-400">Log the day’s takings and count the drawer. No till needed.</p>

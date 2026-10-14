@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, LifeBuoy, Copy, Trash2, Activity } from 'lucide-react';
+import { LifeBuoy, Copy, Trash2, Activity } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useDiagnostics, clearDiagnostics, makeReference } from '../../lib/diagnostics';
 import { getSyncState } from '../../lib/sync';
 import { getSaveStatus } from '../../lib/saveStatus';
@@ -51,9 +52,7 @@ export default function SupportView({ onBack }) {
   return (
     <div>
       {onBack && (
-        <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
+        <ScreenBack onBack={onBack} />
       )}
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 text-primary"><LifeBuoy className="h-5 w-5" /></span>
@@ -87,7 +86,7 @@ export default function SupportView({ onBack }) {
         {!reference ? (
           <>
             <p className="mt-1 text-xs text-gray-500">Create a reference and a short summary to send to support. It contains only the status above — never your stock, invoices or customer details.</p>
-            <button type="button" onClick={() => setReference(makeReference())} className="mt-3 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white active:scale-[0.99]">Create a problem report</button>
+            <button type="button" onClick={() => setReference(makeReference())} className="mt-3 inline-flex min-h-[44px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-white active:scale-[0.99]">Create a problem report</button>
           </>
         ) : (
           <>

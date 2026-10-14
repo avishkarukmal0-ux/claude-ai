@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Download, Trash2, GitMerge } from 'lucide-react';
+import { Download, Trash2, GitMerge } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { getActiveWorkspace } from '../../lib/storage';
 import { listConflicts, clearConflicts } from '../../lib/conflictBackup';
 
@@ -48,9 +49,7 @@ export default function ConflictRecovery({ onBack }) {
   return (
     <div>
       {onBack && (
-        <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
+        <ScreenBack onBack={onBack} />
       )}
       <div className="mb-3 flex items-center gap-2">
         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700"><GitMerge className="h-5 w-5" /></span>

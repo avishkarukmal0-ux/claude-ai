@@ -59,7 +59,7 @@ export default function AgeCheckHelper() {
       <div className="mb-3 flex rounded-xl bg-gray-100 p-1 text-sm font-semibold">
         {PRODUCTS.map((p) => (
           <button key={p.id} type="button" onClick={() => setProduct(p.id)} aria-pressed={product === p.id}
-            className={`flex-1 rounded-lg py-2 ${product === p.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{p.label}</button>
+            className={`flex min-h-[44px] flex-1 items-center justify-center rounded-lg ${product === p.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{p.label}</button>
         ))}
       </div>
 
@@ -73,7 +73,7 @@ export default function AgeCheckHelper() {
 
       {/* Challenge 25 toggle — only where it's a local condition, not Scotland (already mandatory 25). */}
       {nation !== 'scotland' && (
-        <label className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+        <label className="mt-3 flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
           <span className="text-sm text-gray-700">My licence requires Challenge 25</span>
           <input type="checkbox" checked={challenge25} onChange={(e) => setChallenge25(e.target.checked)} className="h-5 w-5" />
         </label>
@@ -83,7 +83,7 @@ export default function AgeCheckHelper() {
       <label className="mt-3 block">
         <span className="mb-1 block text-xs font-medium text-gray-500">Check a date of birth</span>
         <input type="date" value={dob} max={today.toISOString().slice(0, 10)} onChange={(e) => setDob(e.target.value)}
-          className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+          className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
       </label>
 
       {future && (

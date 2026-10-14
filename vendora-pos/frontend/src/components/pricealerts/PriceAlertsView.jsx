@@ -32,7 +32,7 @@ export default function PriceAlertsView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Price changes</h2>
       <p className="mb-4 text-xs text-gray-400">When a supplier’s cost moves, review the margin hit here. Retail prices only change when you approve them.</p>
 

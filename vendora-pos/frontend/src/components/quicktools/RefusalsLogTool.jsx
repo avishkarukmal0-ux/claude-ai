@@ -49,18 +49,18 @@ export default function RefusalsLogTool() {
 
       <label className="block">
         <span className="mb-1 block text-xs font-medium text-gray-500">Reason</span>
-        <select value={f.reason} onChange={set('reason')} className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none">
+        <select value={f.reason} onChange={set('reason')} className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none">
           {REFUSAL_REASONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
       </label>
       <div className="mt-2 grid grid-cols-1 gap-2">
-        <input value={f.product} onChange={set('product')} placeholder="What they tried to buy (optional)"
-          className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
+        <input value={f.product} onChange={set('product')} placeholder="What they tried to buy (optional)" aria-label="What they tried to buy"
+          className="min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" />
         <div className="grid grid-cols-3 gap-2">
           <input value={f.initials} onChange={set('initials')} placeholder="Initials" aria-label="Staff initials" maxLength={4}
-            className="col-span-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base uppercase text-gray-900 focus:border-primary focus:outline-none" />
+            className="col-span-1 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base uppercase text-gray-900 focus:border-primary focus:outline-none" />
           <input value={f.note} onChange={set('note')} placeholder="Note (optional)" aria-label="Note"
-            className="col-span-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none" />
+            className="col-span-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none" />
         </div>
       </div>
       <button type="button" onClick={save} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-white">

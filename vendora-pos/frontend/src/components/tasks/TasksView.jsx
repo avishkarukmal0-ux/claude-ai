@@ -53,7 +53,7 @@ export default function TasksView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
 
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-base font-bold text-gray-900">Team tasks</h2>

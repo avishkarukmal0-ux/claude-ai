@@ -189,7 +189,7 @@ export default function WasteView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Waste &amp; savings</h2>
       <p className="mb-4 text-xs text-gray-400">Log what you bin and what you rescue. See the money either way.</p>
@@ -373,7 +373,7 @@ export default function WasteView({ onBack }) {
 
       {/* Quick add */}
       <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="What is it? (e.g. Milk 2L)" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="What is it? (e.g. Milk 2L)" aria-label="Item name" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <div className="mb-3 grid grid-cols-2 gap-2">
           <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
             £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="value" className="w-full border-none p-0 text-base text-gray-900 focus:outline-none" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, ShieldAlert, Check, Loader2, Link2 } from 'lucide-react';
+import { ShieldAlert, Check, Loader2, Link2 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useCreditNotes, creditNoteReconciliation } from '../../lib/creditNoteStore';
 import { useClaims } from '../../lib/claimStore';
 import { useRecoveryGuard } from '../../lib/recoveryGuard';
@@ -71,9 +72,7 @@ export default function CreditNoteRecoveryView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900"><ShieldAlert className="h-4 w-4 text-danger" /> Credit note repair</h2>
       <p className="mb-4 text-xs text-gray-400">A credit note couldn’t finish saving and its claim totals may not match. Reconcile it here — the note and claims are corrected together and re-checked before the lock lifts.</p>
 

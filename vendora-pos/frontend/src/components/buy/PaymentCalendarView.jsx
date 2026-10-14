@@ -35,7 +35,7 @@ export default function PaymentCalendarView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Payments due</h2>
       <p className="mb-4 text-xs text-gray-400">A reminder of supplier bills and what you’ve committed to buy. Not accounting or profit — just dates and amounts from your records.</p>
 

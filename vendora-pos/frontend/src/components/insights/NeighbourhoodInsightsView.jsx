@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, MapPin, Users, Home, Info, AlertTriangle, Lock, Loader2, BarChart3, Globe2,
+  MapPin, Users, Home, Info, AlertTriangle, Lock, Loader2, BarChart3, Globe2,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { getStatus, getPreview, getProfile, startCheckout, cancelAddon } from '../../lib/insightsClient';
 import TrialsPanel from './TrialsPanel';
 import NeighbourhoodAreaCard from './NeighbourhoodAreaCard';
@@ -73,9 +74,7 @@ export default function NeighbourhoodInsightsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 flex items-center gap-1.5 text-base font-bold text-gray-900"><Globe2 className="h-4 w-4 text-primary" /> Neighbourhood Insights</h2>
       <p className="mb-4 text-xs text-gray-400">Understand the residential area around your shop from official census data — to plan small, measurable range experiments.</p>
 

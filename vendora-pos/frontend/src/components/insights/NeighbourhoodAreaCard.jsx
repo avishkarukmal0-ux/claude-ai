@@ -224,7 +224,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
 
   return (
     <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-      {onBack && <ScreenBack onBack={onBack} label="Home" />}
+      {onBack && <ScreenBack onBack={onBack} />}
       <h3 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-gray-900"><MapPin className="h-4 w-4 text-primary" /> Your area — official figures</h3>
       <p className="mb-3 text-xs text-gray-400">A real figure for your shop’s neighbourhood from official statistics. Updates when you’re online; shows the last saved copy offline.</p>
 

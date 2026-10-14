@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Upload, FileText } from 'lucide-react';
+import { Upload, FileText } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useInventory } from '../../lib/inventoryStore';
 import { parseCSV, toProductRows } from '../../lib/csv';
 
@@ -33,9 +34,7 @@ export default function ImportView({ onBack, onDone }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Import products</h2>
       <p className="mb-4 text-xs text-gray-400">Bring your list from an old till or a spreadsheet. Upload a CSV or paste it below.</p>

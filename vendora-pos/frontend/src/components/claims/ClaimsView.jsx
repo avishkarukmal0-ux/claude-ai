@@ -58,7 +58,7 @@ export default function ClaimsView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Supplier claims</h2>
       <p className="mb-4 text-xs text-gray-400">Recover credit for missing, damaged or wrong-priced goods — evidenced by your delivery photos. You send it; we track it.</p>
 

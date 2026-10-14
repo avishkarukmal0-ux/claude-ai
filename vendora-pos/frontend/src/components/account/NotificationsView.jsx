@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, Bell, BellOff, Mail, Loader2, Clock, Moon, Check,
+  Bell, BellOff, Mail, Loader2, Clock, Moon, Check,
 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import {
   getDevicePrefs, setDevicePrefs, ensurePermission, permissionState, notificationSupported,
   buildLocalDigest, digestLine,
@@ -55,9 +56,7 @@ export default function NotificationsView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Notifications</h2>
       <p className="mb-4 text-xs text-gray-400">A morning heads-up about what needs attention. You choose what and when.</p>
 
@@ -65,7 +64,7 @@ export default function NotificationsView({ onBack }) {
       <section className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">{device.enabled ? <Bell className="h-4 w-4 text-primary" /> : <BellOff className="h-4 w-4 text-gray-400" />} This device</h3>
-          <Toggle on={device.enabled} onClick={toggleDevice} />
+          <Toggle on={device.enabled} onClick={toggleDevice} label="Reminders on this device" />
         </div>
         <p className="mt-0.5 text-xs text-gray-400">Shows a reminder when you open Vendora in the morning. Works on this device only.</p>
         {!notificationSupported() && <p className="mt-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-500">This browser can’t show notifications — use the email digest below instead.</p>}
@@ -148,7 +147,7 @@ function EmailSection() {
     <section className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900"><Mail className="h-4 w-4 text-primary" /> Email digest</h3>
-        <Toggle on={prefs.email.enabled} onClick={() => save({ ...prefs, email: { enabled: !prefs.email.enabled } })} />
+        <Toggle on={prefs.email.enabled} onClick={() => save({ ...prefs, email: { enabled: !prefs.email.enabled } })} label="Email digest" />
       </div>
       <p className="mt-0.5 text-xs text-gray-400">A daily summary emailed to you — arrives even when the app is closed.</p>
 
@@ -181,10 +180,21 @@ function EmailSection() {
 }
 
 // ── shared controls ──
-function Toggle({ on, onClick }) {
+function Toggle({ on, onClick, label }) {
+  // 44x44 tap target (WCAG 2.5.8) wrapping the 44x24 visual track. role=switch + aria-checked make it a real
+  // switch; aria-label gives it an accessible name (the visible heading sits in a sibling, not inside the button).
   return (
-    <button type="button" role="switch" aria-checked={on} onClick={onClick} className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? 'bg-primary' : 'bg-gray-300'}`}>
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${on ? 'left-[22px]' : 'left-0.5'}`} />
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onClick}
+      className="relative inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <span className={`relative block h-6 w-11 rounded-full transition ${on ? 'bg-primary' : 'bg-gray-300'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${on ? 'left-[22px]' : 'left-0.5'}`} />
+      </span>
     </button>
   );
 }

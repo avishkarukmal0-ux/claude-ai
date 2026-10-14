@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Search, PackageOpen, ArrowRightLeft, Store, Warehouse, Plus, Minus } from 'lucide-react';
+import { Search, PackageOpen, ArrowRightLeft, Store, Warehouse, Plus, Minus } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import {
   useInventory, shelfTracked, shelfQtyOf, backQtyOf, needsRefill,
 } from '../../lib/inventoryStore';
@@ -36,9 +37,7 @@ export default function RefillView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Shelf &amp; refill</h2>
       <p className="mb-4 text-xs text-gray-400">Move stock from the back room to the shelf. Total stock stays the same — this isn’t a reorder.</p>
 
@@ -67,7 +66,7 @@ export default function RefillView({ onBack }) {
       {/* Search */}
       <div className="relative mb-4">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products…" className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products…" aria-label="Search products" className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
       </div>
 
       {/* Tracked locations */}

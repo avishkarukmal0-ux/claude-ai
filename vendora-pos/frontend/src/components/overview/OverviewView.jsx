@@ -32,7 +32,7 @@ export default function OverviewView({ onBack, onOpen }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
 
       <h2 className="mb-1 text-base font-bold text-gray-900">Owner glance</h2>
       <p className="mb-4 text-xs text-gray-400">Your shop at a glance — from what you’ve logged. No till needed yet.</p>

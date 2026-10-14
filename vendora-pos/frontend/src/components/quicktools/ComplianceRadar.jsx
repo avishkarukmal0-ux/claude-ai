@@ -9,8 +9,8 @@ function OfficialLink({ href }) {
   if (!href) return null;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-      className="mt-0.5 inline-flex items-center gap-0.5 text-xs font-medium text-primary underline">
-      Official guidance<ExternalLink className="h-3 w-3" aria-hidden="true" />
+      className="mt-0.5 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium text-primary underline">
+      Official guidance<ExternalLink className="h-4 w-4" aria-hidden="true" />
     </a>
   );
 }
@@ -39,8 +39,8 @@ export default function ComplianceRadar() {
                     c.days <= 7 ? 'bg-danger-light text-danger-dark' : 'bg-primary-50 text-primary'
                   }`}
                 >
-                  <span className="text-base font-extrabold tabular-nums">{c.days}</span>
-                  <span className="text-[9px] font-semibold uppercase">days</span>
+                  <span className="text-sm font-extrabold tabular-nums">{c.days}</span>
+                  <span className="text-xs font-semibold lowercase">d</span>
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-gray-900">{c.name}</span>

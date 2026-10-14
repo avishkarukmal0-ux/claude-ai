@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowLeft, Inbox, Check, Trash2 } from 'lucide-react';
+import { Inbox, Check, Trash2 } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useSuggestions, SUGGESTION_KINDS } from '../../lib/suggestionsStore';
 
 const KIND_STYLE = {
@@ -16,9 +17,7 @@ export default function SuggestionsInbox({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} />
 
       <div className="mb-4 flex items-center justify-between">
         <div>

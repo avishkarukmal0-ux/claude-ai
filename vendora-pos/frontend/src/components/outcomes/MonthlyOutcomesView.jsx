@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { ArrowLeft, PiggyBank, Receipt, ClipboardCheck, CheckCircle2, TrendingDown, Info, CalendarClock } from 'lucide-react';
+import { PiggyBank, Receipt, ClipboardCheck, CheckCircle2, TrendingDown, Info, CalendarClock } from 'lucide-react';
+import ScreenBack from '../common/ScreenBack';
 import { useClaims } from '../../lib/claimStore';
 import { useTasks } from '../../lib/taskStore';
 import { useInventory } from '../../lib/inventoryStore';
@@ -29,9 +30,7 @@ export default function MonthlyOutcomesView({ onBack }) {
 
   return (
     <div>
-      <button type="button" onClick={onBack} className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Home
-      </button>
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">This month</h2>
       <p className="mb-4 text-xs text-gray-400">{monthName} — what actually happened, from your records.</p>
 

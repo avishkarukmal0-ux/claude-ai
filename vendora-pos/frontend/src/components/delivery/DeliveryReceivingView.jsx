@@ -181,7 +181,7 @@ export default function DeliveryReceivingView({ onBack }) {
   if (!draft) {
     return (
       <div>
-        {onBack && <ScreenBack onBack={onBack} label="Home" />}
+        {onBack && <ScreenBack onBack={onBack} />}
         <h2 className="mb-1 text-base font-bold text-gray-900">Receive a delivery</h2>
         <p className="mb-4 text-xs text-gray-400">Book in what actually arrived — cases or units, with any shortages or damage.</p>
 

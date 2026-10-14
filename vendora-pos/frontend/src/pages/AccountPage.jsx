@@ -7,8 +7,8 @@ import AccountView from '../components/account/AccountView';
 export default function AccountPage() {
   const navigate = useNavigate();
   return (
-    <div className="mx-auto min-h-screen max-w-md px-4 py-8">
+    <main className="mx-auto min-h-screen max-w-md px-4 py-8">
       <AccountView onDone={() => navigate('/home')} onBack={() => navigate('/home')} />
-    </div>
+    </main>
   );
 }

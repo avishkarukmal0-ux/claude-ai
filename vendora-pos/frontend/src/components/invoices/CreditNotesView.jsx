@@ -82,7 +82,7 @@ export default function CreditNotesView({ onBack }) {
 
   return (
     <div>
-      <ScreenBack onBack={onBack} label="Home" />
+      <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Credit notes</h2>
       <p className="mb-4 text-xs text-gray-400">Record a supplier credit and match it to your claims. Money shows as received only once you allocate it here.</p>
 
