@@ -238,7 +238,7 @@ export default function HomePage() {
           )}
         </div>
       )}
-      <header className="sticky top-0 z-10 flex items-center gap-3 bg-white px-4 py-3 shadow-sm" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}>
+      <header className="app-header sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-1 bg-white px-4 py-3 shadow-sm" style={{ paddingTop: 'max(env(safe-area-inset-top), 0.75rem)' }}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary">
           <svg viewBox="0 0 48 48" className="h-6 w-6" aria-hidden="true">
             <path d="M13 15 L24 35 L35 15" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -250,7 +250,9 @@ export default function HomePage() {
           <div className="truncate text-sm font-semibold text-gray-900">{shopLabel}</div>
           <div className="text-xs text-gray-400">Your Vendora</div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+          {/* ml-auto keeps this on the right; flex-wrap + no shrink-0 lets Account/Change wrap below instead of
+              forcing the page to scroll sideways at 200% text zoom on a narrow screen (a11y: reflow). */}
           {/* Authenticated → an account/sign-out entry point (sign out lives on /account). The signed-out
               "Log in / Create shop" CTA is only in the sample-mode banner and is already hidden when logged in. */}
           {ACCOUNTS_ENABLED && loggedIn && (
@@ -487,7 +489,7 @@ export default function HomePage() {
         </ErrorBoundary>
       </main>
 
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav aria-label="Primary" className="app-bottom-nav fixed inset-x-0 bottom-0 z-10 mx-auto flex max-w-2xl items-stretch justify-around border-t border-gray-200 bg-white" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <NavTab label="Today" icon={ListChecks} to="/home?tab=today" active={!screen && tab === 'today'} onSelect={() => setScreen(null)} accent={accent} />
         <NavTab label="Scan" icon={ScanLine} to="/home?tab=scan" active={!screen && tab === 'scan'} onSelect={() => setScreen(null)} accent={accent} />
         <NavTab label="Stock" icon={Package2} to="/home?tab=stock" active={!screen && tab === 'stock'} onSelect={() => setScreen(null)} accent={accent} />

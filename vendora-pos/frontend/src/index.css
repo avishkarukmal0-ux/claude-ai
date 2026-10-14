@@ -222,3 +222,11 @@ textarea:focus-visible,
   line-height: 44px;
   font-size: 20px;
 }
+
+/* ── Landscape phones: reclaim vertical space (audit — a 68px sticky header + 55px fixed nav ate ~33% of a
+   667×375 viewport). On short landscape viewports the top bar stops sticking (so it scrolls away like a
+   scroll-to-hide header) and the bottom nav tightens up. Portrait and tablets/desktop are unaffected. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app-header { position: static; }
+  .app-bottom-nav a { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+}

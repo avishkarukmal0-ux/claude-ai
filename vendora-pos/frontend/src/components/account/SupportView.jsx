@@ -100,7 +100,7 @@ export default function SupportView({ onBack }) {
       </div>
 
       {totalFailures > 0 && (
-        <button type="button" onClick={() => { clearDiagnostics(); toast('Diagnostics cleared', { icon: '🧹' }); }} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-600">
+        <button type="button" onClick={() => { clearDiagnostics(); toast('Diagnostics cleared', { icon: '🧹' }); }} className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-600">
           <Trash2 className="h-3.5 w-3.5" /> Clear recorded issues
         </button>
       )}

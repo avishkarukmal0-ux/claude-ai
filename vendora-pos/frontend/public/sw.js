@@ -5,7 +5,7 @@
  *   - other same-origin GETs (built JS/CSS/icons): stale-while-revalidate.
  * Bump CACHE_VERSION whenever this file or the precache list changes.
  */
-const CACHE_VERSION = 'vendora-v46';
+const CACHE_VERSION = 'vendora-v47';
 // Caches owned by the PAGE (not this worker) that must survive a version bump. The neighbourhood map keeps its
 // last-viewed tiles here (Cache API, page-managed) so the catchment map still draws offline — don't purge it.
 const KEEP_PREFIXES = ['vendora-tiles'];

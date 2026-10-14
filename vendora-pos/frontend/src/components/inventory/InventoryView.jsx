@@ -83,7 +83,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-base font-bold text-gray-900">Inventory</h2>
           <p className="text-xs text-gray-400">
@@ -91,7 +91,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
             {lowCount > 0 && <span className="text-danger"> · {lowCount} low</span>}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {dupCount > 0 && (
             <button type="button" onClick={() => setMerging(true)} className="flex h-11 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Merge duplicate products">
               <Merge className="h-4 w-4" /> {dupCount}

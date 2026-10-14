@@ -38,8 +38,17 @@ Goal: fix the auditor's 375px UI sweep (SW v44, bundle index-CAyETg14.js). Every
 - **PriceAlertsView** copy: cost/margin now use a literal "→" (was an icon that scraped as "61% 49%") → reads "61% → 49%"; dropped the unused `ArrowRight` import.
 - **CloudBackups**: mapped every remaining sync store key (business_profile_v1, markdowns_v1, temperature_log_v1, …) to readable names + prettified fallback (no more shouty "BUSINESS_PROFILE"); Restore button's accessible name now names the section.
 
+## Part 3 — responsive/reflow + stragglers (audit on v45)
+- **SupportView** "Clear recorded issues" (38px) → `min-h-[44px]`.
+- **VapeProductCheck** "check" link → `min-w-[44px]` + `justify-center` (was 42px wide).
+- **BarcodeScanner** camera-blocked message → `role="status"` so AT announces it.
+- **Reflow at 200% text zoom (WCAG 1.4.10):** HomePage header is now `flex-wrap` and its right cluster (`Account`/`Change`) is `ml-auto flex-wrap`, no longer `shrink-0` — it wraps below instead of forcing sideways page scroll. InventoryView's Stock header row + its button cluster are `flex-wrap` too, so "Add"/Import/Suppliers wrap instead of running off the edge.
+- **Landscape phones (≤500px tall):** new media query in `index.css` — the top header stops sticking (scrolls away) and the bottom-nav tabs tighten padding, reclaiming the ~33% of height the fixed bars ate on 667×375.
+- **Tablet 768px:** already satisfied — `<main>` is `max-w-2xl` (672px) with `mx-auto`, so it centres from 672px (≤768) with no `lg:`-gated width. Left as-is.
+- Items already shipped in part 2 (`773ef8f`) that this v45 audit hadn't re-tested — Edit-product 44px fields, the ⋯ menu name+focus, the stock no-results empty state, credit-notes/delivery/price/orders/cloud fixes — remain in place.
+
 ## Verify
-- `npm run build` ✓. Full vitest: **545 passed / 80 files** (both passes). SW bumped **v44→v46** (Vercel on push).
+- `npm run build` ✓. Full vitest: **545 passed / 80 files** (all passes). SW bumped **v44→v47** (Vercel on push).
 
 ## Couldn't verify
 - No headless 375px re-measure in this environment (no browser screenshot run); relied on the source (explicit `min-h-[44px]`/44px classes), build, and tests. The auditor's re-run is the acceptance gate.

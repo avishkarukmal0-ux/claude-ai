@@ -154,7 +154,7 @@ export default function BarcodeScanner({ onScan, onClose, continuous = false }) 
     return (
       <div className="rounded-2xl bg-gray-50 p-5 text-center">
         <CameraOff className="mx-auto mb-2 h-8 w-8 text-gray-400" />
-        <p className="text-sm text-gray-600">
+        <p role="status" className="text-sm text-gray-600">
           {error === 'denied'
             ? 'Camera permission was blocked. Type the barcode below instead.'
             : 'Camera scanning needs Chrome or an Android device. Type the barcode below instead.'}
