@@ -52,6 +52,11 @@ from the earlier pass). Views: `DeliveryReceivingView.jsx`, `ClaimsView.jsx`, `C
 ## Verify
 - `npm run build` ✓. Full vitest **547 passed / 80 files**. SW v50→v51.
 
+### Touch nuance (v52)
+`<abbr title>` tooltips never show on touch devices, so `Abbr` now **expands inline on first mention** —
+"Making Tax Digital (MTD)" etc. (plain text, so it's safe inside the tappable tool-card buttons; `withGlossary`
+still expands only the first mention per string). SW v51→v52.
+
 ## Couldn't verify
 - No headless device run. The money paths (wrong-price overcharge, multi-issue totals) are covered by unit
   tests; the order-prefill and the credit-note handoff were checked by reading + build, not a live click-through.
