@@ -76,6 +76,9 @@ Audit of `f875abb` confirmed: SW1A 2AA 0.65s (85 OAs all-from-Mongo, server 309 
 Answers for the auditor: Render serves `f875abb` (boot-window coalescing IS in; the deploy log shows `warming OA centroids into memory…` at 11:05:29 and the `…(188880) in Xms` completion ~27s later, just past their log excerpt). Token blacklist shipped in `060b8cd`.
 FE build green (`index-5xHDnST2.js`), pwa test 4 pass. Frontend → Vercel; the script is backend tooling (no redeploy needed to run).
 
+## Round 6 — surface warm duration in the response (auditor can't read Render logs)
+Auditor can't pull the Render deploy log far enough to see the centroid warm-completion line, and I have no Render access to fetch it. So the warm duration is now exposed where they CAN see it — the `/radius` response: `cacheStats.centroids = { warm, count, loadMs, source }`. `centroids.js` records the Mongo load duration (`loadMs`) into `_cache` and `status()` returns it. No Render log needed to confirm the one-time warm time. Full login→logout→refresh-rejected verification is the self-provisioning `scripts/verify-refresh-revocation.js` (caa21b8). cacheStats: keep until public launch (agreed). Files: `services/insightsData/centroids.js`, `routes/pwaNeighbourhoodRoutes.js`. centroids+insights tests 41 pass. Backend-only → needs Render deploy.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.

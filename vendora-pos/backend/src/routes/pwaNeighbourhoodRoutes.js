@@ -12,6 +12,7 @@ const pwaAuth = require('../services/pwaAuthService');
 const neighbourhood = require('../services/neighbourhoodService');
 const insights = require('../services/insightsService');
 const insightsTiles = require('../services/insightsTiles');
+const centroids = require('../services/insightsData/centroids');
 const config = require('../config');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
@@ -149,8 +150,12 @@ async function radiusHandler(req, res, next) {
     // data, no timing internals). Lets you verify persisted == fetched on a cold call and oaFromMongo > 0 on a
     // repeat/after-restart. durationMs is here too, to sanity-check against the client-observed time.
     if (Array.isArray(tables) && tables.length) {
+      // centroid warm status is readable here (from the /radius response you can already see), so the one-time
+      // boot warm duration doesn't require the Render log: warm=true + loadMs=<the "warmed in N ms" number>.
+      const cs = centroids.status();
       body.cacheStats = {
         durationMs,
+        centroids: { warm: !!cs.loaded, count: cs.count, loadMs: cs.loadMs, source: cs.source },
         tables: tables.map((t) => ({ ds: t.ds, req: t.req, mem: t.mem, mongo: t.mongo, fetched: t.fetched, persisted: t.persisted, persistErr: t.persistErr })),
       };
     }

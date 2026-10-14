@@ -129,11 +129,12 @@ async function loadFromFile(path) {
 async function loadFromMongo() {
   if (!dbReady()) return { loaded: false, count: 0, reason: 'centroids: database not connected' };
   try {
+    const t0 = Date.now();
     const rows = await model().find({}, { _id: 0, oa: 1, lat: 1, lng: 1, lsoa: 1 }).lean();
     const list = rows
       .filter((r) => r && r.oa && Number.isFinite(r.lat) && Number.isFinite(r.lng))
       .map((r) => ({ oa: String(r.oa), lat: r.lat, lng: r.lng, lsoa: r.lsoa || null }));
-    _cache = { list, loadedAt: Date.now(), count: list.length, source: 'mongo', path: null };
+    _cache = { list, loadedAt: Date.now(), count: list.length, source: 'mongo', path: null, loadMs: Date.now() - t0 };
     return { loaded: list.length > 0, count: list.length, source: 'mongo', reason: list.length ? undefined : 'no centroids imported into MongoDB (run scripts/import-centroids.js)' };
   } catch (e) {
     return { loaded: false, count: 0, reason: `centroids: Mongo read failed (${e.message})` };
@@ -172,7 +173,14 @@ function all() { return _cache ? _cache.list : []; }
 function isLoaded() { return !!_cache && _cache.count > 0; }
 function status() {
   const path = config.neighbourhoodInsights.data.centroidsPath;
-  return { loaded: isLoaded(), count: _cache ? _cache.count : 0, source: _cache ? _cache.source : (path ? 'file' : 'mongo'), path: path || null };
+  return {
+    loaded: isLoaded(),
+    count: _cache ? _cache.count : 0,
+    source: _cache ? _cache.source : (path ? 'file' : 'mongo'),
+    path: path || null,
+    loadMs: _cache && _cache.loadMs != null ? _cache.loadMs : null, // how long the one-time load took (warm time)
+    loadedAt: _cache && _cache.loadedAt ? _cache.loadedAt : null,
+  };
 }
 
 // Test seam: inject centroids directly without a file or DB.
