@@ -87,6 +87,16 @@ Confirmed live from Render (MCP, read-only): commit `e4f93a5`, warm `OA centroid
 - Tests: FE 503→warmingUp mapping; BE centroids/insights 22 pass; FE build `index-rPMxO6DW.js`. SW v42→v43.
 Files: `backend/services/insightsData/centroids.js`, `backend/routes/pwaNeighbourhoodRoutes.js`, `frontend/lib/neighbourhoodClient.js`, `frontend/components/insights/{NeighbourhoodAreaCard,RadiusFigures}.jsx`, `frontend/public/sw.js`. Backend → Render deploy; frontend → Vercel.
 
+## Round 8 — Retry-After honouring; Render+Atlas connected; cold-latency diagnosis
+Render MCP connected (read-only logs/deploys + deploy trigger). Verified live: deployed `62436b8` then `64f0d4d` myself via trigger_deploy; boot lines show `commit=64f0d4d…` and warm `188880 in 27272ms` (7 restarts today: warm 27.2–29.1s, stable ~28s). Atlas MCP is **disabled org-wide** (Org Owner must enable AI client access) — can't inspect Mongo.
+- **Retry-After honouring** (`64f0d4d`): `transportWithRetry` retries a Nomis 429/503 after `Retry-After` (seconds or HTTP-date, capped 8s, ≤2 retries); batches stay parallel (mapLimit 6). Test added. Safe; does NOT cut the plain-latency cold case (no 429 there).
+- **Cold-latency diagnosis from live logs:** 5000m/2000-OA cold = all Nomis fetch of missing OAs, `retryAfter:null`, centroids 0–1ms. Examples: 892 fetched→11,991ms; 948→15,264ms; 509→8,443ms. Per-150-OA batch ≈1.3–2s; table ms ≈ (batches)×(per-batch). Whether raising concurrency helps depends on parallel-vs-serial at the socket/Nomis layer — needs a `batchMs` reading from the new build (`62436b8`+); the slow lines on record predate batchMs. NOT blind-tuning concurrency.
+- Options (b) cap first lookup / (c) lower first-lookup radius both change the DISPLAYED figure → need product OK; not done.
+- FREE plan: spins down after ~15min idle; cold wake ~30–60s + ~28s warm (503 covers warm, not wake). Options to tell Avishka: Starter instance (~$7/mo, no spin-down) or an external ping every ~10–14min (free, but free hours ~750/mo cap). Don't change plan.
+- 503 UI: `warming` state shows "Getting your area ready…" + a 44px Retry (manual tap; not auto). SW v43 — Your-area map/offline/banner unchanged (version-only bump).
+Files: `backend/services/insightsData/nomis.js`, `backend/__tests__/insightsData.test.js`. Backend tests 17 (data) pass. Live commit `64f0d4d`.
+- **Atlas MCP (enabled mid-round, read-only):** prod DB = `vendora_pilot` on the **VendoraTest** cluster (project vendora-test), 46MB — NOT `vendora-dev` on Cluster0. Confirmed `oacentroids` + `insightsoadatas` present; `insightsoadatas` has its compound index `dataset_1_oa_1` → **autoIndex is ON in prod**, so `revokedtokens` + its TTL index will auto-create on the first web logout (collection is absent now only because no web logout has happened — the PWA uses `pwaAuthService`/`Member.tokenVersion`, a separate path). `insightsoadatas` count = **13,018** OA-dataset rows (cache filling). Cold-fetch `batchMs` still needs one cold 5000m lookup on `62436b8`+ (the on-record slow lines predate the field).
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.
