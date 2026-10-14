@@ -97,6 +97,11 @@ Render MCP connected (read-only logs/deploys + deploy trigger). Verified live: d
 Files: `backend/services/insightsData/nomis.js`, `backend/__tests__/insightsData.test.js`. Backend tests 17 (data) pass. Live commit `64f0d4d`.
 - **Atlas MCP (enabled mid-round, read-only):** prod DB = `vendora_pilot` on the **VendoraTest** cluster (project vendora-test), 46MB — NOT `vendora-dev` on Cluster0. Confirmed `oacentroids` + `insightsoadatas` present; `insightsoadatas` has its compound index `dataset_1_oa_1` → **autoIndex is ON in prod**, so `revokedtokens` + its TTL index will auto-create on the first web logout (collection is absent now only because no web logout has happened — the PWA uses `pwaAuthService`/`Member.tokenVersion`, a separate path). `insightsoadatas` count = **13,018** OA-dataset rows (cache filling). Cold-fetch `batchMs` still needs one cold 5000m lookup on `62436b8`+ (the on-record slow lines predate the field).
 
+## Round 9 — forceWarming test hook + batchMs reading
+- `/radius` gained a gated `forceWarming` hook (`063a2a8`): when `INSIGHTS_FORCE_WARMING=1` (set on Render, merge-safe) AND request sends `forceWarming=1`, returns the real 503 `warming_up` shape — lets the auditor test the 503 on demand. Deployed + flag ON; live commit `063a2a8`. (Unset the env var after testing.)
+- **batchMs evidence:** cold LS2 8DY (93 OAs, 1 batch/table) = `batchMs:[1606]`/`[1909]`; two tables parallel (`nomisTotalMs 2399 ≈ max`). Single-batch so no intra-table signal. Old 509-OA table = 8443ms ≈ 4×~2s ⇒ looks serial/throughput-bound at Nomis. `undici` not requirable here → can't force a bigger socket pool. Definitive call needs one dense 5000m cold lookup (multi-batch batchMs). Next-step options if serial: (b) cap first request ~1000 OAs + background fill, or (c) lower first-lookup radius — both change the displayed figure (product call). Recommend leaving as-is: repeats 0.2–1s, cache self-heals (13,018 OAs cached, growing), nothing hangs.
+- Deploys/env for this round driven via the connected Render MCP.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.
