@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical } from 'lucide-react';
+import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical, ShoppingCart, Check } from 'lucide-react';
 import ConfirmDialog from '../common/ConfirmDialog';
 import ScreenBack from '../common/ScreenBack';
 import { useInventory, margin, isLowStock, expiryInfo, DATE_TYPES, normalisePackSize, findDuplicateProducts } from '../../lib/inventoryStore';
@@ -9,11 +9,39 @@ import MergeView from './MergeView';
 import { ProductThumb } from '../common/ProductImage';
 import { useFormDraft } from '../../lib/formDraft';
 import { useSuppliers } from '../../lib/supplierStore';
+import { useBuyList } from '../../lib/buyListStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
 import { unitPrice } from '../../lib/priceMarking';
 import { validBarcode } from '../../lib/barcode';
 import { ALLERGENS } from '../../data/allergens';
+import { round2 } from '../../lib/money';
+
+// ── Form input validation (UX pass 1) ─────────────────────────────────────────
+// Money fields accept UK comma decimals ("1,20" → 1.2) as well as "1.20". Blank is allowed (optional).
+// Text or a negative is rejected with an inline message; the raw text the user typed is always kept.
+function parseMoneyInput(raw) {
+  const s = String(raw == null ? '' : raw).trim().replace(',', '.');
+  if (s === '') return { value: null, error: null };
+  if (!/^\d*\.?\d+$/.test(s)) return { value: null, error: 'Enter a number, e.g. 1.20' };
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) return { value: null, error: 'Enter a number, e.g. 1.20' };
+  return { value: round2(n), error: null };
+}
+// Quantity must be a whole number. Blank → 0. A negative parses but is flagged so the form can demand an
+// explicit "Yes, stock is -N" confirmation before it's ever saved (never save a silent negative).
+function parseQtyInput(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (s === '') return { value: 0, error: null, negative: false };
+  if (!/^-?\d+$/.test(s)) return { value: null, error: 'Enter a whole number', negative: false };
+  const n = Number(s);
+  return { value: n, error: null, negative: n < 0 };
+}
+// Inline field error (screen-reader live): role="alert" announces it the moment it appears.
+function FieldError({ children }) {
+  if (!children) return null;
+  return <p role="alert" className="mb-2 -mt-1 text-xs font-medium text-danger-dark">{children}</p>;
+}
 
 // Food shops (Fresh & weighed, World & specialist) need allergen/ingredient capture for PPDS.
 function isFoodShop() {
@@ -117,7 +145,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
         </div>
       </div>
 
-      {adding && <AddForm suppliers={suppliers} categorySuggestions={categorySuggestions} onAdd={(p) => { addProduct(p); setAdding(false); }} onCancel={() => setAdding(false)} />}
+      {adding && <AddForm suppliers={suppliers} categorySuggestions={categorySuggestions} onAdd={(p) => { addProduct(p); setAdding(false); toast.success(`Saved ${(p.name || '').trim() || 'item'}`); }} onCancel={() => setAdding(false)} />}
 
       {editing && (
         <EditForm
@@ -179,6 +207,12 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct, onEdit, onHistory }) {
   const m = margin(p);
   const low = isLowStock(p);
+  const buyList = useBuyList();
+  const onBuyList = !!buyList.hasProduct?.(p.id);
+  function orderThis() {
+    buyList.addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: 1, supplierId: p.supplierId || null, supplierName: suppliers.find((s) => s.id === p.supplierId)?.name });
+    toast.success(`Added ${p.name} to the buy list`);
+  }
   const [menuOpen, setMenuOpen] = useState(false); // kebab menu: History / Edit / Delete (declutters the row)
   const [confirmDel, setConfirmDel] = useState(false);
   // Move keyboard focus into the menu when it opens (a11y: an opened menu should take focus), and back to the
@@ -208,6 +242,9 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
             {Number.isFinite(p.price) && p.price != null && <span>£{Number(p.price).toFixed(2)} incl. VAT</span>}
             {unitPrice(p) && <span className="text-gray-400">{unitPrice(p).text}</span>}
             {m != null && <span className={m < 0 ? 'text-danger' : 'text-success-dark'}>{(m * 100).toFixed(0)}% margin</span>}
+            {!(Number.isFinite(Number(p.price)) && Number(p.price) > 0) && (
+              <button type="button" onClick={onEdit} className="text-primary underline">Add a price to see your margin</button>
+            )}
             {isFoodShop() && (!Array.isArray(p.allergens) || p.allergens.length === 0) && !p.ingredients && (
               <span className="inline-flex items-center gap-1 rounded-full bg-warning-light px-1.5 py-0.5 text-xs font-semibold text-warning-dark">⚠ no allergens</span>
             )}
@@ -287,9 +324,19 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
-          {low ? 'Low stock' : 'In stock'}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${low ? 'bg-danger-light text-danger-dark' : 'bg-gray-100 text-gray-500'}`}>
+            {low ? 'Low stock' : 'In stock'}
+          </span>
+          {/* Quick "Order this" straight from a low-stock row (UX pass 1.8) — one tap adds it to the buy list. */}
+          {low && (onBuyList ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-success-dark"><Check className="h-3.5 w-3.5" /> On buy list</span>
+          ) : (
+            <button type="button" onClick={orderThis} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-primary/30 bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95">
+              <ShoppingCart className="h-3.5 w-3.5" /> Order this
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => updateProduct(p.id, { qty: Math.max(0, (Number(p.qty) || 0) - 1) })} className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-600 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`Decrease ${p.name}`}>
             <Minus className="h-5 w-5" />
@@ -324,15 +371,33 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
   const vapeBlocked = isVape && reusable === false;
   const vapeUnanswered = isVape && reusable == null;
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
+  const [errors, setErrors] = useState({});
+  const [confirmNegQty, setConfirmNegQty] = useState(false);
+  // Typing in a number field clears its error and cancels any pending negative-stock confirm.
+  const setNum = (k) => (e) => { set(k)(e); setErrors((x) => (x[k] ? { ...x, [k]: null } : x)); if (k === 'qty') setConfirmNegQty(false); };
   const barcodeOk = validBarcode(f.barcode);
   const canSave = f.name.trim().length > 0 && !vapeBlocked && !vapeUnanswered && barcodeOk;
-  const save = () => { clearDraft(); onAdd(f); };
+  // Autofocus the name field when the form opens (UX pass 1.6) so the owner can type straight away.
+  const nameRef = useRef(null);
+  useEffect(() => { nameRef.current?.focus(); }, []);
+  const negQty = parseQtyInput(f.qty).value;
+  function save() {
+    const cost = parseMoneyInput(f.cost);
+    const price = parseMoneyInput(f.price);
+    const qty = parseQtyInput(f.qty);
+    const errs = { cost: cost.error, price: price.error, qty: qty.error };
+    setErrors(errs);
+    if (errs.cost || errs.price || errs.qty) return;         // reject text; keep what they typed
+    if (qty.negative && !confirmNegQty) { setConfirmNegQty(true); return; } // never save a silent negative
+    clearDraft();
+    onAdd({ ...f, cost: cost.value, price: price.value, qty: qty.value });
+  }
   const cancel = () => { clearDraft(); onCancel(); };
   const inputCls = 'mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none';
   return (
     <div className="mb-3 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
       <ScreenBack onBack={cancel} label="Back" />
-      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className={inputCls} />
+      <input ref={nameRef} value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className={inputCls} />
       <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode (optional)" aria-label="Barcode" className={`${inputCls.replace('mb-2', barcodeOk ? 'mb-2' : 'mb-1')}`} />
       {!barcodeOk && <p className="mb-2 text-xs font-medium text-danger-dark">A barcode should be 8–14 digits.</p>}
       <input
@@ -365,11 +430,14 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
-      <div className="mb-2 grid grid-cols-3 gap-2">
-        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
-        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
-        <input value={f.qty} onChange={set('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+      <div className="mb-1 grid grid-cols-3 gap-2">
+        <input value={f.cost} onChange={setNum('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" aria-invalid={!!errors.cost} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.cost ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.price} onChange={setNum('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" aria-invalid={!!errors.price} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.price ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.qty} onChange={setNum('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" aria-invalid={!!errors.qty} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.qty ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
       </div>
+      <FieldError>{errors.cost && `Cost: ${errors.cost}`}</FieldError>
+      <FieldError>{errors.price && `Sell price: ${errors.price}`}</FieldError>
+      <FieldError>{errors.qty && `Quantity: ${errors.qty}`}</FieldError>
 
       {!showPack ? (
         <button type="button" onClick={() => setShowPack(true)} className="mb-2 inline-flex min-h-[44px] items-center text-sm font-medium text-primary">+ Comes in a case? Add pack size</button>
@@ -379,6 +447,16 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
           <div className="grid grid-cols-2 gap-2">
             <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case (e.g. 24)" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
             <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode (optional)" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
+          </div>
+        </div>
+      )}
+
+      {confirmNegQty && (
+        <div role="alert" className="mb-2 rounded-xl border border-warning/50 bg-warning-light/60 p-2.5 text-xs text-warning-dark">
+          Stock will be set to <b>{negQty}</b> (a negative number). That’s unusual — only do this if you’re deliberately recording a shortfall.
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={save} className="inline-flex min-h-[44px] items-center rounded-lg bg-warning px-3 font-semibold text-white">Yes, stock is {negQty}</button>
+            <button type="button" onClick={() => setConfirmNegQty(false)} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-300 bg-white px-3 font-semibold text-gray-700">No, fix it</button>
           </div>
         </div>
       )}
@@ -400,7 +478,9 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
     cost: toStr(product.cost), price: toStr(product.price), supplierId: toStr(product.supplierId),
     packSize: toStr(product.packSize), caseBarcode: toStr(product.caseBarcode),
   });
+  const [errors, setErrors] = useState({});
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
+  const setNum = (k) => (e) => { set(k)(e); setErrors((x) => (x[k] ? { ...x, [k]: null } : x)); };
   const canSave = f.name.trim().length > 0 && validBarcode(f.barcode);
 
   // Allergens + ingredients (PPDS / Natasha's Law) — food shops only.
@@ -434,12 +514,15 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
   const supplierLabel = (id) => (suppliers.find((s) => s.id === id)?.name || 'Any supplier');
 
   function save() {
+    const cost = parseMoneyInput(f.cost);
+    const price = parseMoneyInput(f.price);
+    if (cost.error || price.error) { setErrors({ cost: cost.error, price: price.error }); return; }
     onSave({
       name: f.name.trim() || 'Unnamed item',
       barcode: f.barcode.trim(),
       category: f.category.trim() || null,
-      cost: f.cost === '' ? null : Number(f.cost),
-      price: f.price === '' ? null : Number(f.price),
+      cost: cost.value,
+      price: price.value,
       supplierId: f.supplierId || null,
       packSize: normalisePackSize(f.packSize),
       caseBarcode: f.caseBarcode.trim() || null,
@@ -462,10 +545,12 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
-      <div className="mb-2 grid grid-cols-2 gap-2">
-        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <div className="mb-1 grid grid-cols-2 gap-2">
+        <input value={f.cost} onChange={setNum('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" aria-invalid={!!errors.cost} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-sm focus:outline-none ${errors.cost ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.price} onChange={setNum('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" aria-invalid={!!errors.price} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-sm focus:outline-none ${errors.price ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
       </div>
+      <FieldError>{errors.cost && `Cost: ${errors.cost}`}</FieldError>
+      <FieldError>{errors.price && `Sell price: ${errors.price}`}</FieldError>
       <div className="mb-2 grid grid-cols-2 gap-2">
         <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />

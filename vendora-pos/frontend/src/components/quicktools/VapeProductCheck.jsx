@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PackageCheck, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
+import Abbr from '../common/Abbr';
 import { VAPE_LIMITS } from '../../data/compliance';
 
 // Vape product check — a before-you-stock helper against the verified product limits (TRPR 2016). Limits are
@@ -59,7 +60,7 @@ export default function VapeProductCheck() {
       </div>
 
       <label className="mt-3 flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
-        <span className="text-sm text-gray-700">On the MHRA notified-products list? <a href={VAPE_LIMITS.mhraUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-primary underline">check</a></span>
+        <span className="text-sm text-gray-700">On the <Abbr term="MHRA" /> notified-products list? <a href={VAPE_LIMITS.mhraUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-primary underline">check</a></span>
         <input type="checkbox" checked={onMhra} onChange={(e) => setOnMhra(e.target.checked)} className="h-5 w-5" />
       </label>
       <label className="mt-2 flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5">

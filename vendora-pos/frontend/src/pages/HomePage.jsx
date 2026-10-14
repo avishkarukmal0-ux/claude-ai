@@ -7,6 +7,7 @@ import {
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
   FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy, ShieldAlert,
+  Cloud, CloudOff, Check, RefreshCw,
 } from 'lucide-react';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
@@ -71,6 +72,36 @@ import { Route, Scale, CalendarClock as CalClock } from 'lucide-react';
 
 const ONBOARDED_KEY = 'vendora:onboarded';
 function isOnboarded() { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return true; } }
+function markOnboarded() { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* ignore */ } }
+
+function syncRelative(ts) {
+  if (!ts) return '';
+  const secs = Math.round((Date.now() - ts) / 1000);
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  try { return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); } catch { return ''; }
+}
+
+// Compact online/sync chip for the header (UX pass 1.5). Shows "Offline — saving on this device" whenever the
+// device is offline, and (for a signed-in shop) "Synced"/"Syncing…" otherwise. A signed-out guest online sees
+// nothing (there's no cloud to sync to — their Back-up-your-data nudge lives on Today instead).
+function HeaderSyncChip({ loggedIn, sync }) {
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+  useEffect(() => {
+    const on = () => setOnline(true); const off = () => setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  if (!online) {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500"><CloudOff className="h-3.5 w-3.5" /> Offline — saving on this device</span>;
+  }
+  if (!loggedIn) return null;
+  if (sync.status === 'syncing') return <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary"><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Syncing…</span>;
+  return <span className="inline-flex items-center gap-1 rounded-full bg-success-light px-2 py-0.5 text-xs font-medium text-success-dark"><Check className="h-3.5 w-3.5" /> Synced</span>;
+}
 
 /**
  * HomePage — the phone app shell. Five tabs (Today / Scan / Stock / Buy / More) group the workflows
@@ -119,6 +150,9 @@ export default function HomePage() {
   // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.
   const toolDialogRef = useDialog(!!activeTool, () => setActiveTool(null));
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
+  // Show the "What Vendora helps with" intro once, then auto-hide on the next visit (UX pass 1.8) — the owner
+  // doesn't have to dismiss it. It stays visible for this session; marking onboarded stops it returning.
+  useEffect(() => { if (showPromises) markOnboarded(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt);
   const [exporting, setExporting] = useState(false); // double-tap guard: Export is async (share sheet / download)
   const restoreInputRef = useRef(null);
@@ -260,6 +294,7 @@ export default function HomePage() {
           )}
           <Link to="/" aria-label="Change shop type" className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-primary hover:underline">Change</Link>
         </div>
+        <div className="basis-full"><HeaderSyncChip loggedIn={loggedIn} sync={syncState} /></div>
       </header>
 
       <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 pb-24 pt-4 focus:outline-none">
@@ -324,7 +359,35 @@ export default function HomePage() {
 
             {/* Backup nudge: shop data is on THIS device only until exported. Surface "No backup yet" on Today
                 until the first export (then lastBackupAt is set and this disappears). Not shown in demo/sample. */}
-            {!demo && !lastBackupAt && (
+            {/* Backup status. Signed-in shops sync to the cloud, so show that honestly (not the scary "device
+                only" line). Guests (no account) still get the local-export nudge until they export once. */}
+            {!demo && loggedIn ? (
+              <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success-light text-success-dark">
+                    {syncState.status === 'offline' ? <CloudOff className="h-5 w-5" /> : <Cloud className="h-5 w-5" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {syncState.status === 'offline' ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900">Saved on this device</p>
+                        <p className="mt-0.5 text-xs text-gray-500">You’re offline — your changes back up to the cloud automatically once you’re online again.</p>
+                      </>
+                    ) : syncState.lastSyncedAt ? (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900">Backed up to the cloud</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Last synced {syncRelative(syncState.lastSyncedAt)} · also on any device you sign in to.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-gray-900">Backing up to the cloud…</p>
+                        <p className="mt-0.5 text-xs text-gray-500">Your shop data syncs to your account automatically.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </section>
+            ) : (!demo && !lastBackupAt && (
               <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><Download className="h-5 w-5" /></span>
@@ -337,7 +400,7 @@ export default function HomePage() {
                   </div>
                 </div>
               </section>
-            )}
+            ))}
 
             {showPromises && family.promises?.length > 0 && (
               <section className="mb-5 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">

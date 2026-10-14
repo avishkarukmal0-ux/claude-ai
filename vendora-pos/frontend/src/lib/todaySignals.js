@@ -34,6 +34,24 @@ const FAMILY_NUDGES = {
   ],
 };
 
+// Per-member overrides where the family line would be wrong for that niche (e.g. an off-licence isn't a
+// newsagent, so it shouldn't be told to sort "news/mag returns"). When a member has its own set it REPLACES
+// the family set; otherwise the family set is used.
+const MEMBER_NUDGES = {
+  'off-licence': [
+    'Cash-&-carry run? Build your beer, wine & spirits list first.',
+    'Rotate chilled beers & mixers — pull anything short-dated.',
+    'Ask for ID if a customer looks under 25.',
+    'Spot-check shelf prices against the minimum unit price (Scotland/Wales).',
+  ],
+  'vape-cbd': [
+    'New lines: check they’re on the MHRA notified list before selling.',
+    'Confirm nicotine strength and bottle/tank sizes are within the limits.',
+    'No single-use disposable vapes — they’re banned.',
+    'Keep CBD supplier and novel-food evidence to hand.',
+  ],
+};
+
 /** Should cultural-festival nudges show? OFF by default for everyone — they appear only once the owner opts in
  *  (profile.festivalsOn === true). No shop is shown Diwali/Eid unasked, regardless of family. */
 export function festivalsEnabled(familyId, profile) {
@@ -79,8 +97,8 @@ export function buildTodaySignals(familyId, from = new Date(), { memberId = null
 
   // 4) A family-specific daily nudge (rotates by weekday). Drop the "date-code the milk & chilled" nudge for
   //    a vape & CBD shop — it doesn't sell chilled, so that prompt is noise.
-  let nudges = FAMILY_NUDGES[familyId] || [];
-  if (memberId === 'vape-cbd') nudges = nudges.filter((n) => !/milk|chilled/i.test(n));
+  // Prefer a member-specific set (niche-correct); fall back to the family set.
+  let nudges = (memberId && MEMBER_NUDGES[memberId]) || FAMILY_NUDGES[familyId] || [];
   if (nudges.length) {
     signals.push({ kind: 'tip', tone: 'neutral', text: nudges[day % nudges.length] });
   }

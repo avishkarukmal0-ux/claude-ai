@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pill, AlertTriangle } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
+import Abbr from '../common/Abbr';
 
 // Food supplement + novel-food checklist (Health-food). A checklist of the label points a supplement needs,
 // plus a novel-food register check. Reported rules (gov/FSA guidance, partly dated) — a helper, not advice.
@@ -48,7 +49,7 @@ export default function SupplementCheck() {
 
       <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
         <label className="flex min-h-[44px] items-center justify-between gap-2">
-          <span className="text-sm text-gray-700">Novel food? Checked on the FSA register?</span>
+          <span className="text-sm text-gray-700">Novel food? Checked on the <Abbr term="FSA" /> register?</span>
           <select value={novel} onChange={(e) => setNovel(e.target.value)} className="min-h-[44px] rounded-lg border border-gray-200 px-2 text-sm">
             <option value="">—</option>
             <option value="not-novel">Not novel</option>

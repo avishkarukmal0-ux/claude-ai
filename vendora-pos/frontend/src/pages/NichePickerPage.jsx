@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Check, ArrowRight } from 'lucide-react';
 import ScreenBack from '../components/common/ScreenBack';
+import { ACCOUNTS_ENABLED, isLoggedIn } from '../lib/account';
 import { SHOP_FAMILIES, getFamily, getMember, saveShopType, getSavedShopType } from '../config/shopTypes';
 import { useBusinessProfile, ENTITIES, TURNOVER_BANDS, REGIONS } from '../lib/businessProfile';
 import { onboardingQuestionsFor } from '../config/niche';
@@ -233,16 +234,19 @@ export default function NichePickerPage() {
             <p className="text-center text-sm text-gray-500">Tap the category that fits your shop.</p>
           )}
 
-          {/* Welcome-audit fix 1: "Log in" is a full-width secondary BUTTON (>= 44px tap target), not a tiny link. */}
-          <div className="mt-4 text-center">
-            <p className="mb-2 text-sm text-gray-500">Already using Vendora?</p>
-            <Link
-              to="/login"
-              className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-primary transition hover:bg-gray-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            >
-              Log in
-            </Link>
-          </div>
+          {/* "Log in" is a full-width secondary BUTTON (>= 44px). Hidden when already signed in — a logged-in
+              owner changing shop type doesn't need a log-in prompt (UX pass 1.8). */}
+          {!(ACCOUNTS_ENABLED && isLoggedIn()) && (
+            <div className="mt-4 text-center">
+              <p className="mb-2 text-sm text-gray-500">Already using Vendora?</p>
+              <Link
+                to="/login"
+                className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-primary transition hover:bg-gray-50 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              >
+                Log in
+              </Link>
+            </div>
+          )}
         </div>
         </main>
       </div>

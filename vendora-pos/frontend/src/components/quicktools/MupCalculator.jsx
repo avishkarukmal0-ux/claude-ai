@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Wine, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
+import Abbr from '../common/Abbr';
 import { getBusinessProfile } from '../../lib/businessProfile';
 
 // Minimum Unit Pricing guardrail. Floor = rate × units; units = ABV% × litres.
@@ -28,7 +29,7 @@ export default function MupCalculator() {
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400">
           <Info className="h-7 w-7" strokeWidth={1.75} />
         </div>
-        <p className="text-sm font-semibold text-gray-900">No MUP in your nation</p>
+        <p className="text-sm font-semibold text-gray-900">No <Abbr term="MUP" /> in your nation</p>
         <p className="mx-auto mt-1 max-w-xs text-sm text-gray-500">Minimum Unit Pricing applies in Scotland and Wales, not in {nation === 'ni' ? 'Northern Ireland' : 'England'}.</p>
         <ComplianceNote verified="2026-10-12" href="https://www.gov.wales/minimum-pricing-alcohol-guidance-retailers" label="MUP guidance (gov.wales)" />
       </div>
