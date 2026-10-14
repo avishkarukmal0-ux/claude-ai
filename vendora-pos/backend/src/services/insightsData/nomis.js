@@ -78,6 +78,35 @@ async function fetchJson(url) {
 let _transport = fetchJson;
 function __setTransport(t) { _transport = t || fetchJson; }
 
+// Parse a Retry-After header (delta-seconds or an HTTP-date) into milliseconds, capped so a rate-limit wait can
+// never blow the client's 30s budget. Returns null when there's nothing usable.
+function retryAfterMs(v) {
+  if (v == null) return null;
+  const secs = Number(v);
+  if (Number.isFinite(secs)) return Math.min(Math.max(secs, 0) * 1000, 8000);
+  const when = Date.parse(v);
+  if (!Number.isNaN(when)) return Math.min(Math.max(when - Date.now(), 0), 8000);
+  return null;
+}
+
+// Fetch one Nomis URL, honouring Retry-After on a 429/503 with a short bounded backoff (at most `attempts`
+// retries, each wait capped at 8s). Other errors propagate immediately. This makes bursts of parallel OA batches
+// degrade gracefully if Nomis ever rate-limits, instead of failing the whole table.
+async function transportWithRetry(url, attempts = 2) {
+  for (let i = 0; ; i += 1) {
+    try { return await _transport(url); }
+    catch (e) {
+      const status = e && e.status;
+      if ((status === 429 || status === 503) && i < attempts) {
+        const waitMs = retryAfterMs(e && e.retryAfter);
+        await new Promise((r) => setTimeout(r, waitMs != null ? waitMs : 1000 * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; }
 
 // Run `fn` over items with at most `limit` in flight — so a dense postcode's many OA batches fetch in parallel
@@ -171,7 +200,7 @@ async function fetchTable(def, oaCodes, rec = null) {
         const geogParam = encodeURIComponent(batch.join(','));
         const url = `${DATA().nomisBase}/dataset/${dataset}.data.json?geography=${geogParam}&measures=${def.measures}${sel}${uid}`;
         const bT = Date.now();
-        const parsed = parseObs(await _transport(url), def.dimension);
+        const parsed = parseObs(await transportWithRetry(url), def.dimension);
         // Per-batch wall time (so we can tell parallel from sequential: Σ batchMs ≈ table ms ⇒ sequual at Nomis;
         // max(batchMs) ≈ table ms ⇒ truly parallel). The batches are dispatched concurrently (mapLimit).
         if (rec) rec.batchMs.push(Date.now() - bT);

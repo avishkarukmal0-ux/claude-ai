@@ -218,6 +218,20 @@ describe('oaStore + per-OA durable cache (fetch-only-missing + timings)', () => 
     expect(out.E00000C['Aged 16 to 64 years']).toBe(60); // C freshly fetched
   });
 
+  test('a 429 with Retry-After is retried (bounded) and then succeeds', async () => {
+    const base = stubTransport();
+    let hits = 0;
+    nomis.__setTransport(async (url) => {
+      hits += 1;
+      if (hits === 1) { const e = new Error('Nomis HTTP 429'); e.status = 429; e.retryAfter = '0'; throw e; } // first call rate-limited
+      return base(url);
+    });
+    const r = {};
+    const out = await nomis.fetchTable(T.age, ['E00000A'], r); // retries after 0s, then succeeds
+    expect(hits).toBe(2);
+    expect(out.E00000A['Aged 16 to 64 years']).toBe(60);
+  });
+
   test('fetchAreaProfiles records per-step timings (centroid load, OA select, per-table)', async () => {
     await nomis.fetchAreaProfiles(POINT, 500, { headlineOnly: true });
     const tm = nomis.lastTimings();
