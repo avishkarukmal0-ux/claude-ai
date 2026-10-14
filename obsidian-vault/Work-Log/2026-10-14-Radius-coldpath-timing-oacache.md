@@ -53,6 +53,14 @@ Live `diag.timing` confirmed fc022b1 is deployed: centroids 0 ms (warm), Nomis i
 - Verify after deploy: `insightsoadatas` doc count before/after one cold `/radius`; `tables[].persisted` on that call; `oaFromMongo > 0` on a SECOND lookup of the same postcode after a restart.
 Files: `services/insightsData/oaStore.js`, `services/insightsData/nomis.js`, `routes/pwaNeighbourhoodRoutes.js`. insights tests 35 pass. Backend-only → needs Render deploy.
 
+## Round 3 — deploy visibility, auditable cache counts, RevokedToken blacklist
+Audit found the live `/radius` no longer returned `diag` — correct: commit `50a9057` strips `diag` in production (so Render is serving ≥50a9057). But `persisted`/`oaFromMongo` lived inside `diag`, so the cache was no longer auditable from the response. Fixes:
+- **`/version`** endpoint + a `commit` field on `/health` (from `RENDER_GIT_COMMIT`) so the serving build is checkable (`1e1218a`).
+- **Always-on `cacheStats`** on `/radius` (even in prod, diag hidden): per-table `{ds, req, mem, mongo, fetched, persisted, persistErr}` + `durationMs` — counts/dataset ids only, no OA codes. Lets the audit confirm `persisted == fetched` (cold) and `oaFromMongo > 0` (repeat/after-restart) from the response alone (`1e1218a`).
+- **Durable Mongo TTL refresh-token blacklist** (`060b8cd`, auth-only, separate commit): new `RevokedToken {tokenHash(sha256), expiresAt}` with a TTL index on `expiresAt`; `authService.refreshTokens`/`logout` check+write it alongside Redis, so sign-out holds with no `REDIS_URL`. 15-min access tokens unchanged. Test: after logout the same refresh token is rejected (CI, DB-backed).
+Live cold `/radius` (build fc022b1+): centroids 0 ms (warm); Nomis is the whole cost at ~18 ms/missing-OA. Measured: E9 6PT 6.9s, E3 4PH 3.9s, E8 3DY 10.2s, N1 9GU 18s, E14 5AB 17.5s. Dense ones (N1 9GU, E14 5AB) miss the <10s target on a FULL cold fetch — expected to drop once the Mongo read path is confirmed filling (repeat/after-restart), since only first-ever OAs hit Nomis. Hold radius-stepping until that's confirmed.
+insights tests 35 pass; auth modules load. Backend-only → needs Render deploy. Could NOT run DB-backed auth test locally (mongodb-memory-server binary blocked) — CI covers it.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.
