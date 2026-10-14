@@ -91,7 +91,10 @@ io.on('connection', (socket) => {
 // Start HTTP server — bind to 0.0.0.0 so Railway can route traffic to the container.
 // Without an explicit host Node defaults to 127.0.0.1 which is unreachable externally.
 server.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Vendora POS v3.0 running on 0.0.0.0:${PORT} [${process.env.NODE_ENV}]`);
+  // Log the git commit at startup so the Render deploy log always shows exactly which build is live (the API
+  // also serves it at /health.commit and /version, but those need a request; this is right there in the log).
+  const commit = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.SOURCE_VERSION || 'unknown';
+  logger.info(`Vendora POS v3.0 running on 0.0.0.0:${PORT} [${process.env.NODE_ENV}] commit=${commit}`);
   logger.info(`API: http://0.0.0.0:${PORT}/api`);
   logger.info(`Health: http://0.0.0.0:${PORT}/health`);
 
