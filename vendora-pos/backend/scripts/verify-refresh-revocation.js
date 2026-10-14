@@ -19,7 +19,9 @@ const Staff = require('../src/models/Staff');
 const RevokedToken = require('../src/models/RevokedToken');
 
 const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
-const redact = (t) => (t ? `${String(t).slice(0, 12)}…(${String(t).length} chars)` : '(none)');
+// NEVER print any part of a token (not even a prefix) — a refresh token is a bearer credential. Report only
+// its presence and length, which is enough to show "a token was issued" without leaking any of its bytes.
+const redact = (t) => (t ? `(present, ${String(t).length} chars)` : '(none)');
 
 /**
  * Run the verification against the CURRENT mongoose connection. `log(line)` receives each result line.

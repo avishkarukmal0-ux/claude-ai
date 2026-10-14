@@ -112,6 +112,11 @@ Audit confirmed batches ARE parallel (cold 4970m/2000 OAs: batchMs [4509,5089]/[
 - Item 5 (FREE plan): Starter ~£6–7/mo (no spin-down) vs an external <15min ping (free-ish, 750 instance-hrs/mo cap) — Avishka's call; plan not changed.
 Live commit `1fa3085`; both test flags off. insightsData/centroids tests pass; FE build `index-C8hMrDdd.js`.
 
+## Round 11 — re-proved blacklist from a fresh deploy; stopped logging any token bytes
+- **Re-ran the boot self-verify** on request: set `VERIFY_REVOCATION=1` (merge-safe) → deploy `dep-db7nk2qj9qps73d3gf60` on live commit `31872f4` → log shows all 5 steps PASS + `RESULT: PASS — logout revokes the refresh token durably (no Redis needed).`; set flag back to `0` (deploy `dep-db7nlgdg1s2s73b6n9g0`). Throwaway account only.
+- **Security fix (`verify-refresh-revocation.js`):** the `redact()` helper used to print a 12-char token prefix (`eyJhbGciOiJI…(308 chars)`). A refresh token is a bearer credential — now logs `(present, 308 chars)`, no token bytes. Script-only; runs only when the flag is on, so no live deploy needed (service autoDeploy is OFF anyway).
+- **TTL index confirmed (as far as the read tools allow):** `revokedtokens` indexes = `_id_`, `tokenHash_1` (unique), `expiresAt_1`. The Atlas MCP read tools (`collection-indexes`, `$indexStats`) surface only name+key, **not** `expireAfterSeconds`, so the option value can't be read back through them. Corroborated: model declares `schema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })`; autoIndex ON in prod; no `IndexOptionsConflict` at boot (a pre-existing plain index would have thrown); and **0 documents linger past their `expiresAt`** (empirical: `count({expiresAt:{$lt:now}})` = 0), consistent with an active TTL sweep. `insightsoadatas` = 15,668.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.
