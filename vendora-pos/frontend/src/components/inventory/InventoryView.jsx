@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical } from 'lucide-react';
 import ConfirmDialog from '../common/ConfirmDialog';
@@ -142,6 +142,15 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
         </div>
       )}
 
+      {products.length > 0 && filtered.length === 0 && (
+        <div className="mt-6 flex flex-col items-center text-center">
+          <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-400"><Search className="h-7 w-7" strokeWidth={1.75} /></span>
+          <p className="text-sm font-semibold text-gray-900">No products match “{query}”</p>
+          <p className="mt-1 max-w-xs text-sm text-gray-500">Try a different name or barcode.</p>
+          <button type="button" onClick={() => setQuery('')} className="mt-4 inline-flex min-h-[44px] items-center rounded-xl border border-gray-200 px-4 text-sm font-semibold text-primary">Clear search</button>
+        </div>
+      )}
+
       {products.length === 0 && !adding ? (
         <EmptyState onAdd={() => setAdding(true)} onImport={onOpenImport} />
       ) : (
@@ -172,6 +181,11 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
   const low = isLowStock(p);
   const [menuOpen, setMenuOpen] = useState(false); // kebab menu: History / Edit / Delete (declutters the row)
   const [confirmDel, setConfirmDel] = useState(false);
+  // Move keyboard focus into the menu when it opens (a11y: an opened menu should take focus), and back to the
+  // trigger when it closes, so keyboard/screen-reader users land on the first item instead of being left behind.
+  const menuTriggerRef = useRef(null);
+  const firstMenuItemRef = useRef(null);
+  useEffect(() => { if (menuOpen) firstMenuItemRef.current?.focus(); }, [menuOpen]);
   function doDelete() {
     setConfirmDel(false);
     const snapshot = p; // keep the exact product so Undo can restore it (id + history links intact)
@@ -215,7 +229,7 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
               value={p.supplierId || ''}
               onChange={(e) => updateProduct(p.id, { supplierId: e.target.value || null })}
               className="mt-1.5 min-h-[44px] w-full max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary focus:outline-none"
-              aria-label="Supplier"
+              aria-label={`Supplier for ${p.name}`}
             >
               <option value="">— supplier —</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -227,14 +241,14 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
               value={p.expiry || ''}
               onChange={(e) => updateProduct(p.id, { expiry: e.target.value || null })}
               className="min-h-[44px] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary focus:outline-none"
-              aria-label="Expiry date"
+              aria-label={`Expiry date for ${p.name}`}
             />
             {p.expiry && (
               <select
                 value={p.dateType || 'best-before'}
                 onChange={(e) => updateProduct(p.id, { dateType: e.target.value })}
                 className="min-h-[44px] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 focus:border-primary focus:outline-none"
-                aria-label="Date type"
+                aria-label={`Date type for ${p.name}`}
               >
                 {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
@@ -250,14 +264,14 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
         {/* Actions collapse into a "⋮" menu so the row isn't a wall of icon buttons (375px). Delete sits apart
             at the bottom (danger tint) and CONFIRMS — it removes the product + its stock number. */}
         <div className="relative shrink-0">
-          <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`More actions for ${p.name}`}>
+          <button ref={menuTriggerRef} type="button" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label={`More actions for ${p.name}`}>
             <MoreVertical className="h-5 w-5" />
           </button>
           {menuOpen && (
             <>
               <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
-              <div role="menu" className="absolute right-0 top-11 z-20 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onHistory(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
+              <div role="menu" aria-label={`Actions for ${p.name}`} onKeyDown={(e) => { if (e.key === 'Escape') { setMenuOpen(false); menuTriggerRef.current?.focus(); } }} className="absolute right-0 top-11 z-20 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+                <button ref={firstMenuItemRef} type="button" role="menuitem" onClick={() => { setMenuOpen(false); onHistory(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
                   <History className="h-4 w-4 text-gray-400" /> Stock history
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
@@ -438,23 +452,23 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
   return (
     <div className="mb-3 rounded-2xl border border-gray-300 bg-white p-3 shadow-sm">
       <h3 className="mb-2 text-sm font-bold text-gray-900">Edit product</h3>
-      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode" aria-label="Barcode" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-      <input value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category" aria-label="Category" className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.name} onChange={set('name')} placeholder="Product name" aria-label="Product name" className="min-h-[44px] mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.barcode} onChange={set('barcode')} inputMode="numeric" placeholder="Barcode" aria-label="Barcode" className="min-h-[44px] mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+      <input value={f.category} onChange={set('category')} list="vendora-category-list" placeholder="Category" aria-label="Category" className="min-h-[44px] mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       <datalist id="vendora-category-list">{categorySuggestions.map((c) => <option key={c} value={c} />)}</datalist>
       {suppliers.length > 0 && (
-        <select value={f.supplierId} onChange={set('supplierId')} className="mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
+        <select value={f.supplierId} onChange={set('supplierId')} className="min-h-[44px] mb-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:border-primary focus:outline-none">
           <option value="">Supplier (optional)</option>
           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       )}
       <div className="mb-2 grid grid-cols-2 gap-2">
-        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.cost} onChange={set('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.price} onChange={set('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       </div>
       <div className="mb-2 grid grid-cols-2 gap-2">
-        <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
-        <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
+        <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
       </div>
 
       {/* Allergens + ingredients (PPDS / Natasha's Law) — food shops only. */}
@@ -462,7 +476,7 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
         <div className="mb-2 rounded-xl border border-gray-200 bg-gray-50 p-2.5">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">Allergens &amp; ingredients (PPDS)</p>
           <textarea value={ingredients} onChange={(e) => setIngredients(e.target.value)} rows={2} placeholder="Full ingredients (in weight order)" aria-label="Ingredients"
-            className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+            className="min-h-[44px] mb-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
           <div className="flex flex-wrap gap-1.5">
             {ALLERGENS.map((a) => {
               const on = allergens.includes(a);
@@ -496,9 +510,9 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
             inputMode="numeric"
             placeholder="Add another barcode"
             aria-label="Add another barcode"
-            className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+            className="min-h-[44px] flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
-          <button type="button" onClick={addExtra} className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-primary">Add</button>
+          <button type="button" onClick={addExtra} className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-primary">Add</button>
         </div>
       </div>
 
@@ -517,20 +531,20 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
         )}
         <div className="grid grid-cols-2 gap-2">
           {suppliers.length > 0 ? (
-            <select value={al.supplierId} onChange={(e) => setAl((p) => ({ ...p, supplierId: e.target.value }))} className="col-span-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none">
+            <select value={al.supplierId} onChange={(e) => setAl((p) => ({ ...p, supplierId: e.target.value }))} className="min-h-[44px] col-span-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none">
               <option value="">Any supplier</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           ) : null}
-          <input value={al.code} onChange={(e) => setAl((p) => ({ ...p, code: e.target.value }))} placeholder="Their code" aria-label="Supplier code" className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
-          <input value={al.name} onChange={(e) => setAl((p) => ({ ...p, name: e.target.value }))} placeholder="Their name for it" aria-label="Supplier name for product" className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+          <input value={al.code} onChange={(e) => setAl((p) => ({ ...p, code: e.target.value }))} placeholder="Their code" aria-label="Supplier code" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
+          <input value={al.name} onChange={(e) => setAl((p) => ({ ...p, name: e.target.value }))} placeholder="Their name for it" aria-label="Supplier name for product" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none" />
         </div>
-        <button type="button" onClick={addAlias} className="mt-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary">Add supplier alias</button>
+        <button type="button" onClick={addAlias} className="min-h-[44px] mt-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-primary">Add supplier alias</button>
       </div>
 
       <div className="flex gap-2">
-        <button type="button" disabled={!canSave} onClick={save} className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save changes</button>
-        <button type="button" onClick={onCancel} className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
+        <button type="button" disabled={!canSave} onClick={save} className="min-h-[44px] flex-1 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Save changes</button>
+        <button type="button" onClick={onCancel} className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-600">Cancel</button>
       </div>
     </div>
   );

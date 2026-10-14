@@ -1,6 +1,6 @@
 import React from 'react';
 import toast from 'react-hot-toast';
-import { BadgePercent, ArrowRight, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { BadgePercent, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { usePriceAlerts } from '../../lib/priceAlertStore';
 import { useInventory } from '../../lib/inventoryStore';
 import ScreenBack from '../common/ScreenBack';
@@ -55,10 +55,10 @@ export default function PriceAlertsView({ onBack }) {
                   </span>
                 </div>
                 <div className="mb-1 flex items-center gap-2 text-[12px] text-gray-600">
-                  cost {money(a.prevCost)} <ArrowRight className="h-3.5 w-3.5 text-gray-400" /> <span className="font-semibold text-gray-900">{money(a.newCost)}</span>
+                  cost {money(a.prevCost)} <span className="text-gray-400">→</span> <span className="font-semibold text-gray-900">{money(a.newCost)}</span>
                 </div>
                 <div className="mb-2 text-xs text-gray-500">
-                  margin {pct(a.prevMargin)} <ArrowRight className="inline h-3 w-3 text-gray-400" /> <span className={a.newMargin != null && a.prevMargin != null && a.newMargin < a.prevMargin ? 'font-semibold text-danger' : 'font-semibold text-gray-700'}>{pct(a.newMargin)}</span>
+                  margin {pct(a.prevMargin)} <span className="text-gray-400">→</span> <span className={a.newMargin != null && a.prevMargin != null && a.newMargin < a.prevMargin ? 'font-semibold text-danger' : 'font-semibold text-gray-700'}>{pct(a.newMargin)}</span>
                   {a.suggestedRetail != null && <> · hold margin at retail <span className="font-semibold text-gray-900">{money(a.suggestedRetail)}</span></>}
                 </div>
                 <div className="flex items-center gap-2">

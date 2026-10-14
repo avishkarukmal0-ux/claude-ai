@@ -12,7 +12,7 @@ export default function ScreenBack({ onBack, label = 'Back', className = '' }) {
     <button
       type="button"
       onClick={onBack}
-      aria-label="Back"
+      aria-label={label}
       className={`mb-3 -ml-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-sm font-medium text-primary hover:underline active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${className}`}
     >
       <ChevronLeft className="h-5 w-5" /> {label}

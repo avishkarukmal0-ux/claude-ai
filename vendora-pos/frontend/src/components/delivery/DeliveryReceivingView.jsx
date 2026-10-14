@@ -271,7 +271,8 @@ export default function DeliveryReceivingView({ onBack }) {
             <select
               value={draft.orderId || ''}
               onChange={(e) => commit({ ...draft, orderId: e.target.value || null })}
-              className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
+              aria-label="Receive against which order"
+              className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
             >
               <option value="">Not against an order</option>
               {openOrders.map((o) => <option key={o.id} value={o.id}>{o.supplierName || 'Order'} · {(o.lines || []).length} lines</option>)}

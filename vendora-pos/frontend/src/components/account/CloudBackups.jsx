@@ -13,8 +13,14 @@ const STORE_LABEL = {
   requests_v1: 'Customer requests', invoices_v1: 'Invoices', credit_notes_v1: 'Credit notes',
   price_alerts_v1: 'Price changes', shop_type: 'Shop type', suggestions_v1: 'Team suggestions',
   handovers_v1: 'Handovers', sales_imports_v1: 'Till imports', stocktake_history_v1: 'Count history',
+  markdowns_v1: 'Markdowns', trials_v1: 'Product trials', business_profile_v1: 'Business profile',
+  temperature_log_v1: 'Temperature log', refusals_log_v1: 'Refusals log', refusals_signoff_v1: 'Refusals sign-off',
+  scale_checks_v1: 'Scale checks', food_registration_v1: 'Food registration', licence_log_v1: 'Licence log',
+  trading_permits_v1: 'Trading permits', animal_licence_v1: 'Animal licence', recall_log_v1: 'Product recalls',
 };
-const label = (n) => STORE_LABEL[n] || n.replace(/_v1$/, '');
+// Readable name for a store key. Fall back to a prettified version (drop the _v1, underscores → spaces) so an
+// unmapped key never shows as a raw, shouty "BUSINESS_PROFILE" under the uppercase heading style.
+const label = (n) => STORE_LABEL[n] || n.replace(/_v1$/, '').replace(/_/g, ' ');
 const when = (ts) => { try { return new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
 
 // Internal keys that aren't user-facing "data to roll back" — don't list them (e.g. the shop-type marker).
@@ -121,7 +127,7 @@ export default function CloudBackups({ onBack }) {
                       type="button"
                       onClick={() => setConfirmRestore({ name, rev: h.rev, h })}
                       disabled={!!restoring}
-                      aria-label={`Restore version ${h.rev}, ${when(h.mtime || h.at)}`}
+                      aria-label={`Restore ${label(name)} version ${h.rev}, ${when(h.mtime || h.at)}`}
                       className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 active:scale-95 disabled:opacity-50"
                     >
                       {restoring === `${name}:${h.rev}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Restore
