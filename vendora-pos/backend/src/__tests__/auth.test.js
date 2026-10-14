@@ -2,9 +2,12 @@
 
 require('./setup');
 const request = require('supertest');
+const crypto = require('crypto');
 const app = require('../app');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
+const authService = require('../services/authService');
+const RevokedToken = require('../models/RevokedToken');
 
 describe('Auth Routes', () => {
   describe('POST /api/auth/login', () => {
@@ -179,5 +182,28 @@ describe('Auth Routes', () => {
         .send({ pin: '2222', minRole: 'manager' });
       expect([200, 400]).toContain(res.status); // 400 if endpoint doesn't exist, 200 if it does
     });
+  });
+});
+
+// Durable (Mongo TTL) refresh-token blacklist — so sign-out works without Redis (REDIS_URL unset in the pilot).
+describe('refresh-token revocation after logout (durable Mongo blacklist)', () => {
+  it('rejects a refresh token once the user has logged out', async () => {
+    const { refreshToken } = await authService.login(
+      global.testStore._id.toString(),
+      'owner@test.com',
+      'password123',
+    );
+    expect(typeof refreshToken).toBe('string');
+    const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+    // Not revoked yet → refresh works.
+    expect(await RevokedToken.exists({ tokenHash: hash })).toBeFalsy();
+
+    // Log out → the token is recorded in the durable blacklist …
+    await authService.logout(refreshToken);
+    expect(await RevokedToken.exists({ tokenHash: hash })).toBeTruthy();
+
+    // … and the same refresh token is now rejected (even with no Redis).
+    await expect(authService.refreshTokens(refreshToken)).rejects.toBeTruthy();
   });
 });
