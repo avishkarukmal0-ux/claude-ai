@@ -68,6 +68,14 @@ Live audit of `f6fe5ae`: cache verified — N1 9GU 207 OAs all-from-Mongo 0.54s 
 - Verification of sign-out: the `auth.test.js` logout→refresh-rejected test asserts the exact requirement and runs in CI against real Mongo; it can't run in this sandbox (mongodb-memory-server binary blocked — it errors at `global.testStore`). On prod, a web logout inserts one doc into the `revokedtokens` collection (hash only); that's the observable check.
 Files: `services/insightsData/centroids.js`, `server.js`, `config/redis.js`. centroids+insights tests 22 pass. Backend-only → needs Render deploy of the new tip.
 
+## Round 5 — audit answers: verify script + update-banner preview
+Audit of `f875abb` confirmed: SW1A 2AA 0.65s (85 OAs all-from-Mongo, server 309 ms), non-existent E17 4RA → 404 + status message, debug line gone, Your-area controls ≥44px. Remaining were things the auditor can't verify from the browser; provided tools instead:
+- **Sign-out verification without a real account:** new `backend/scripts/verify-refresh-revocation.js` — mints a throwaway refresh JWT (no real login), asserts it isn't blacklisted, calls `authService.logout()`, asserts a `RevokedToken` row now exists (hash only, future `expiresAt`), then deletes it. Run `node scripts/verify-refresh-revocation.js` in the Render shell (reads `MONGODB_URI`). Prints PASS/FAIL. (End-to-end login→logout→refresh-rejected is the CI `auth.test.js`.)
+- **Update-banner preview:** `pwa.js` shows the Refresh toast on `?swUpdatePreview=1` (inert button — dummy worker, just dismisses) so the 44px button can be measured on screen without a real SW update. SW bumped v41→v42.
+- **cacheStats:** intentional, counts/dataset-ids only (no secrets) — KEEP.
+Answers for the auditor: Render serves `f875abb` (boot-window coalescing IS in; the deploy log shows `warming OA centroids into memory…` at 11:05:29 and the `…(188880) in Xms` completion ~27s later, just past their log excerpt). Token blacklist shipped in `060b8cd`.
+FE build green (`index-5xHDnST2.js`), pwa test 4 pass. Frontend → Vercel; the script is backend tooling (no redeploy needed to run).
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.

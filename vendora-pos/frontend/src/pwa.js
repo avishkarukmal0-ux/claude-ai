@@ -94,6 +94,15 @@ export function registerServiceWorker() {
     else window.addEventListener('load', fn, { once: true });
   };
 
+  // Preview the "New version is ready" banner on demand (?swUpdatePreview=1) so its Refresh button can be
+  // measured on screen without waiting for a real worker update. The button is inert here (dummy worker →
+  // postMessage no-ops), it just dismisses. Harmless if a visitor hits the param; purely a visual preview.
+  try {
+    if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('swUpdatePreview') === '1') {
+      promptRefresh({ postMessage() { /* preview only — no real worker to activate */ } });
+    }
+  } catch { /* ignore */ }
+
   whenReady(() => {
     navigator.serviceWorker
       .register('/sw.js')
