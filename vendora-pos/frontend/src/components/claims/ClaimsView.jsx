@@ -17,6 +17,13 @@ const STATUS = {
   settled: { label: 'Settled', cls: 'bg-success-light text-success-dark' },
 };
 const ADVANCE_LABEL = { submitted: 'Mark submitted', acknowledged: 'Acknowledged', approved: 'Approve', rejected: 'Reject', settled: 'Mark settled' };
+const ADVANCE_TOAST = {
+  submitted: 'Claim submitted — follow up in 7 days',
+  acknowledged: 'Marked acknowledged',
+  approved: 'Claim approved — record the credit when it arrives',
+  rejected: 'Claim marked rejected',
+  settled: 'Claim settled',
+};
 
 async function shareClaim(claim) {
   const lines = (claim.items || []).map((i) => `• ${i.name} x${i.qty} (${DELIVERY_ISSUES[i.reason]?.label || i.reason}) — ${money(i.amount)}`);
@@ -136,6 +143,12 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, onDelete, onRecor
     // Item 6: once the money's in (received ≥ requested), offer a one-tap settle.
     const canSettle = c.status !== 'settled' && t.received != null && t.requested > 0 && t.received >= t.requested;
     function settle() { advance(c.id, 'settled'); toast.success(`Claim settled — ${money(t.received ?? t.requested)} recovered`); }
+    // Advance + a confirming toast. On submit, set a 7-day follow-up (if none) so the toast's promise is real.
+    function doAdvance(s) {
+      advance(c.id, s);
+      if (s === 'submitted' && !c.followUpDate) { const d = new Date(); d.setDate(d.getDate() + 7); updateClaim(c.id, { followUpDate: d.toISOString().slice(0, 10) }); }
+      if (ADVANCE_TOAST[s]) toast.success(ADVANCE_TOAST[s]);
+    }
     return (
       <li className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
@@ -199,17 +212,17 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, onDelete, onRecor
           <button type="button" onClick={settle} className="mb-2 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-success px-3 text-sm font-bold text-white active:scale-[0.99]"><CheckCircle2 className="h-4 w-4" /> Mark settled — {money(t.received)} recovered</button>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => shareClaim(c)} disabled={shareBlocked} aria-label={`Share claim for ${c.supplierName || 'supplier'}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95 disabled:opacity-40"><Share2 className="h-3.5 w-3.5" /> Share</button>
+          <button type="button" onClick={() => shareClaim(c)} disabled={shareBlocked} title={shareBlocked ? (missingAgreed ? 'Enter the agreed price to share' : 'Add an affected quantity to share') : undefined} aria-label={`Share claim for ${c.supplierName || 'supplier'}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95 disabled:opacity-40"><Share2 className="h-3.5 w-3.5" /> Share</button>
           {(c.status === 'approved' || c.status === 'settled') && onRecordCredit && (
-            <button type="button" onClick={() => onRecordCredit({ supplierId: c.supplierId || null, supplierName: c.supplierName || '', amount: t.approved ?? t.requested, reference: c.creditNoteRef || c.deliveryRef || '' })} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95"><Receipt className="h-3.5 w-3.5" /> Record credit</button>
+            <button type="button" onClick={() => onRecordCredit({ claimId: c.id, supplierId: c.supplierId || null, supplierName: c.supplierName || '', amount: t.approved ?? t.requested, reference: c.creditNoteRef || c.deliveryRef || '' })} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95"><Receipt className="h-3.5 w-3.5" /> Record credit</button>
           )}
           {nextStates(c.status).map((s) => (
-            <button key={s} type="button" onClick={() => advance(c.id, s)} className={`inline-flex min-h-[44px] items-center rounded-lg px-3 text-xs font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
+            <button key={s} type="button" onClick={() => doAdvance(s)} className={`inline-flex min-h-[44px] items-center rounded-lg px-3 text-xs font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
           ))}
           <button type="button" onClick={() => onDelete(c)} className="ml-auto inline-flex h-11 w-11 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete claim for ${c.supplierName || 'supplier'}${c.deliveryRef ? ` ${c.deliveryRef}` : ''}`}><Trash2 className="h-4 w-4" /></button>
         </div>
         {shareBlocked && (
-          <p className="mt-1.5 text-xs text-warning-dark">{nothingToClaim ? 'Nothing to claim yet — add an agreed price or an affected quantity before sending.' : 'Enter the agreed £/unit on each wrong-price line so the claim has an amount to send.'}</p>
+          <p className="mt-1.5 text-xs text-warning-dark">{missingAgreed ? 'Enter the agreed price to share — a blank agreed price isn’t counted (so it’s not claimed as the full billed amount).' : 'Add an affected quantity before sharing — there’s nothing to claim yet.'}</p>
         )}
       </li>
     );

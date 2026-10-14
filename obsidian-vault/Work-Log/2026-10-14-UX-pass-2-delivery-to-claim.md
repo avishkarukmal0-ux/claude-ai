@@ -42,8 +42,15 @@ from the earlier pass). Views: `DeliveryReceivingView.jsx`, `ClaimsView.jsx`, `C
 `inventory/InventoryView.jsx`, `reorder/ReorderView.jsx`, `report/WeeklyReportView.jsx`, `home/TodayAtShop.jsx`,
 `pages/HomePage.jsx`. `public/sw.js` v49→v50.
 
+## Re-check follow-ups (B59FcGzc audit → v51)
+1. **Blank agreed price bug:** `updateClaimItem` used `Number(merged.unitAgreed)` — `Number(null)` is 0, so a blank agreed price claimed the FULL billed value (£1.80). Now a blank agreed price is treated as unknown → the line stays £0 and isn't included in the requested total. Share stays blocked with a clear reason ("Enter the agreed price to share…") on the button `title` + inline hint.
+2. **"Order this" quantity:** now uses the shared `suggestReorderQty(product, vpd)` (moved into `movementStore`, reused by the Buy list) with the row's sales velocity — so Stock's "Order this" adds the same number the Buy list shows (e.g. +3), not 1.
+3. **Record credit auto-allocates:** the prefill now carries `claimId`; on save, `CreditNotesView.autoAllocate` allocates the note to that claim (capped to its outstanding) via `setAllocation` + `applyCredit` — no more "£0.75 unallocated / Match to claims".
+4. **Acronyms:** also wrapped the quick-tool **labels** ("MTD countdown", "MUP floor", "PPDS label") in the grid + dialog header with `withGlossary` (taglines, nudges and Compliance-radar name/note were already wrapped).
+5. **Advance toasts:** "Mark submitted" → "Claim submitted — follow up in 7 days" (and sets a 7-day follow-up if none), "Approve" → "Claim approved — record the credit when it arrives", plus acknowledged/rejected.
+
 ## Verify
-- `npm run build` ✓. Full vitest **547 passed / 80 files** (2 new claim tests: multi-issue + wrong-price defaults).
+- `npm run build` ✓. Full vitest **547 passed / 80 files**. SW v50→v51.
 
 ## Couldn't verify
 - No headless device run. The money paths (wrong-price overcharge, multi-issue totals) are covered by unit

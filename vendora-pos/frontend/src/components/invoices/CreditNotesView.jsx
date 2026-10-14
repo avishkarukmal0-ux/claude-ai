@@ -51,6 +51,22 @@ export default function CreditNotesView({ onBack, prefill }) {
     return ok;
   }
 
+  // Item 3: when the note was started via a claim's "Record credit", auto-allocate it to that claim on save
+  // (capped to what the claim still has outstanding), so the owner doesn't have to Match → Allocate by hand.
+  function autoAllocate(note) {
+    const claimId = prefill?.claimId;
+    if (!claimId || !note) return;
+    const claim = claims.find((c) => c.id === claimId);
+    if (!claim) return;
+    const amt = r2(Math.min(Number(note.amount) || 0, claimOutstanding(claim)));
+    if (!(amt > 0)) return;
+    const a = setAllocation(note.id, claimId, amt);
+    if (a && a.ok === false) { toast.error('Saved — but couldn’t link it to the claim. Use “Match to claims”.'); return; }
+    const applied = applyCredit(claimId, { creditNoteId: note.id, creditNoteRef: note.reference, amount: amt });
+    if (!applied) { setAllocation(note.id, claimId, 0); toast.error('Saved — but couldn’t record it on the claim. Use “Match to claims”.'); return; }
+    toast.success(`Credit allocated to ${claim.supplierName || 'the claim'}`);
+  }
+
   function deleteNote(cn) {
     setConfirmDelNote(null);
     // V2: a note left in pending-repair is blocked until the owner reloads and checks it.
@@ -96,7 +112,7 @@ export default function CreditNotesView({ onBack, prefill }) {
       {adding && <AddForm suppliers={suppliers} initial={prefill} onCancel={() => setAdding(false)} onSave={(d) => {
         const dup = findDuplicate(d);
         if (dup) { setDupPending({ note: d, dup }); return; } // confirm via accessible dialog, not window.confirm
-        const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save');
+        const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); autoAllocate(r.note); } else toast.error(r.error || 'Couldn’t save');
       }} />}
 
       {notes.length === 0 && !adding ? (
@@ -210,7 +226,7 @@ export default function CreditNotesView({ onBack, prefill }) {
         title="Possible duplicate"
         message={`This looks like a credit note you already have (${dupPending?.dup?.supplierName || 'supplier'} · ${dupPending?.dup?.reference || 'no ref'} · ${gbp(dupPending?.dup?.amount)}). Save it anyway?`}
         confirmLabel="Save anyway"
-        onConfirm={() => { const d = dupPending.note; setDupPending(null); const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save'); }}
+        onConfirm={() => { const d = dupPending.note; setDupPending(null); const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); autoAllocate(r.note); } else toast.error(r.error || 'Couldn’t save'); }}
         onCancel={() => setDupPending(null)}
       />
     </div>

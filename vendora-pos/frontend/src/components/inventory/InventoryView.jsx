@@ -10,6 +10,7 @@ import { ProductThumb } from '../common/ProductImage';
 import { useFormDraft } from '../../lib/formDraft';
 import { useSuppliers } from '../../lib/supplierStore';
 import { useBuyList } from '../../lib/buyListStore';
+import { useMovements, velocity, suggestReorderQty } from '../../lib/movementStore';
 import { getSavedShopType, getFamily } from '../../config/shopTypes';
 import { categoriesForFamily, categoriesInUse, UNCATEGORISED } from '../../config/categories';
 import { unitPrice } from '../../lib/priceMarking';
@@ -59,6 +60,7 @@ export { validBarcode };
 export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const { products, addProduct, updateProduct, removeProduct, restoreProduct } = useInventory();
   const { suppliers } = useSuppliers();
+  const { records } = useMovements(); // sales velocity → the same reorder suggestion the Buy list uses
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // product being edited, or null
@@ -191,7 +193,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
               </div>
               <ul className="space-y-2">
                 {items.map((p) => (
-                  <ProductRow key={p.id} p={p} suppliers={suppliers} updateProduct={updateProduct} removeProduct={removeProduct} restoreProduct={restoreProduct} onEdit={() => setEditing(p)} onHistory={() => setViewingId(p.id)} />
+                  <ProductRow key={p.id} p={p} suppliers={suppliers} records={records} updateProduct={updateProduct} removeProduct={removeProduct} restoreProduct={restoreProduct} onEdit={() => setEditing(p)} onHistory={() => setViewingId(p.id)} />
                 ))}
               </ul>
             </div>
@@ -204,16 +206,15 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
 // One product row. Shows category + pack ("Case of N") alongside the existing barcode/price/margin so
 // the shopkeeper can see at a glance what the item is and how it's bought.
-function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct, onEdit, onHistory }) {
+function ProductRow({ p, suppliers, records, updateProduct, removeProduct, restoreProduct, onEdit, onHistory }) {
   const m = margin(p);
   const low = isLowStock(p);
   const buyList = useBuyList();
   const onBuyList = !!buyList.hasProduct?.(p.id);
   function orderThis() {
-    // Suggest a quantity that brings stock back up to the reorder level (par/min), not a bare 1. Falls back to a
-    // small default when no par is set. The owner can still fine-tune it on the Buy list.
-    const target = Number(p.min) > 0 ? Number(p.min) : 3;
-    const suggested = Math.max(1, target - (Number(p.qty) || 0));
+    // Use the SAME suggestion the Buy list shows (velocity-based cover, par fallback), not a bare 1.
+    const { vpd } = velocity(records || [], p.id);
+    const suggested = suggestReorderQty(p, vpd);
     buyList.addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: suggested, supplierId: p.supplierId || null, supplierName: suppliers.find((s) => s.id === p.supplierId)?.name });
     toast.success(`Added ${suggested} ${suggested === 1 ? 'unit' : 'units'} of ${p.name} to the buy list`);
   }

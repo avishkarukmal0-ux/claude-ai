@@ -5,7 +5,7 @@ import ScreenBack from '../common/ScreenBack';
 import { useInventory, isLowStock } from '../../lib/inventoryStore';
 import { useBuyList } from '../../lib/buyListStore';
 import { useSuppliers } from '../../lib/supplierStore';
-import { useMovements, velocity, daysOfCover } from '../../lib/movementStore';
+import { useMovements, velocity, daysOfCover, suggestReorderQty } from '../../lib/movementStore';
 import { useOrders, incomingFor } from '../../lib/orderStore';
 
 // How far ahead we want stock to cover, and how few days left flags a fast mover
@@ -33,14 +33,7 @@ async function shareGroup(supplier, groupItems) {
 // Suggested restock quantity. If we know how fast it sells, order enough to cover
 // the next TARGET_COVER_DAYS at that rate. Otherwise fall back to the honest par
 // heuristic (min ×2, or 6) so it still works on day one with no history.
-function suggestQty(p, vpd) {
-  const qty = Number(p.qty) || 0;
-  if (vpd && vpd > 0) {
-    return Math.max(1, Math.ceil(vpd * TARGET_COVER_DAYS) - qty);
-  }
-  const par = (Number(p.min) || 0) > 0 ? Number(p.min) * 2 : 6;
-  return Math.max(1, par - qty);
-}
+const suggestQty = (p, vpd) => suggestReorderQty(p, vpd, { targetDays: TARGET_COVER_DAYS });
 
 // Human weekly rate, e.g. 4.6 → "~5/wk", 0.4 → "<1/wk".
 function weeklyLabel(vpd) {

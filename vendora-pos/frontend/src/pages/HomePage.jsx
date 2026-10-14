@@ -436,7 +436,7 @@ export default function HomePage() {
                     return (
                       <button key={t.id} type="button" onClick={() => setActiveTool(t)} className={`flex ${toolsExpanded ? 'w-full' : 'w-32 shrink-0'} flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2`}>
                         <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}1A`, color: accent }}><Icon className="h-5 w-5" strokeWidth={1.75} /></span>
-                        <span className="text-sm font-semibold leading-tight text-gray-900">{t.label}</span>
+                        <span className="text-sm font-semibold leading-tight text-gray-900">{withGlossary(t.label)}</span>
                         <span className="mt-0.5 text-xs leading-snug text-gray-500">{withGlossary(t.tagline)}</span>
                       </button>
                     );
@@ -566,7 +566,7 @@ export default function HomePage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setActiveTool(null)} role="dialog" aria-modal="true" aria-label={activeTool.label}>
           <div ref={toolDialogRef} className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h3 className="text-base font-bold text-gray-900">{activeTool.label}</h3>
+              <h3 className="text-base font-bold text-gray-900">{withGlossary(activeTool.label)}</h3>
               <button type="button" onClick={() => setActiveTool(null)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close"><X className="h-5 w-5" /></button>
             </div>
             <div className="overflow-y-auto px-5 pt-5" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>

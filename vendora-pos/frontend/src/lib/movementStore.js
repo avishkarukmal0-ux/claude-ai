@@ -231,6 +231,16 @@ export function daysOfCover(qty, vpd) {
   return q / vpd;
 }
 
+/** Suggested restock quantity — shared by the Buy list and the Stock-row "Order this" so both show the same
+ *  number. If we know how fast it sells (vpd), order enough to cover the next `targetDays`; otherwise fall back
+ *  to a par heuristic (min ×2, or 6) so it still works with no sales history. Always ≥ 1. */
+export function suggestReorderQty(product, vpd, { targetDays = 14 } = {}) {
+  const qty = Number(product.qty) || 0;
+  if (vpd && vpd > 0) return Math.max(1, Math.ceil(vpd * targetDays) - qty);
+  const par = (Number(product.min) || 0) > 0 ? Number(product.min) * 2 : 6;
+  return Math.max(1, par - qty);
+}
+
 /** Top movers by confirmed sales in the window: [{ productId, units }]. */
 export function topMovers(records, windowDays = 28, now = Date.now(), limit = 5) {
   const since = now - windowDays * DAY;

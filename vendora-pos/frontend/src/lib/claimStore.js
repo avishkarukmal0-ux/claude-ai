@@ -191,8 +191,11 @@ export function useClaims() {
         const merged = { ...it, ...patch };
         if (merged.reason === 'wrong_price') {
           const billed = Number(merged.unitBilled);
+          // A blank agreed price is UNKNOWN, not £0 — Number(null)/Number('') is 0, which would wrongly claim
+          // the whole billed value. Only compute the overcharge once a real agreed price is entered.
+          const hasAgreed = merged.unitAgreed != null && merged.unitAgreed !== '';
           const agreed = Number(merged.unitAgreed);
-          merged.amount = (Number.isFinite(billed) && Number.isFinite(agreed))
+          merged.amount = (hasAgreed && Number.isFinite(billed) && Number.isFinite(agreed))
             ? mul(Math.max(0, billed - agreed), merged.qty) : 0;
         }
         return merged;
