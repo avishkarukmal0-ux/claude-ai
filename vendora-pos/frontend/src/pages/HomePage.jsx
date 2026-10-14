@@ -9,6 +9,7 @@ import {
   FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy, ShieldAlert,
   Cloud, CloudOff, Check, RefreshCw,
 } from 'lucide-react';
+import { withGlossary } from '../components/common/glossary';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
 import { resolveNiche } from '../config/niche';
@@ -294,7 +295,7 @@ export default function HomePage() {
           )}
           <Link to="/" aria-label="Change shop type" className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-primary hover:underline">Change</Link>
         </div>
-        <div className="basis-full"><HeaderSyncChip loggedIn={loggedIn} sync={syncState} /></div>
+        <div className="basis-full" role="status" aria-live="polite"><HeaderSyncChip loggedIn={loggedIn} sync={syncState} /></div>
       </header>
 
       <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto px-4 pb-24 pt-4 focus:outline-none">
@@ -435,7 +436,7 @@ export default function HomePage() {
                       <button key={t.id} type="button" onClick={() => setActiveTool(t)} className={`flex ${toolsExpanded ? 'w-full' : 'w-32 shrink-0'} flex-col items-start rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition hover:border-primary/40 hover:shadow-md active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2`}>
                         <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}1A`, color: accent }}><Icon className="h-5 w-5" strokeWidth={1.75} /></span>
                         <span className="text-sm font-semibold leading-tight text-gray-900">{t.label}</span>
-                        <span className="mt-0.5 text-xs leading-snug text-gray-500">{t.tagline}</span>
+                        <span className="mt-0.5 text-xs leading-snug text-gray-500">{withGlossary(t.tagline)}</span>
                       </button>
                     );
                   })}

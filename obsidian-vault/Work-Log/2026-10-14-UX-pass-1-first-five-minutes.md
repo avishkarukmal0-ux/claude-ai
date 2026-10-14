@@ -29,8 +29,14 @@ Eight fixes from a signed-in Off-licence walkthrough, in priority order.
 - **"What Vendora helps with"** card auto-hides after the first visit (marks onboarded on mount; still shows that session).
 - **"Already using Vendora? Log in"** on the welcome screen is hidden when already signed in.
 
+## Re-check follow-ups (v48 audit → v49)
+1. "Add a price to see your margin" link → `inline-flex min-h-[44px]` (was 16px tall).
+2. Shared glossary: new `common/glossary.jsx` `withGlossary(text)` wraps the first mention of each acronym (MTD/MUP/MHRA/FSA/PPDS/HACCP/SFBB) in `<Abbr>`. Applied to the Today tool taglines (`t.tagline`) and Compliance radar `name`/`note` — catches the "…& MHRA list" tagline and the bare "FSA" in the radar. Abbr dictionary extended with HACCP/SFBB.
+3. Product validation: all invalid fields already report together; added `aria-describedby` linking each input to its `role="alert"` message (`add-/edit-…-err` ids), and "No, fix it" now moves focus to the quantity field (`qtyRef`).
+4. Offline/sync chip now sits in a `role="status" aria-live="polite"` region so going offline/online is announced.
+
 ## Verify
-- `npm run build` ✓. Full vitest: **545 passed / 80 files**. SW bumped **v47→v48** (Vercel on push).
+- `npm run build` ✓. Full vitest: **545 passed / 80 files**. SW bumped **v47→v49** (Vercel on push).
 
 ## Couldn't verify / notes
 - No headless device run here — validated via source, build and the existing suite. No new unit tests added for the parse helpers (module-scoped); behaviour is simple regex + `round2`.

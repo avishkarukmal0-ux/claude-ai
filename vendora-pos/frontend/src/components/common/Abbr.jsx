@@ -8,6 +8,8 @@ const TERMS = {
   MHRA: 'Medicines and Healthcare products Regulatory Agency',
   FSA: 'Food Standards Agency',
   PPDS: 'Prepacked for Direct Sale',
+  HACCP: 'Hazard Analysis and Critical Control Points',
+  SFBB: 'Safer Food, Better Business',
 };
 
 export default function Abbr({ term, children }) {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldAlert, AlertCircle, ExternalLink } from 'lucide-react';
 import { complianceForFamily, COMPLIANCE_VERIFIED } from '../../config/compliance';
+import { withGlossary } from '../common/glossary';
 import { getSavedShopType } from '../../config/shopTypes';
 import { getBusinessProfile } from '../../lib/businessProfile';
 import { formatUK } from '../../lib/dateUtils';
@@ -43,8 +44,8 @@ export default function ComplianceRadar() {
                   <span className="text-xs font-semibold lowercase">d</span>
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-gray-900">{c.name}</span>
-                  <span className="block text-xs text-gray-500">{formatUK(c.date)} · {c.note}</span>
+                  <span className="block text-sm font-semibold text-gray-900">{withGlossary(c.name)}</span>
+                  <span className="block text-xs text-gray-500">{formatUK(c.date)} · {withGlossary(c.note)}</span>
                   <OfficialLink href={c.sourceUrl} />
                 </span>
               </li>
@@ -61,7 +62,7 @@ export default function ComplianceRadar() {
               <li key={c.id} className="flex items-start gap-2.5 rounded-xl bg-gray-50 p-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
                 <span className="text-sm text-gray-700">
-                  <span className="font-semibold text-gray-900">{c.name}</span> — {c.note}
+                  <span className="font-semibold text-gray-900">{withGlossary(c.name)}</span> — {withGlossary(c.note)}
                   <OfficialLink href={c.sourceUrl} />
                 </span>
               </li>

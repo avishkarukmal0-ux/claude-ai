@@ -38,9 +38,9 @@ function parseQtyInput(raw) {
   return { value: n, error: null, negative: n < 0 };
 }
 // Inline field error (screen-reader live): role="alert" announces it the moment it appears.
-function FieldError({ children }) {
+function FieldError({ id, children }) {
   if (!children) return null;
-  return <p role="alert" className="mb-2 -mt-1 text-xs font-medium text-danger-dark">{children}</p>;
+  return <p id={id} role="alert" className="mb-2 -mt-1 text-xs font-medium text-danger-dark">{children}</p>;
 }
 
 // Food shops (Fresh & weighed, World & specialist) need allergen/ingredient capture for PPDS.
@@ -243,7 +243,7 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
             {unitPrice(p) && <span className="text-gray-400">{unitPrice(p).text}</span>}
             {m != null && <span className={m < 0 ? 'text-danger' : 'text-success-dark'}>{(m * 100).toFixed(0)}% margin</span>}
             {!(Number.isFinite(Number(p.price)) && Number(p.price) > 0) && (
-              <button type="button" onClick={onEdit} className="text-primary underline">Add a price to see your margin</button>
+              <button type="button" onClick={onEdit} className="inline-flex min-h-[44px] items-center text-primary underline">Add a price to see your margin</button>
             )}
             {isFoodShop() && (!Array.isArray(p.allergens) || p.allergens.length === 0) && !p.ingredients && (
               <span className="inline-flex items-center gap-1 rounded-full bg-warning-light px-1.5 py-0.5 text-xs font-semibold text-warning-dark">⚠ no allergens</span>
@@ -379,6 +379,7 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
   const canSave = f.name.trim().length > 0 && !vapeBlocked && !vapeUnanswered && barcodeOk;
   // Autofocus the name field when the form opens (UX pass 1.6) so the owner can type straight away.
   const nameRef = useRef(null);
+  const qtyRef = useRef(null);
   useEffect(() => { nameRef.current?.focus(); }, []);
   const negQty = parseQtyInput(f.qty).value;
   function save() {
@@ -431,13 +432,13 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
         </select>
       )}
       <div className="mb-1 grid grid-cols-3 gap-2">
-        <input value={f.cost} onChange={setNum('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" aria-invalid={!!errors.cost} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.cost ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
-        <input value={f.price} onChange={setNum('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" aria-invalid={!!errors.price} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.price ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
-        <input value={f.qty} onChange={setNum('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" aria-invalid={!!errors.qty} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.qty ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.cost} onChange={setNum('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost in pounds" aria-invalid={!!errors.cost} aria-describedby={errors.cost ? 'add-cost-err' : undefined} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.cost ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.price} onChange={setNum('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price in pounds" aria-invalid={!!errors.price} aria-describedby={errors.price ? 'add-price-err' : undefined} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.price ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input ref={qtyRef} value={f.qty} onChange={setNum('qty')} inputMode="numeric" placeholder="Qty" aria-label="Quantity in stock" aria-invalid={!!errors.qty} aria-describedby={errors.qty ? 'add-qty-err' : undefined} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-base focus:outline-none ${errors.qty ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
       </div>
-      <FieldError>{errors.cost && `Cost: ${errors.cost}`}</FieldError>
-      <FieldError>{errors.price && `Sell price: ${errors.price}`}</FieldError>
-      <FieldError>{errors.qty && `Quantity: ${errors.qty}`}</FieldError>
+      <FieldError id="add-cost-err">{errors.cost && `Cost: ${errors.cost}`}</FieldError>
+      <FieldError id="add-price-err">{errors.price && `Sell price: ${errors.price}`}</FieldError>
+      <FieldError id="add-qty-err">{errors.qty && `Quantity: ${errors.qty}`}</FieldError>
 
       {!showPack ? (
         <button type="button" onClick={() => setShowPack(true)} className="mb-2 inline-flex min-h-[44px] items-center text-sm font-medium text-primary">+ Comes in a case? Add pack size</button>
@@ -456,7 +457,7 @@ function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) 
           Stock will be set to <b>{negQty}</b> (a negative number). That’s unusual — only do this if you’re deliberately recording a shortfall.
           <div className="mt-2 flex gap-2">
             <button type="button" onClick={save} className="inline-flex min-h-[44px] items-center rounded-lg bg-warning px-3 font-semibold text-white">Yes, stock is {negQty}</button>
-            <button type="button" onClick={() => setConfirmNegQty(false)} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-300 bg-white px-3 font-semibold text-gray-700">No, fix it</button>
+            <button type="button" onClick={() => { setConfirmNegQty(false); qtyRef.current?.focus(); }} className="inline-flex min-h-[44px] items-center rounded-lg border border-gray-300 bg-white px-3 font-semibold text-gray-700">No, fix it</button>
           </div>
         </div>
       )}
@@ -546,11 +547,11 @@ function EditForm({ product, onSave, onCancel, suppliers = [], categorySuggestio
         </select>
       )}
       <div className="mb-1 grid grid-cols-2 gap-2">
-        <input value={f.cost} onChange={setNum('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" aria-invalid={!!errors.cost} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-sm focus:outline-none ${errors.cost ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
-        <input value={f.price} onChange={setNum('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" aria-invalid={!!errors.price} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-sm focus:outline-none ${errors.price ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.cost} onChange={setNum('cost')} inputMode="decimal" placeholder="Cost £" aria-label="Cost" aria-invalid={!!errors.cost} aria-describedby={errors.cost ? 'edit-cost-err' : undefined} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-sm focus:outline-none ${errors.cost ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
+        <input value={f.price} onChange={setNum('price')} inputMode="decimal" placeholder="Sell £" aria-label="Sell price" aria-invalid={!!errors.price} aria-describedby={errors.price ? 'edit-price-err' : undefined} className={`min-h-[44px] rounded-xl border px-3 py-2.5 text-sm focus:outline-none ${errors.price ? 'border-danger/60 focus:border-danger' : 'border-gray-200 focus:border-primary'}`} />
       </div>
-      <FieldError>{errors.cost && `Cost: ${errors.cost}`}</FieldError>
-      <FieldError>{errors.price && `Sell price: ${errors.price}`}</FieldError>
+      <FieldError id="edit-cost-err">{errors.cost && `Cost: ${errors.cost}`}</FieldError>
+      <FieldError id="edit-price-err">{errors.price && `Sell price: ${errors.price}`}</FieldError>
       <div className="mb-2 grid grid-cols-2 gap-2">
         <input value={f.packSize} onChange={set('packSize')} inputMode="numeric" placeholder="Units per case" aria-label="Units per case" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
         <input value={f.caseBarcode} onChange={set('caseBarcode')} inputMode="numeric" placeholder="Case barcode" aria-label="Case barcode" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none" />
