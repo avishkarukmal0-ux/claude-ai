@@ -7,7 +7,7 @@
 // supplier agreed), RECEIVED (credit actually banked).
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
-import { DELIVERY_ISSUES, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost } from './deliveryStore';
+import { DELIVERY_ISSUES, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, lineIssues } from './deliveryStore';
 import { actorName } from './actor';
 import { round2 as r2, sumMoney, mul } from './money';
 
@@ -46,36 +46,45 @@ export function claimTotals(claim) {
 
 /** Build claim items from a delivery's claimable issues (missing/damaged/wrong-price). */
 export function claimItemsFromDelivery(delivery) {
-  return (delivery.lines || [])
-    .filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable)
-    .map((l) => {
-      // Affected quantity drives the claim VALUE (affected × unit cost), so it must be the units actually
-      // affected — not the whole line. The owner sets it per issue in the delivery form (l.issueQty); when
-      // that's present we use it (clamped to what was delivered). Otherwise fall back to a sensible default.
-      const delivered = deliveredUnits(l);
-      const explicit = Number(l.issueQty);
-      const hasExplicit = Number.isFinite(explicit) && explicit > 0;
-      let affected;
-      if (l.issue === 'missing') {
-        // Missing = short vs ordered; default to the shortfall, but honour an explicit figure.
-        affected = hasExplicit ? explicit : Math.max(0, orderedUnits(l) - delivered);
-      } else if (l.issue === 'damaged') {
-        affected = hasExplicit ? Math.min(explicit, delivered) : (Math.max(0, delivered - acceptedUnits(l)) || 1);
-      } else { // wrong_price
-        affected = hasExplicit ? Math.min(explicit, delivered || explicit) : acceptedUnits(l);
-      }
-      const base = {
-        id: newId('ci'), name: l.name, barcode: l.barcode || '', productId: l.productId || null,
-        qty: affected, reason: l.issue, photo: l.photo || null,
-      };
-      // Missing/damaged: you're owed the full value of those units. Wrong-price: you're only owed the
-      // OVERCHARGE (billed − agreed) per unit, so start at £0 with the billed price captured and prompt
-      // the owner to enter the agreed price in the claim (audit W8).
-      if (l.issue === 'wrong_price') {
-        return { ...base, unitBilled: r2(perUnitCost(l)), unitAgreed: null, amount: 0 };
-      }
-      return { ...base, amount: mul(perUnitCost(l), affected) };
-    });
+  // One line can now carry several issues (Damaged + Wrong price); build a claim item per claimable issue.
+  return (delivery.lines || []).flatMap((l) => {
+    const delivered = deliveredUnits(l);
+    return lineIssues(l)
+      .filter((iss) => DELIVERY_ISSUES[iss.type]?.claimable)
+      .map((iss) => {
+        // Affected quantity drives the claim VALUE (affected × unit cost). The owner sets it per issue in the
+        // delivery form (iss.qty); when present we use it (clamped to what was delivered). Otherwise a default.
+        const explicit = Number(iss.qty);
+        const hasExplicit = Number.isFinite(explicit) && explicit > 0;
+        let affected;
+        if (iss.type === 'missing') {
+          affected = hasExplicit ? explicit : Math.max(0, orderedUnits(l) - delivered);
+        } else if (iss.type === 'damaged') {
+          affected = hasExplicit ? Math.min(explicit, delivered) : (Math.max(0, delivered - acceptedUnits(l)) || 1);
+        } else { // wrong_price — default to ALL delivered units (3 units billed wrong = claim ×3, not ×1).
+          affected = hasExplicit ? Math.min(explicit, delivered || explicit) : (delivered || 1);
+        }
+        const base = {
+          id: newId('ci'), name: l.name, barcode: l.barcode || '', productId: l.productId || null,
+          qty: affected, reason: iss.type, photo: l.photo || null,
+        };
+        // Missing/damaged: owed the full value of those units. Wrong-price: owed only the OVERCHARGE
+        // (billed − agreed) per unit. Default the agreed price to the PREVIOUS cost (`priorUnitCost`, captured
+        // on the delivery line from the product's cost at book-in) so the claim values itself straight away;
+        // when it's unknown, fall back to £0 and prompt the owner to enter the agreed price (audit W8).
+        if (iss.type === 'wrong_price') {
+          const billed = r2(perUnitCost(l));
+          // Only treat a GENUINE prior cost as the agreed price — `null`/'' means "unknown" (Number(null) is 0,
+          // which would wrongly claim the whole billed amount), so leave agreed null and prompt the owner.
+          const priorN = Number(l.priorUnitCost);
+          const hasPrior = l.priorUnitCost != null && l.priorUnitCost !== '' && Number.isFinite(priorN) && priorN >= 0;
+          const agreed = hasPrior ? r2(priorN) : null;
+          const amount = agreed != null ? mul(Math.max(0, billed - agreed), affected) : 0;
+          return { ...base, unitBilled: billed, unitAgreed: agreed, amount };
+        }
+        return { ...base, amount: mul(perUnitCost(l), affected) };
+      });
+  });
 }
 
 export function useClaims() {

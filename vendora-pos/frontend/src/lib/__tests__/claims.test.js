@@ -115,6 +115,32 @@ describe('claims — wrong-price claims the overcharge (audit W8)', () => {
   });
 });
 
+describe('claims — UX pass 2: multi-issue + wrong-price defaults', () => {
+  it('builds one claim item per issue when a line is both Damaged AND Wrong price (item 5)', () => {
+    const delivery = {
+      id: 'dm', status: 'received', supplierName: 'Booker',
+      lines: [blankLine({
+        name: 'Cola', qtyMode: 'units', deliveredQty: 10, unitCost: 2, priorUnitCost: 1.8,
+        issues: [{ type: 'damaged', qty: '2' }, { type: 'wrong_price', qty: '10' }],
+      })],
+    };
+    const items = claimItemsFromDelivery(delivery);
+    expect(items.map((i) => i.reason).sort()).toEqual(['damaged', 'wrong_price']);
+    expect(items.find((i) => i.reason === 'damaged')).toMatchObject({ qty: 2, amount: 4 }); // 2 × £2
+  });
+
+  it('wrong-price defaults the quantity to ALL delivered units and the agreed price to the previous cost (item 2)', () => {
+    // 3 units billed at £2 but previously £1.90 → claim 3 × £0.10 = £0.30 (not ×1 / £0.10).
+    const delivery = {
+      id: 'wp', status: 'received', supplierName: 'Booker',
+      lines: [blankLine({ name: 'Cola', qtyMode: 'units', deliveredQty: 3, unitCost: 2, priorUnitCost: 1.9, issues: [{ type: 'wrong_price' }] })],
+    };
+    const [item] = claimItemsFromDelivery(delivery);
+    expect(item).toMatchObject({ reason: 'wrong_price', qty: 3, unitBilled: 2, unitAgreed: 1.9 });
+    expect(item.amount).toBeCloseTo(0.3, 2);
+  });
+});
+
 describe('claimStore.createClaim — source refs + decimal-safe total (A1/A3)', () => {
   it('stores invoice + delivery references and sums the requested amount in pence', () => {
     const { result } = renderHook(() => useClaims());

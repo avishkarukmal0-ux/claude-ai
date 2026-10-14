@@ -6,6 +6,7 @@ import { useInventory } from '../../lib/inventoryStore';
 import { useDeliveries } from '../../lib/deliveryStore';
 import { useClaims } from '../../lib/claimStore';
 import { useInvoices } from '../../lib/invoiceStore';
+import { usePriceAlerts } from '../../lib/priceAlertStore';
 import { readJSON } from '../../lib/storage';
 import { weeklyReport, reportToText } from '../../lib/report';
 
@@ -19,13 +20,14 @@ export default function WeeklyReportView({ onBack }) {
   const { deliveries } = useDeliveries();
   const { claims } = useClaims();
   const { invoices } = useInvoices();
+  const { alerts } = usePriceAlerts();
 
   const rep = useMemo(() => weeklyReport({
     deliveries,
     stocktakeHistory: readJSON('stocktake_history_v1', []),
     movements: readJSON('movements_v1', []),
-    claims, invoices, products, periodDays: 7, now: Date.now(),
-  }), [deliveries, claims, invoices, products]);
+    claims, invoices, products, priceAlerts: alerts, periodDays: 7, now: Date.now(),
+  }), [deliveries, claims, invoices, products, alerts]);
 
   function download() {
     try {
@@ -68,8 +70,13 @@ export default function WeeklyReportView({ onBack }) {
       </Section>
 
       <Section icon={TrendingUp} title="Purchase-price changes">
-        {rep.priceChanges.length === 0 ? <Sub>None this period</Sub>
-          : rep.priceChanges.map((x, i) => <Sub key={i}>{x.name}: {gbp(x.from)} → {gbp(x.to)} ({x.changePct > 0 ? '+' : ''}{x.changePct}%){x.marginPressure ? ' ⚠ margin pressure' : ''}</Sub>)}
+        {rep.priceChanges.length === 0 && (rep.pendingPriceChanges || []).length === 0 ? <Sub>None this period</Sub>
+          : (<>
+            {rep.priceChanges.map((x, i) => <Sub key={`c${i}`}>{x.name}: {gbp(x.from)} → {gbp(x.to)} ({x.changePct > 0 ? '+' : ''}{x.changePct}%){x.marginPressure ? ' ⚠ margin pressure' : ''}</Sub>)}
+            {(rep.pendingPriceChanges || []).map((x, i) => (
+              <Sub key={`p${i}`}>{x.name}: {gbp(x.from)} → {gbp(x.to)} ({x.changePct > 0 ? '+' : ''}{x.changePct}%) <span className="font-semibold text-warning-dark">· not confirmed</span></Sub>
+            ))}
+          </>)}
       </Section>
 
       <p className="mt-4 text-center text-xs text-gray-400">Pending amounts are what you’ve asked for, not money received. This is an operational summary, not a guarantee of regulatory compliance.</p>

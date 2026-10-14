@@ -210,8 +210,12 @@ function ProductRow({ p, suppliers, updateProduct, removeProduct, restoreProduct
   const buyList = useBuyList();
   const onBuyList = !!buyList.hasProduct?.(p.id);
   function orderThis() {
-    buyList.addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: 1, supplierId: p.supplierId || null, supplierName: suppliers.find((s) => s.id === p.supplierId)?.name });
-    toast.success(`Added ${p.name} to the buy list`);
+    // Suggest a quantity that brings stock back up to the reorder level (par/min), not a bare 1. Falls back to a
+    // small default when no par is set. The owner can still fine-tune it on the Buy list.
+    const target = Number(p.min) > 0 ? Number(p.min) : 3;
+    const suggested = Math.max(1, target - (Number(p.qty) || 0));
+    buyList.addItem({ productId: p.id, name: p.name, barcode: p.barcode, qty: suggested, supplierId: p.supplierId || null, supplierName: suppliers.find((s) => s.id === p.supplierId)?.name });
+    toast.success(`Added ${suggested} ${suggested === 1 ? 'unit' : 'units'} of ${p.name} to the buy list`);
   }
   const [menuOpen, setMenuOpen] = useState(false); // kebab menu: History / Edit / Delete (declutters the row)
   const [confirmDel, setConfirmDel] = useState(false);

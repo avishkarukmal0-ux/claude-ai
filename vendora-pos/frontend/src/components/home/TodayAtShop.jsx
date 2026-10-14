@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sunrise, FileClock, CalendarHeart, Sparkles, Banknote, Lightbulb } from 'lucide-react';
 import { buildTodaySignals } from '../../lib/todaySignals';
+import { withGlossary } from '../common/glossary';
 
 const KIND_ICON = {
   deadline: FileClock,
@@ -51,7 +52,7 @@ export default function TodayAtShop({ signals: signalsProp, familyId, memberId =
             return (
               <li key={i} className={`flex items-start gap-3 rounded-xl p-3 ${tone.wrap}`}>
                 <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${tone.icon}`} strokeWidth={2} />
-                <span className={`text-sm ${tone.text}`}>{s.text}</span>
+                <span className={`text-sm ${tone.text}`}>{withGlossary(s.text)}</span>
               </li>
             );
           })}

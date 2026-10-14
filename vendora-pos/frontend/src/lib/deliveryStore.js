@@ -26,6 +26,17 @@ export const DELIVERY_ISSUES = {
   wrong_price: { label: 'Wrong price', claimable: true },
 };
 
+// A line can now carry SEVERAL issues (e.g. Damaged + Wrong price) as `line.issues: [{ type, qty }]`.
+// Older drafts stored a single `line.issue` + `line.issueQty`; normalise both shapes to one array so every
+// reader (claims, totals, the buying journey) works the same. Returns [] when there are no issues.
+export function lineIssues(line) {
+  const arr = Array.isArray(line.issues) ? line.issues.filter((i) => i && i.type) : [];
+  if (arr.length) return arr;
+  if (line.issue) return [{ type: line.issue, qty: line.issueQty }]; // legacy single-issue drafts
+  return [];
+}
+export function hasIssue(line, type) { return lineIssues(line).some((i) => i.type === type); }
+
 // ---- pure conversion helpers (unit-tested) --------------------------------
 const n = (v) => (v === '' || v == null ? 0 : Number(v) || 0);
 
@@ -66,7 +77,7 @@ export function deliveryTotals(delivery) {
     acceptedUnitsTotal += au;
     cost += au * perUnitCost(l);
     const shortfall = deliveredUnits(l) < orderedUnits(l) && orderedUnits(l) > 0;
-    if (l.issue || shortfall || acceptedUnits(l) !== deliveredUnits(l)) discrepancies += 1;
+    if (lineIssues(l).length > 0 || shortfall || acceptedUnits(l) !== deliveredUnits(l)) discrepancies += 1;
   }
   return { acceptedUnits: acceptedUnitsTotal, cost: Math.round(cost * 100) / 100, discrepancies, lineCount: lines.length };
 }
@@ -77,8 +88,8 @@ function blankLine(over = {}) {
     barcode: '', productId: null, name: '',
     packSize: 1, qtyMode: 'units',
     orderedQty: '', deliveredQty: 1, acceptedQty: '',
-    unitCost: '', caseCost: '',
-    issue: null, issueQty: '', note: '', photo: null,
+    unitCost: '', caseCost: '', priorUnitCost: null,
+    issues: [], note: '', photo: null,
     ...over,
   };
 }

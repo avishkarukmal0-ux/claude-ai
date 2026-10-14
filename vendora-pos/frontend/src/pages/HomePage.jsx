@@ -154,6 +154,7 @@ export default function HomePage() {
   // Show the "What Vendora helps with" intro once, then auto-hide on the next visit (UX pass 1.8) — the owner
   // doesn't have to dismiss it. It stays visible for this session; marking onboarded stops it returning.
   useEffect(() => { if (showPromises) markOnboarded(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [creditPrefill, setCreditPrefill] = useState(null); // {supplierName, amount, reference} handed from a claim's "Record credit"
   const [lastBackupAt, setLastBackupAt] = useState(getLastBackupAt);
   const [exporting, setExporting] = useState(false); // double-tap guard: Export is async (share sheet / download)
   const restoreInputRef = useRef(null);
@@ -323,7 +324,7 @@ export default function HomePage() {
         {screen === 'insights' && INSIGHTS_ENABLED && canSeeScreen(role, 'insights') && <NeighbourhoodInsightsView onBack={() => setScreen(null)} />}
         {screen === 'area' && NEIGHBOURHOOD_ENABLED && canSeeScreen(role, 'area') && <NeighbourhoodAreaCard onBack={() => setScreen(null)} />}
         {screen === 'orders' && <OrdersView onBack={() => setScreen(null)} />}
-        {screen === 'claims' && canSeeScreen(role, 'claims') && <ClaimsView onBack={() => setScreen(null)} />}
+        {screen === 'claims' && canSeeScreen(role, 'claims') && <ClaimsView onBack={() => setScreen(null)} onRecordCredit={INVOICES_ENABLED ? (p) => { setCreditPrefill(p); setScreen('credit-notes'); } : undefined} />}
         {screen === 'price-alerts' && canSeeScreen(role, 'price-alerts') && <PriceAlertsView onBack={() => setScreen(null)} />}
         {screen === 'tasks' && <TasksView onBack={() => setScreen(null)} />}
         {screen === 'worker' && <WorkerBoard onBack={() => setScreen(null)} />}
@@ -337,7 +338,7 @@ export default function HomePage() {
         {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
         {screen === 'invoices' && INVOICES_ENABLED && canSeeScreen(role, 'invoices') && <InvoiceCaptureView onBack={() => setScreen(null)} />}
-        {screen === 'credit-notes' && INVOICES_ENABLED && canSeeScreen(role, 'credit-notes') && <CreditNotesView onBack={() => setScreen(null)} />}
+        {screen === 'credit-notes' && INVOICES_ENABLED && canSeeScreen(role, 'credit-notes') && <CreditNotesView onBack={() => { setScreen(null); setCreditPrefill(null); }} prefill={creditPrefill} />}
         {screen === 'credit-recovery' && INVOICES_ENABLED && canSeeScreen(role, 'credit-recovery') && <CreditNoteRecoveryView onBack={() => setScreen(null)} />}
         {screen === 'price-history' && INVOICES_ENABLED && canSeeScreen(role, 'price-history') && <PriceHistoryView onBack={() => setScreen(null)} />}
         {screen === 'weekly-report' && canSeeScreen(role, 'weekly-report') && <WeeklyReportView onBack={() => setScreen(null)} />}

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Receipt, Plus, Trash2, Check, Link2 } from 'lucide-react';
 import { useCreditNotes, suggestClaims, remainingToAllocate, allocatedTotal, claimOutstanding } from '../../lib/creditNoteStore';
@@ -15,12 +15,14 @@ import ConfirmDialog from '../common/ConfirmDialog';
 const gbp = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
 const dayInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 10) : '');
 
-export default function CreditNotesView({ onBack }) {
+export default function CreditNotesView({ onBack, prefill }) {
   const { notes, saveNote, setAllocation, removeNote, findDuplicate } = useCreditNotes();
   const { claims, applyCredit, removeCredit } = useClaims();
   const { suppliers } = useSuppliers();
   const recovery = useRecoveryGuard();
   const [adding, setAdding] = useState(false);
+  // "Record credit" from a claim hands us a prefill (supplier + amount); open the add form seeded with it.
+  useEffect(() => { if (prefill) setAdding(true); }, [prefill]);
   const [allocating, setAllocating] = useState(null); // note id being allocated
   const [confirmDelNote, setConfirmDelNote] = useState(null); // credit note pending delete-confirm
   const [dupPending, setDupPending] = useState(null); // { note, dup } awaiting "save duplicate anyway"
@@ -91,7 +93,7 @@ export default function CreditNotesView({ onBack }) {
           <Plus className="h-4 w-4" /> Add credit note
         </button>
       )}
-      {adding && <AddForm suppliers={suppliers} onCancel={() => setAdding(false)} onSave={(d) => {
+      {adding && <AddForm suppliers={suppliers} initial={prefill} onCancel={() => setAdding(false)} onSave={(d) => {
         const dup = findDuplicate(d);
         if (dup) { setDupPending({ note: d, dup }); return; } // confirm via accessible dialog, not window.confirm
         const r = saveNote(d); if (r.ok) { setAdding(false); toast.success('Credit note saved'); } else toast.error(r.error || 'Couldn’t save');
@@ -215,9 +217,18 @@ export default function CreditNotesView({ onBack }) {
   );
 }
 
-function AddForm({ suppliers, onSave, onCancel }) {
-  const [f, setF] = useState({ supplierName: '', reference: '', date: Date.now(), amount: '' });
+function AddForm({ suppliers, onSave, onCancel, initial }) {
+  const [f, setF] = useState({
+    supplierName: initial?.supplierName || '',
+    reference: initial?.reference || '',
+    date: Date.now(),
+    amount: initial?.amount != null ? String(initial.amount) : '',
+  });
   const [touched, setTouched] = useState(false);
+  // Supplier is a picker of existing suppliers, with "Other…" to type a new one. If the prefilled supplier
+  // isn't in the list we start in free-type mode so its name is kept.
+  const knownNames = suppliers.map((s) => s.name);
+  const [otherSupplier, setOtherSupplier] = useState(() => !!f.supplierName && !knownNames.includes(f.supplierName));
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const supplierMissing = !(f.supplierName || '').trim();
   const amountRaw = String(f.amount).trim();
@@ -231,9 +242,21 @@ function AddForm({ suppliers, onSave, onCancel }) {
   const amtCls = touched && amountInvalid ? 'border-danger/50' : 'border-gray-200 focus:border-primary';
   return (
     <div className="mb-4 rounded-2xl border border-primary/20 bg-primary-50/50 p-3">
-      <input value={f.supplierName} onChange={set('supplierName')} list="vendora-cn-suppliers" placeholder="Supplier" aria-label="Supplier" className={`mb-1 min-h-[44px] w-full rounded-xl border px-3 py-2.5 text-base focus:outline-none ${touched && supplierMissing ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`} />
-      <datalist id="vendora-cn-suppliers">{suppliers.map((s) => <option key={s.id} value={s.name} />)}</datalist>
-      {touched && supplierMissing && <p className="mb-1 text-xs font-medium text-danger-dark">Enter the supplier.</p>}
+      {suppliers.length > 0 && !otherSupplier ? (
+        <select
+          value={knownNames.includes(f.supplierName) ? f.supplierName : ''}
+          onChange={(e) => { if (e.target.value === '__other__') { setOtherSupplier(true); setF((p) => ({ ...p, supplierName: '' })); } else setF((p) => ({ ...p, supplierName: e.target.value })); }}
+          aria-label="Supplier"
+          className={`mb-1 min-h-[44px] w-full rounded-xl border bg-white px-3 py-2.5 text-base focus:outline-none ${touched && supplierMissing ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`}
+        >
+          <option value="">Choose supplier…</option>
+          {suppliers.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+          <option value="__other__">Other…</option>
+        </select>
+      ) : (
+        <input value={f.supplierName} onChange={set('supplierName')} placeholder="Supplier name" aria-label="Supplier" className={`mb-1 min-h-[44px] w-full rounded-xl border px-3 py-2.5 text-base focus:outline-none ${touched && supplierMissing ? 'border-danger/50' : 'border-gray-200 focus:border-primary'}`} />
+      )}
+      {touched && supplierMissing && <p className="mb-1 text-xs font-medium text-danger-dark">Choose or enter the supplier.</p>}
       <div className="mb-1 mt-1 grid grid-cols-3 gap-2">
         <input value={f.reference} onChange={set('reference')} placeholder="Credit ref" aria-label="Credit reference" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <input type="date" value={dayInput(f.date)} onChange={(e) => setF((p) => ({ ...p, date: e.target.value ? new Date(e.target.value).getTime() : null }))} aria-label="Credit date" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />

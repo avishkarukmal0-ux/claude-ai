@@ -13,6 +13,7 @@ import { useOrders, statusFor, OPEN_STATUSES } from '../../lib/orderStore';
 import {
   useDeliveries, blankLine, DELIVERY_ISSUES,
   deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, packSize, deliveryTotals,
+  lineIssues, hasIssue,
 } from '../../lib/deliveryStore';
 import BarcodeScanner, { barcodeScanSupported } from '../scan/BarcodeScanner';
 import { isBarcode } from '../../lib/barcode';
@@ -40,7 +41,8 @@ const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n
 // Stage 2 — receive & check a delivery. Cases/packs with conversion, ordered vs delivered vs
 // accepted, discrepancies, notes/photos, drafts (autosaved), duplicate protection, repeat-last.
 export default function DeliveryReceivingView({ onBack }) {
-  const { findByBarcode, applyDelivery } = useInventory();
+  const { products, findByBarcode, applyDelivery } = useInventory();
+  const productById = (id) => (id ? (products || []).find((p) => p.id === id) : null);
   const { suppliers } = useSuppliers();
   const { orders, receiveAgainst } = useOrders();
   const { deliveries, createDraft, updateDraft, removeDelivery, markReceived, repeatFrom } = useDeliveries();
@@ -94,7 +96,7 @@ export default function DeliveryReceivingView({ onBack }) {
       lines[idx] = { ...lines[idx], deliveredQty: (Number(lines[idx].deliveredQty) || 0) + 1 };
     } else {
       const known = findByBarcode(barcode);
-      lines.unshift(blankLine({ barcode, name: known?.name || '', productId: known?.id || null, unitCost: known?.cost ?? '' }));
+      lines.unshift(blankLine({ barcode, name: known?.name || '', productId: known?.id || null, unitCost: known?.cost ?? '', priorUnitCost: known?.cost ?? null }));
     }
     commit({ ...draft, lines });
     setCode('');
@@ -105,13 +107,41 @@ export default function DeliveryReceivingView({ onBack }) {
   }
   function removeLine(key) { commit({ ...draft, lines: draft.lines.filter((l) => l.key !== key) }); }
 
-  // Selecting an issue seeds a sensible AFFECTED quantity (so a claim is for the affected units, not the whole
-  // line). Missing defaults to the short-vs-ordered amount; damaged/wrong-price default to 1. Re-tapping clears.
-  function selectIssue(l, k) {
-    if (l.issue === k) { setLine(l.key, { issue: null }); return; }
+  // A line can carry several issues at once (e.g. Damaged + Wrong price). Toggling an issue adds/removes it and
+  // seeds a sensible AFFECTED quantity: Missing → short-vs-ordered; Wrong price → ALL delivered units (a whole
+  // line billed wrong, not 1); Damaged → 1 to start. Each issue keeps its own quantity.
+  function toggleIssue(l, k) {
+    const issues = lineIssues(l);
+    if (issues.some((i) => i.type === k)) { setLine(l.key, { issues: issues.filter((i) => i.type !== k), issue: null, issueQty: '' }); return; }
     const du = deliveredUnits(l); const ou = orderedUnits(l);
-    const suggested = k === 'missing' ? Math.max(1, ou - du) : 1;
-    setLine(l.key, { issue: k, issueQty: String(suggested) });
+    const qty = k === 'missing' ? Math.max(1, ou - du) : (k === 'wrong_price' ? (du || 1) : 1);
+    setLine(l.key, { issues: [...issues, { type: k, qty: String(qty) }], issue: null, issueQty: '' });
+  }
+  function setIssueQty(l, type, val) {
+    setLine(l.key, { issues: lineIssues(l).map((i) => (i.type === type ? { ...i, qty: val } : i)) });
+  }
+
+  // Item 1: choosing an order loads its supplier + lines, pre-filling Ordered from the order and Delivered =
+  // Ordered, so the owner only edits the differences. Only fills when the draft has no lines yet (don't clobber
+  // work already keyed in); otherwise just links the order + supplier.
+  function selectOrder(orderId) {
+    if (!orderId) { commit({ ...draft, orderId: null }); return; }
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) { commit({ ...draft, orderId }); return; }
+    const supplierName = draft.supplierName || order.supplierName || '';
+    if ((draft.lines || []).length > 0) { commit({ ...draft, orderId, supplierName }); return; }
+    const lines = (order.lines || []).map((ol) => {
+      const prod = productById(ol.productId) || (ol.barcode ? findByBarcode(ol.barcode) : null);
+      const orderedQ = Number(ol.qty) || 0;
+      return blankLine({
+        barcode: ol.barcode || '', productId: ol.productId || prod?.id || null, name: ol.name || prod?.name || '',
+        orderedQty: String(orderedQ), deliveredQty: String(orderedQ), acceptedQty: '',
+        unitCost: ol.unitCost != null ? String(ol.unitCost) : (prod?.cost ?? ''),
+        priorUnitCost: prod?.cost ?? null,
+      });
+    });
+    commit({ ...draft, orderId, supplierName, lines });
+    toast('Loaded the order — edit only what differs', { icon: '📦' });
   }
 
   async function attachPhoto(key, file) {
@@ -270,7 +300,7 @@ export default function DeliveryReceivingView({ onBack }) {
             <ShoppingCart className="h-4 w-4 text-gray-400" />
             <select
               value={draft.orderId || ''}
-              onChange={(e) => commit({ ...draft, orderId: e.target.value || null })}
+              onChange={(e) => selectOrder(e.target.value || null)}
               aria-label="Receive against which order"
               className="min-h-[44px] min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-primary focus:outline-none"
             >
@@ -365,31 +395,46 @@ export default function DeliveryReceivingView({ onBack }) {
                 </div>
 
                 {/* Auto-surface a shortfall as a one-tap Missing claim (B3) — no need to hunt the chip. */}
-                {shortfall && l.issue !== 'missing' && (
-                  <button type="button" onClick={() => setLine(l.key, { issue: 'missing', issueQty: String(ou - du) })} className="mt-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-warning-light px-3 text-xs font-semibold text-warning-dark active:scale-95">
+                {shortfall && !hasIssue(l, 'missing') && (
+                  <button type="button" onClick={() => toggleIssue(l, 'missing')} className="mt-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-warning-light px-3 text-xs font-semibold text-warning-dark active:scale-95">
                     <AlertTriangle className="h-3.5 w-3.5" /> Short {ou - du} vs ordered — claim as missing
                   </button>
                 )}
 
-                {/* issues */}
+                {/* Item 4: unit cost up vs the last delivery → suggest a wrong-price claim in one tap. */}
+                {(() => {
+                  const prior = Number(l.priorUnitCost);
+                  const up = Number.isFinite(prior) && prior > 0 && puc > prior ? Math.round(((puc - prior) / prior) * 100) : 0;
+                  if (up < 1 || hasIssue(l, 'wrong_price')) return null;
+                  return (
+                    <button type="button" onClick={() => toggleIssue(l, 'wrong_price')} className="mt-2 inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-danger/10 px-3 text-xs font-semibold text-danger-dark active:scale-95">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Cost up {up}% vs last delivery ({money(prior)}→{money(puc)}) — wrong price?
+                    </button>
+                  );
+                })()}
+
+                {/* issues — several can be active at once (e.g. Damaged + Wrong price) */}
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {Object.entries(DELIVERY_ISSUES).map(([k, v]) => (
-                    <button key={k} type="button" onClick={() => selectIssue(l, k)} aria-pressed={l.issue === k} aria-label={`${v.label} — ${l.name || 'line'}`} className={`inline-flex min-h-[44px] items-center rounded-full px-3 text-xs font-semibold ${l.issue === k ? 'bg-danger text-white' : 'bg-gray-100 text-gray-500'}`}>{v.label}</button>
-                  ))}
+                  {Object.entries(DELIVERY_ISSUES).map(([k, v]) => {
+                    const on = hasIssue(l, k);
+                    return (
+                      <button key={k} type="button" onClick={() => toggleIssue(l, k)} aria-pressed={on} aria-label={`${v.label} — ${l.name || 'line'}`} className={`inline-flex min-h-[44px] items-center rounded-full px-3 text-xs font-semibold ${on ? 'bg-danger text-white' : 'bg-gray-100 text-gray-500'}`}>{v.label}</button>
+                    );
+                  })}
                 </div>
 
-                {/* Affected quantity for the selected claimable issue (B3) — the claim is valued on THIS many
-                    units × the unit cost, not the whole line. Max = delivered. */}
-                {l.issue && DELIVERY_ISSUES[l.issue]?.claimable && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-danger/5 px-2 py-2">
-                    <label className="flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-gray-600">How many units?
-                      <input value={l.issueQty ?? ''} onChange={(e) => setLine(l.key, { issueQty: e.target.value })} inputMode="numeric" min="1" max={du || undefined} aria-label={`Affected units for ${l.name || 'line'}`} className="min-h-[44px] w-16 rounded-lg border border-gray-200 px-2 text-center text-base text-gray-900 focus:border-primary focus:outline-none" />
+                {/* Affected quantity per claimable issue — the claim is valued on THIS many units, not the whole
+                    line. Each selected issue gets its own quantity. Max = delivered. */}
+                {lineIssues(l).filter((iss) => DELIVERY_ISSUES[iss.type]?.claimable).map((iss) => (
+                  <div key={iss.type} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-danger/5 px-2 py-2">
+                    <label className="flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-gray-600">{DELIVERY_ISSUES[iss.type].label} — how many units?
+                      <input value={iss.qty ?? ''} onChange={(e) => setIssueQty(l, iss.type, e.target.value)} inputMode="numeric" min="1" max={du || undefined} aria-label={`Affected units for ${DELIVERY_ISSUES[iss.type].label} on ${l.name || 'line'}`} className="min-h-[44px] w-16 rounded-lg border border-gray-200 px-2 text-center text-base text-gray-900 focus:border-primary focus:outline-none" />
                     </label>
-                    {l.issue !== 'missing' && du > 0 && Number(l.issueQty) > du && (
+                    {iss.type !== 'missing' && du > 0 && Number(iss.qty) > du && (
                       <span className="text-xs font-medium text-danger-dark">Only {du} delivered.</span>
                     )}
                   </div>
-                )}
+                ))}
 
                 {/* note (reason) + photo */}
                 <div className="mt-2 flex items-center gap-2">

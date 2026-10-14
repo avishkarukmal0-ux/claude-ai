@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Receipt, Building2, Share2, Trash2, ChevronRight, AlertTriangle, CalendarClock } from 'lucide-react';
+import { Receipt, Building2, Share2, Trash2, ChevronRight, AlertTriangle, CalendarClock, CheckCircle2 } from 'lucide-react';
 import { useClaims, claimTotals, nextStates, OPEN_CLAIM_STATUSES } from '../../lib/claimStore';
-import { useDeliveries, DELIVERY_ISSUES } from '../../lib/deliveryStore';
+import { useDeliveries, DELIVERY_ISSUES, lineIssues } from '../../lib/deliveryStore';
 import ScreenBack from '../common/ScreenBack';
 import ConfirmDialog from '../common/ConfirmDialog';
 
 const money = (v) => { const n = Number(v) || 0; return n < 0 ? `-£${Math.abs(n).toFixed(2)}` : `£${n.toFixed(2)}`; };
+const DISMISS_KEY = 'vendora:claims-dismissed-v1';
 const STATUS = {
   draft: { label: 'Draft', cls: 'bg-gray-100 text-gray-500' },
   submitted: { label: 'Submitted', cls: 'bg-primary-50 text-primary' },
@@ -27,10 +28,19 @@ async function shareClaim(claim) {
 
 // Stage 5b — supplier claims. Raise from a delivery's flagged issues (with evidence photos),
 // then track it through to credit actually received. Nothing is sent automatically.
-export default function ClaimsView({ onBack }) {
+export default function ClaimsView({ onBack, onRecordCredit }) {
   const { claims, createFromDelivery, updateClaim, updateClaimItem, advance, removeClaim, restoreClaim } = useClaims();
   const { deliveries } = useDeliveries();
   const [confirmClaim, setConfirmClaim] = useState(null); // claim pending delete-confirm
+  // "Not worth claiming" — hide a delivery-with-issues the owner has decided to let go (item 8). Kept locally
+  // (per device): it's a dismissal of a suggestion, not business data. Survives reloads via localStorage.
+  const [dismissed, setDismissed] = useState(() => { try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]'); } catch { return []; } });
+  function dismissDelivery(id) {
+    const next = [...new Set([...dismissed, id])];
+    setDismissed(next);
+    try { localStorage.setItem(DISMISS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    toast('Hidden — you can still raise it later from the delivery', { icon: '👍' });
+  }
 
   function doDelete(c) {
     setConfirmClaim(null);
@@ -44,8 +54,9 @@ export default function ClaimsView({ onBack }) {
   const claimLabel = (c) => `${c?.supplierName || 'supplier'}${c?.deliveryRef ? ` · ${c.deliveryRef}` : ''}`;
 
   const claimable = useMemo(() => deliveries.filter((d) => d.status === 'received'
-    && (d.lines || []).some((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable)
-    && !claims.some((c) => c.deliveryId === d.id)), [deliveries, claims]);
+    && (d.lines || []).some((l) => lineIssues(l).some((i) => DELIVERY_ISSUES[i.type]?.claimable))
+    && !claims.some((c) => c.deliveryId === d.id)
+    && !dismissed.includes(d.id)), [deliveries, claims, dismissed]);
 
   const open = useMemo(() => claims.filter((c) => OPEN_CLAIM_STATUSES.includes(c.status)), [claims]);
   const done = useMemo(() => claims.filter((c) => !OPEN_CLAIM_STATUSES.includes(c.status)), [claims]);
@@ -71,9 +82,12 @@ export default function ClaimsView({ onBack }) {
                 <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{d.supplierName || 'Delivery'}{d.reference && ` · ${d.reference}`}</span>
-                  <span className="block text-xs text-gray-500">{(d.lines || []).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable).length} issue(s) to claim</span>
+                  <span className="block text-xs text-gray-500">{(d.lines || []).reduce((n, l) => n + lineIssues(l).filter((i) => DELIVERY_ISSUES[i.type]?.claimable).length, 0)} issue(s) to claim</span>
                 </span>
-                <button type="button" onClick={() => raise(d)} aria-label={`Raise claim for ${d.supplierName || 'delivery'}`} className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <button type="button" onClick={() => raise(d)} aria-label={`Raise claim for ${d.supplierName || 'delivery'}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-xl bg-primary px-3 text-sm font-semibold text-white active:scale-95">Raise claim <ChevronRight className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => dismissDelivery(d.id)} aria-label={`Dismiss issues on ${d.supplierName || 'delivery'} — not worth claiming`} className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-gray-400 hover:text-gray-600">Not worth claiming</button>
+                </div>
               </li>
             ))}
           </ul>
@@ -89,10 +103,10 @@ export default function ClaimsView({ onBack }) {
       ) : (
         <>
           {open.length > 0 && (
-            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} onDelete={setConfirmClaim} />)}</ul></section>
+            <section className="mb-5"><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Open claims</h3><ul className="space-y-2">{open.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} onDelete={setConfirmClaim} onRecordCredit={onRecordCredit} />)}</ul></section>
           )}
           {done.length > 0 && (
-            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} onDelete={setConfirmClaim} />)}</ul></section>
+            <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Closed</h3><ul className="space-y-2">{done.map((c) => <ClaimCard key={c.id} c={c} updateClaim={updateClaim} updateClaimItem={updateClaimItem} advance={advance} onDelete={setConfirmClaim} onRecordCredit={onRecordCredit} />)}</ul></section>
           )}
         </>
       )}
@@ -112,9 +126,16 @@ export default function ClaimsView({ onBack }) {
 
 // Module-scope so it keeps a stable component identity across parent re-renders — defined inside the
 // parent, every keystroke created a NEW component type and remounted the card, dropping input focus (W9).
-function ClaimCard({ c, updateClaim, updateClaimItem, advance, onDelete }) {
+function ClaimCard({ c, updateClaim, updateClaimItem, advance, onDelete, onRecordCredit }) {
     const t = claimTotals(c);
     const meta = STATUS[c.status] || STATUS.draft;
+    // Item 3: can't send a claim that asks for nothing, or a wrong-price line with no agreed price entered.
+    const missingAgreed = (c.items || []).some((i) => i.reason === 'wrong_price' && i.unitAgreed == null);
+    const nothingToClaim = !(t.requested > 0);
+    const shareBlocked = nothingToClaim || missingAgreed;
+    // Item 6: once the money's in (received ≥ requested), offer a one-tap settle.
+    const canSettle = c.status !== 'settled' && t.received != null && t.requested > 0 && t.received >= t.requested;
+    function settle() { advance(c.id, 'settled'); toast.success(`Claim settled — ${money(t.received ?? t.requested)} recovered`); }
     return (
       <li className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
@@ -174,13 +195,22 @@ function ClaimCard({ c, updateClaim, updateClaimItem, advance, onDelete }) {
           </div>
         )}
 
+        {canSettle && (
+          <button type="button" onClick={settle} className="mb-2 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-success px-3 text-sm font-bold text-white active:scale-[0.99]"><CheckCircle2 className="h-4 w-4" /> Mark settled — {money(t.received)} recovered</button>
+        )}
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => shareClaim(c)} aria-label={`Share claim for ${c.supplierName || 'supplier'}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95"><Share2 className="h-3.5 w-3.5" /> Share</button>
+          <button type="button" onClick={() => shareClaim(c)} disabled={shareBlocked} aria-label={`Share claim for ${c.supplierName || 'supplier'}`} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-600 active:scale-95 disabled:opacity-40"><Share2 className="h-3.5 w-3.5" /> Share</button>
+          {(c.status === 'approved' || c.status === 'settled') && onRecordCredit && (
+            <button type="button" onClick={() => onRecordCredit({ supplierId: c.supplierId || null, supplierName: c.supplierName || '', amount: t.approved ?? t.requested, reference: c.creditNoteRef || c.deliveryRef || '' })} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95"><Receipt className="h-3.5 w-3.5" /> Record credit</button>
+          )}
           {nextStates(c.status).map((s) => (
             <button key={s} type="button" onClick={() => advance(c.id, s)} className={`inline-flex min-h-[44px] items-center rounded-lg px-3 text-xs font-semibold active:scale-95 ${s === 'rejected' ? 'bg-gray-100 text-gray-500' : 'bg-primary text-white'}`}>{ADVANCE_LABEL[s]}</button>
           ))}
           <button type="button" onClick={() => onDelete(c)} className="ml-auto inline-flex h-11 w-11 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete claim for ${c.supplierName || 'supplier'}${c.deliveryRef ? ` ${c.deliveryRef}` : ''}`}><Trash2 className="h-4 w-4" /></button>
         </div>
+        {shareBlocked && (
+          <p className="mt-1.5 text-xs text-warning-dark">{nothingToClaim ? 'Nothing to claim yet — add an agreed price or an affected quantity before sending.' : 'Enter the agreed £/unit on each wrong-price line so the claim has an amount to send.'}</p>
+        )}
       </li>
     );
 }

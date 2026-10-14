@@ -16,7 +16,7 @@ const tsOf = (x) => Number(x.at || x.date || x.receivedAt || x.committedAt || x.
  * @param {{ deliveries?, stocktakeHistory?, movements?, claims?, invoices?, products?, periodDays?, now? }} data
  */
 export function weeklyReport({
-  deliveries = [], stocktakeHistory = [], movements = [], claims = [], invoices = [], products = [],
+  deliveries = [], stocktakeHistory = [], movements = [], claims = [], invoices = [], products = [], priceAlerts = [],
   periodDays = 7, now = Date.now(),
 } = {}) {
   const since = now - periodDays * DAY;
@@ -56,10 +56,17 @@ export function weeklyReport({
   for (const c of claims || []) for (const cr of c.credits || []) if (inPeriod(Number(cr.at) || 0)) creditsReceived += Number(cr.amount) || 0;
   creditsReceived = r2(creditsReceived);
 
-  // Purchase-price changes whose latest confirmed cost landed this period.
+  // Purchase-price changes whose latest CONFIRMED cost (from an invoice) landed this period.
   const priceChanges = priceHistory(invoices, products)
     .filter((row) => row.prev && inPeriod(Number(row.latest.date) || 0))
     .map((row) => ({ name: row.name, from: row.prev.unitCost, to: row.latest.unitCost, changePct: row.changePct, marginPressure: row.marginPressure, invoiceRef: row.latest.invoiceRef }));
+
+  // Pending price changes the owner hasn't confirmed yet (open price alerts) — shown separately as "not
+  // confirmed" so the report never implies a cost is settled before the owner has accepted it (item 10).
+  const pct = (from, to) => { const f = Number(from) || 0; return f > 0 ? Math.round(((Number(to) - f) / f) * 100) : 0; };
+  const pendingPriceChanges = (priceAlerts || [])
+    .filter((a) => a.status === 'open' && inPeriod(Number(a.at) || 0))
+    .map((a) => ({ name: a.name, from: a.prevCost, to: a.newCost, changePct: pct(a.prevCost, a.newCost) }));
 
   return {
     period: { from: since, to: now, days: periodDays },
@@ -68,6 +75,7 @@ export function weeklyReport({
     expiry: { wasteUnits, wasteCost, pastUseBy },
     claims: { openCount: openClaims.length, outstanding, creditsReceived },
     priceChanges,
+    pendingPriceChanges,
   };
 }
 
@@ -95,8 +103,9 @@ export function reportToText(rep) {
   L.push(`- Credits received this period (recovered): ${gbp(rep.claims.creditsReceived)}`);
   L.push('');
   L.push('PURCHASE-PRICE CHANGES');
-  if (!rep.priceChanges.length) L.push('- None this period');
+  if (!rep.priceChanges.length) L.push('- None confirmed this period');
   for (const x of rep.priceChanges) L.push(`    • ${x.name}: ${gbp(x.from)} → ${gbp(x.to)} (${x.changePct > 0 ? '+' : ''}${x.changePct}%)${x.marginPressure ? ' ⚠ margin pressure' : ''}`);
+  for (const x of rep.pendingPriceChanges || []) L.push(`    • ${x.name}: ${gbp(x.from)} → ${gbp(x.to)} (${x.changePct > 0 ? '+' : ''}${x.changePct}%) — NOT CONFIRMED`);
   L.push('');
   L.push('Pending claim amounts are what you have ASKED for, not money received. This report is an');
   L.push('operational summary and is not a guarantee of regulatory compliance.');

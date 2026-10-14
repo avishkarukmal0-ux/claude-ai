@@ -12,7 +12,7 @@
 // (orderStore.statusFor: a draft order has orderedAt == null); this module only reports which.
 
 import { statusFor, orderTotals } from './orderStore';
-import { DELIVERY_ISSUES } from './deliveryStore';
+import { DELIVERY_ISSUES, lineIssues } from './deliveryStore';
 import { claimReceived, claimOutstanding } from './creditReport';
 import { round2 } from './money';
 
@@ -23,7 +23,7 @@ const first = (list) => (list.length ? list[0] : null);
 
 /** Claimable issues on a received delivery (missing / damaged / wrong-price). */
 export function claimableIssues(delivery) {
-  return arr(delivery && delivery.lines).filter((l) => l.issue && DELIVERY_ISSUES[l.issue]?.claimable);
+  return arr(delivery && delivery.lines).filter((l) => lineIssues(l).some((i) => DELIVERY_ISSUES[i.type]?.claimable));
 }
 
 /** The claim(s) raised for a given delivery id (used to prevent raising a duplicate). */

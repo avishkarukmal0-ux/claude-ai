@@ -205,7 +205,7 @@ export default function ReorderView({ onBack }) {
 
       {/* The list */}
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Your list {items.length > 0 && `· ${totalUnits} units`}</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Your list {items.length > 0 && `· ${totalUnits} ${totalUnits === 1 ? 'unit' : 'units'}`}</h3>
         {boughtCount > 0 && (
           <button type="button" onClick={clearBought} className="text-xs font-medium text-primary hover:underline">
             Clear {boughtCount} bought
