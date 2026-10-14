@@ -43,17 +43,23 @@ app.set('trust proxy', 1);
 // MongoDB connection after deploy (open <backend-url>/health and look for db:"connected").
 const mongoose = require('mongoose');
 const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+// The git commit Render (or any platform) built from — so you can confirm which build is live without guessing.
+// Render injects RENDER_GIT_COMMIT at build time; GIT_COMMIT/SOURCE_VERSION are common fallbacks on other hosts.
+const BUILD_COMMIT = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || process.env.SOURCE_VERSION || 'unknown';
 const healthHandler = (req, res) => {
   res.json({
     status: 'ok',
     db: DB_STATES[mongoose.connection.readyState] || 'unknown',
     timestamp: new Date().toISOString(),
     version: '3.0.0',
+    commit: BUILD_COMMIT,
     env: process.env.NODE_ENV,
   });
 };
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+// A tiny dedicated version probe (commit + version), handy for a quick "what's live?" check.
+app.get('/version', (req, res) => res.json({ version: '3.0.0', commit: BUILD_COMMIT, env: process.env.NODE_ENV }));
 app.get('/', (req, res) => {
   res.json({ message: 'Vendora POS API', version: '3.0.0', status: 'running' });
 });

@@ -144,6 +144,16 @@ async function radiusHandler(req, res, next) {
     const exposeDiag = process.env.NODE_ENV !== 'production' || process.env.INSIGHTS_DIAG_PUBLIC === 'true';
     const body = { success: true, ...out };
     if (!exposeDiag) delete body.diag;
+    // Minimal, non-sensitive cache counts — ALWAYS returned (even in prod, even with diag hidden) so the per-OA
+    // cache is auditable from the response alone: per-table COUNTS + dataset ids only (no OA codes, no sample
+    // data, no timing internals). Lets you verify persisted == fetched on a cold call and oaFromMongo > 0 on a
+    // repeat/after-restart. durationMs is here too, to sanity-check against the client-observed time.
+    if (Array.isArray(tables) && tables.length) {
+      body.cacheStats = {
+        durationMs,
+        tables: tables.map((t) => ({ ds: t.ds, req: t.req, mem: t.mem, mongo: t.mongo, fetched: t.fetched, persisted: t.persisted, persistErr: t.persistErr })),
+      };
+    }
     // Note: no `testUnlock` flag in the response — it's an internal gate (INSIGHTS_TEST_UNLOCK), not client data.
     res.json(body);
   } catch (err) {
