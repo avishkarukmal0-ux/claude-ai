@@ -92,6 +92,16 @@ async function radiusHandler(req, res, next) {
     const postcode = (src.postcode || '').toString();
     const radiusM = Number(src.radiusM);
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
+    // Boot window: the ~27s one-time OA-centroid load runs at startup. If a /radius lands while it's still in
+    // flight, don't hang the request for the remainder (a dense postcode could then brush the client's 30s
+    // timeout) — answer fast with a 503 "warming up" + Retry-After, and the app shows a Retry. The warm itself is
+    // shared (coalesced), so this request isn't triggering a second load; it just declines to wait.
+    if (config.neighbourhoodInsights.dataProvider && centroids.isLoading() && !centroids.isLoaded()) {
+      const elapsedS = Math.round((centroids.loadingElapsedMs() || 0) / 1000);
+      const retryAfterS = Math.max(3, 35 - elapsedS); // typical warm ~27s + headroom
+      res.set('Retry-After', String(retryAfterS));
+      return res.status(503).json({ success: false, error: 'warming_up', retryAfterS, message: `Neighbourhood data is warming up — try again in about ${retryAfterS}s.` });
+    }
     // Default: headline only (people + households) → 2 Nomis tables, fast. `full=1` ("Who lives here") returns the
     // full profile with the community breakdowns (country of birth, ethnic group, main language) — fetched only
     // when the owner opens that section, so the headline stays fast.

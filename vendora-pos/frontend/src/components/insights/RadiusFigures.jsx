@@ -49,6 +49,16 @@ export default function RadiusFigures({ state, http, diag, profile, radiusM, uni
           )}
         </div>
       )}
+      {state === 'warming' && (
+        <div className="mt-2 flex flex-wrap items-center gap-2" role="status">
+          <span className="flex items-center gap-1.5 text-xs leading-snug text-gray-600"><Loader2 className="h-3 w-3 animate-spin" /> Getting your area ready — this takes a few seconds after an update.</span>
+          {onRetry && (
+            <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-white active:scale-95">
+              <RefreshCw className="h-3.5 w-3.5" /> Retry
+            </button>
+          )}
+        </div>
+      )}
       {state === 'error' && (
         <p className="mt-2 text-xs leading-snug text-gray-400">Couldn’t load the radius figures right now. The figures below are for your immediate area (LSOA).</p>
       )}

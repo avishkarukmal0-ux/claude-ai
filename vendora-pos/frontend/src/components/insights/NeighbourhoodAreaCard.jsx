@@ -127,8 +127,9 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         if (!live) return; // a cleanup-abort lands here with live=false and is ignored; only a real failure/timeout shows
         setRadFetching(false);
         const code = (e && e.status) || 0;
-        // A 30s timeout aborts with AbortError → a retryable "couldn't count" state, distinct from a 403 lock.
-        setRadState(code === 403 ? 'locked' : (e && e.name === 'AbortError') ? 'timeout' : 'error');
+        // 503 warming_up → the server's centroid warm-up is still running; a retryable "warming" state (distinct
+        // from a 403 lock and a 30s AbortError timeout).
+        setRadState(code === 403 ? 'locked' : (e && e.warmingUp) || code === 503 ? 'warming' : (e && e.name === 'AbortError') ? 'timeout' : 'error');
         setRadHttp(code);
         if (code === 403) radCache.current.set(key, { state: 'locked', profile: null, http: 403, diag: null });
       }

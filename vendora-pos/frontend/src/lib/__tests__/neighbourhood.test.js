@@ -29,6 +29,11 @@ describe('neighbourhoodClient.getRadiusProfile — radius aggregation request', 
     await expect(getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1000 })).rejects.toMatchObject({ status: 403 });
   });
 
+  it('flags a 503 warming_up response as retryable (warmingUp + retryAfterS)', async () => {
+    __setFetch(async () => ({ ok: false, status: 503, json: async () => ({ success: false, error: 'warming_up', retryAfterS: 20 }) }));
+    await expect(getRadiusProfile({ postcode: 'RM10 8AA', radiusM: 1000 })).rejects.toMatchObject({ status: 503, warmingUp: true, retryAfterS: 20 });
+  });
+
   it('falls back to GET /radius when POST 404s (deploy mismatch)', async () => {
     const methods = [];
     __setFetch(async (url, opts) => {

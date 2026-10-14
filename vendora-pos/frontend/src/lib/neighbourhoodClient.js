@@ -82,7 +82,13 @@ export async function getRadiusProfile({ postcode, radiusM, full = false, signal
       }
     }
     let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
-    if (!res.ok) { const e = new Error((body && body.message) || `radius ${res.status}`); e.status = res.status; throw e; }
+    if (!res.ok) {
+      const e = new Error((body && body.message) || `radius ${res.status}`);
+      e.status = res.status;
+      // 503 warming_up: the server's one-time centroid load is still in flight — a retryable, distinct state.
+      if (res.status === 503 && body && body.error === 'warming_up') { e.warmingUp = true; e.retryAfterS = body.retryAfterS || null; }
+      throw e;
+    }
     return body || {};
   } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
 }

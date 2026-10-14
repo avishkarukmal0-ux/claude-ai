@@ -79,6 +79,14 @@ FE build green (`index-5xHDnST2.js`), pwa test 4 pass. Frontend → Vercel; the 
 ## Round 6 — surface warm duration in the response (auditor can't read Render logs)
 Auditor can't pull the Render deploy log far enough to see the centroid warm-completion line, and I have no Render access to fetch it. So the warm duration is now exposed where they CAN see it — the `/radius` response: `cacheStats.centroids = { warm, count, loadMs, source }`. `centroids.js` records the Mongo load duration (`loadMs`) into `_cache` and `status()` returns it. No Render log needed to confirm the one-time warm time. Full login→logout→refresh-rejected verification is the self-provisioning `scripts/verify-refresh-revocation.js` (caa21b8). cacheStats: keep until public launch (agreed). Files: `services/insightsData/centroids.js`, `routes/pwaNeighbourhoodRoutes.js`. centroids+insights tests 41 pass. Backend-only → needs Render deploy.
 
+## Round 7 — boot-window: fast 503 "warming up" instead of a 27s hang (Render now connected)
+Confirmed live from Render (MCP, read-only): commit `e4f93a5`, warm `OA centroids warmed into memory (188880) in 27280ms`, `cacheStats.centroids={count:188880,loadMs:27279,warm:true}`. Decision on the boot window = **option (b)** (not gating /health, which would blank the whole app for 27s each deploy):
+- `/radius` returns **503 `{error:'warming_up', retryAfterS}`** + `Retry-After` header while `centroids.isLoading() && !isLoaded()` — fast, instead of awaiting the shared promise for the remainder (which could brush the 30s client timeout on a dense first call). The warm stays coalesced; the request just declines to wait.
+- `centroids.js`: `isLoading()` + `loadingElapsedMs()` (+ `_loadStartedAt`); retryAfterS ≈ 35 − elapsed.
+- Client `getRadiusProfile` surfaces `warmingUp`/`retryAfterS` on a 503; card maps it to a new `warming` radState; `RadiusFigures` shows a `role=status` "Getting your area ready — this takes a few seconds after an update." + Retry.
+- Tests: FE 503→warmingUp mapping; BE centroids/insights 22 pass; FE build `index-rPMxO6DW.js`. SW v42→v43.
+Files: `backend/services/insightsData/centroids.js`, `backend/routes/pwaNeighbourhoodRoutes.js`, `frontend/lib/neighbourhoodClient.js`, `frontend/components/insights/{NeighbourhoodAreaCard,RadiusFigures}.jsx`, `frontend/public/sw.js`. Backend → Render deploy; frontend → Vercel.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.

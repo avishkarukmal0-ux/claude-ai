@@ -146,6 +146,7 @@ async function loadFromMongo() {
  * otherwise loads from MongoDB. Idempotent — re-reads only on force or a changed source.
  */
 let _loading = null; // in-flight load promise — shared so concurrent callers never start a second DB pull
+let _loadStartedAt = null; // when the in-flight load began (for a "warming up, retry in N s" estimate)
 async function load({ force = false } = {}) {
   const path = config.neighbourhoodInsights.data.centroidsPath;
   if (_cache && !force) {
@@ -156,9 +157,14 @@ async function load({ force = false } = {}) {
   // share ONE promise (and ONE ~190k-row Mongo read) instead of each pulling its own copy. The request simply
   // awaits the load already in progress and then proceeds — no duplicate work, no second connection spike.
   if (_loading && !force) return _loading;
+  _loadStartedAt = Date.now();
   _loading = (path ? loadFromFile(path) : loadFromMongo()).finally(() => { _loading = null; });
   return _loading;
 }
+/** True while the one-time centroid load is in flight (used by /radius to answer "warming up" instead of hanging). */
+function isLoading() { return !!_loading; }
+/** Milliseconds since the in-flight load began, or null if not loading. */
+function loadingElapsedMs() { return _loading && _loadStartedAt ? Date.now() - _loadStartedAt : null; }
 
 /** Fast check of how many centroids exist WITHOUT loading them all into memory (for the status indicator). */
 async function count() {
@@ -186,4 +192,4 @@ function status() {
 // Test seam: inject centroids directly without a file or DB.
 function __setForTest(list) { _cache = list ? { list, loadedAt: Date.now(), count: list.length, source: 'test', path: '__test__' } : null; }
 
-module.exports = { load, all, isLoaded, status, count, parseLatLng, osgbToWgs84, __setForTest };
+module.exports = { load, all, isLoaded, isLoading, loadingElapsedMs, status, count, parseLatLng, osgbToWgs84, __setForTest };
