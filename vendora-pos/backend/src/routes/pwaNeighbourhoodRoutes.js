@@ -89,6 +89,15 @@ async function radiusHandler(req, res, next) {
       throw new AppError('Radius figures are the paid Neighbourhood Insights add-on.', 403, 'INSIGHTS_PAID');
     }
     const src = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+    // Test hook (item 2): lets an auditor exercise the 503 "warming up" path on demand, without waiting for a
+    // restart. Gated so it can't fire in normal production: only when INSIGHTS_FORCE_WARMING=1 is set (or outside
+    // production) AND the request opts in with forceWarming=1. Returns the exact same 503 shape a real warm-up does.
+    const forceWarmAllowed = process.env.INSIGHTS_FORCE_WARMING === '1' || process.env.NODE_ENV !== 'production';
+    const forceWarm = forceWarmAllowed && (src.forceWarming === '1' || src.forceWarming === 1 || src.forceWarming === true);
+    if (forceWarm) {
+      res.set('Retry-After', '30');
+      return res.status(503).json({ success: false, error: 'warming_up', retryAfterS: 30, forced: true, message: 'Neighbourhood data is warming up — try again in about 30s.' });
+    }
     const postcode = (src.postcode || '').toString();
     const radiusM = Number(src.radiusM);
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
