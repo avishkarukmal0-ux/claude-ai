@@ -102,6 +102,16 @@ Files: `backend/services/insightsData/nomis.js`, `backend/__tests__/insightsData
 - **batchMs evidence:** cold LS2 8DY (93 OAs, 1 batch/table) = `batchMs:[1606]`/`[1909]`; two tables parallel (`nomisTotalMs 2399 ≈ max`). Single-batch so no intra-table signal. Old 509-OA table = 8443ms ≈ 4×~2s ⇒ looks serial/throughput-bound at Nomis. `undici` not requirable here → can't force a bigger socket pool. Definitive call needs one dense 5000m cold lookup (multi-batch batchMs). Next-step options if serial: (b) cap first request ~1000 OAs + background fill, or (c) lower first-lookup radius — both change the displayed figure (product call). Recommend leaving as-is: repeats 0.2–1s, cache self-heals (13,018 OAs cached, growing), nothing hangs.
 - Deploys/env for this round driven via the connected Render MCP.
 
+## Round 10 — warming copy/auto-retry; blacklist PROVEN live; flags off; free-plan options
+Audit confirmed batches ARE parallel (cold 4970m/2000 OAs: batchMs [4509,5089]/[4212,6699], tables concurrent, 9.5s server) — the ~10s is pure Nomis latency (~4–7s per ~140-OA batch), not fixable client-side. Actions (`1fa3085`, live):
+- **Copy:** warming message → "…can take up to 30 seconds after an update." **Auto-retry:** card retries the 503 ONCE after Retry-After (clamped 3–30s), one per postcode, manual 44px Retry kept. SW v43→v44 (Vercel).
+- **Blacklist PROVEN in prod:** added a boot self-verify behind `VERIFY_REVOCATION=1`; deploy log shows every step PASS incl. "the logged-out refresh token is rejected" + `RESULT: PASS` (creates+deletes a throwaway account). Flag then set back to `0`.
+- **Atlas (read-only) evidence:** `revokedtokens` now has `tokenHash_1` (unique) + **`expiresAt_1` (TTL)**; `insightsoadatas` = **15,668** rows (was 13,018 — cache growing).
+- **`INSIGHTS_FORCE_WARMING` set to `0`** (the forced 503 test path is off in prod again).
+- Item 3 (cap first req ~1000 OAs + bg fill): NOT done — figures-changing; the ~10s cold edge self-heals via cache. Owner's call.
+- Item 5 (FREE plan): Starter ~£6–7/mo (no spin-down) vs an external <15min ping (free-ish, 750 instance-hrs/mo cap) — Avishka's call; plan not changed.
+Live commit `1fa3085`; both test flags off. insightsData/centroids tests pass; FE build `index-C8hMrDdd.js`.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.
