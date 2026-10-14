@@ -44,6 +44,15 @@ A cold `/radius` for SW1A 1AA took **32,372 ms for 119 OAs**; the repeat was 0 m
 ## Commit(s)
 - `<hash>` — perf(neighbourhood): per-step /radius timing + durable per-OA Mongo cache + centroid warm
 
+## Round 2 (same day) — live evidence + follow-ups from fc022b1
+Live `diag.timing` confirmed fc022b1 is deployed: centroids 0 ms (warm), Nomis is the cost. E8 3DY (5,000 m, 2,000 OAs): 509 fetched in 4 batches, ~8.4 s + 9.3 s per (parallel) table, total 9.9 s. SE1 9SG: 55 fetched, 2.1 s. ~18 ms per MISSING OA → cost scales with OAs not yet cached. **`oaFromMongo` was 0 on first lookups** — expected (first fetch), but unverifiable without a write confirmation, so:
+- `oaStore.put` now RETURNS `{ persisted }` and **logs a WARN on a Mongo write failure** (a silent failure is exactly what would keep `oaFromMongo` at 0). `fetchTable` records `rec.mongoPersisted` (+ `mongoError`).
+- Route log/table rows now carry `persisted`, `persistErr`, and **`batchMs[]`** (per-batch wall time → Σ≈table ⇒ Nomis serialises; max≈table ⇒ truly parallel). The client already dispatches batches concurrently (mapLimit, conc 6); `batchMs` will show whether Nomis is the serialiser.
+- **diag removed from the production `/radius` response** (item 3): kept in the server log; exposed to clients only in dev or with `INSIGHTS_DIAG_PUBLIC=true`.
+- Not changed: radius stepping (d) — E8 3DY is already 9.9 s (< 10 s target) and repeats are cache-instant; hold unless a denser postcode exceeds target. Batch concurrency left at 6 (raising it risks Nomis 429 if it's the serialiser).
+- Verify after deploy: `insightsoadatas` doc count before/after one cold `/radius`; `tables[].persisted` on that call; `oaFromMongo > 0` on a SECOND lookup of the same postcode after a restart.
+Files: `services/insightsData/oaStore.js`, `services/insightsData/nomis.js`, `routes/pwaNeighbourhoodRoutes.js`. insights tests 35 pass. Backend-only → needs Render deploy.
+
 ## Follow-ups
 - [ ] Deploy to Render; capture a cold SW1A 1AA `/radius` line and read the `step`/`tables` split; confirm `centroidsWarm:true` on user requests.
 - [ ] If centroid load still shows on the first user request, consider a 2dsphere geo query so we never load all ~190k OAs into memory.

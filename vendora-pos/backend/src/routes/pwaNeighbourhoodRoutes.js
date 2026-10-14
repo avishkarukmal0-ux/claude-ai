@@ -108,7 +108,11 @@ async function radiusHandler(req, res, next) {
     const tables = Array.isArray(timing.tables) ? timing.tables.map((tbl) => ({
       t: tbl.table || null, ds: tbl.dataset || null, req: tbl.oaRequested || 0,
       mem: tbl.oaFromMem || 0, mongo: tbl.oaFromMongo || 0, fetched: tbl.oaFetched || 0,
-      ms: tbl.ms != null ? tbl.ms : null, status: tbl.status != null ? tbl.status : null,
+      persisted: tbl.mongoPersisted != null ? tbl.mongoPersisted : null, // how many we wrote to Mongo this call
+      persistErr: tbl.mongoError || null,                                 // a surfaced Mongo write failure, if any
+      ms: tbl.ms != null ? tbl.ms : null,
+      batchMs: Array.isArray(tbl.batchMs) ? tbl.batchMs : null,           // per-batch wall time (parallel vs serial)
+      status: tbl.status != null ? tbl.status : null,
       retryAfter: tbl.retryAfter || null,
     })) : undefined;
     logger.log(durationMs >= RADIUS_SLOW_MS ? 'warn' : 'info', 'pwa-neighbourhood /radius', {
@@ -134,8 +138,14 @@ async function radiusHandler(req, res, next) {
       tables,
     });
     if (!out.ok) throw new AppError(out.reason || 'Couldn’t build that profile.', 400, 'RADIUS_FAILED');
+    // The `diag` block (OA counts, sample OA code, per-step timing, per-table status) is a server-side diagnostic
+    // — it's already in the log above. Don't leak it to clients in production; keep it in the response only in
+    // dev or when explicitly opted in (INSIGHTS_DIAG_PUBLIC=true), so the owner's DevTools can still see it.
+    const exposeDiag = process.env.NODE_ENV !== 'production' || process.env.INSIGHTS_DIAG_PUBLIC === 'true';
+    const body = { success: true, ...out };
+    if (!exposeDiag) delete body.diag;
     // Note: no `testUnlock` flag in the response — it's an internal gate (INSIGHTS_TEST_UNLOCK), not client data.
-    res.json({ success: true, ...out });
+    res.json(body);
   } catch (err) {
     if (err && err.statusCode) return next(new AppError(err.message, err.statusCode, err.code || 'RADIUS'));
     next(err);

@@ -7,6 +7,7 @@
 // The Nomis network fetch is only ever done for OAs missing from BOTH layers; results are written through to both.
 // Everything is best-effort: if Mongo is down we degrade to L1-only (and the caller still fetches from Nomis).
 const mongoose = require('mongoose');
+const logger = require('../../utils/logger');
 
 let _Model = null;
 function model() { _Model = _Model || require('../../models/InsightsOaData'); return _Model; }
@@ -51,13 +52,20 @@ async function get(dataset, oaCodes, stats = null) {
 async function put(dataset, map) {
   const entries = map instanceof Map ? [...map] : Object.entries(map || {});
   for (const [oa, counts] of entries) _mem.set(memKey(dataset, oa), counts || {});
-  if (!dbReady() || !entries.length) return;
+  if (!dbReady() || !entries.length) return { persisted: 0, dbReady: dbReady() };
   try {
     const ops = entries.map(([oa, counts]) => ({
       updateOne: { filter: { dataset, oa }, update: { $set: { dataset, oa, counts: counts || {}, fetchedAt: new Date() } }, upsert: true },
     }));
-    await model().bulkWrite(ops, { ordered: false });
-  } catch { /* best effort — a failed persist just means we re-fetch that OA next cold start */ }
+    const res = await model().bulkWrite(ops, { ordered: false });
+    const persisted = (res && (res.upsertedCount || 0) + (res.modifiedCount || 0) + (res.matchedCount || 0)) || entries.length;
+    return { persisted, dbReady: true };
+  } catch (e) {
+    // A failed persist just means we re-fetch that OA next cold start — but surface it, because a SILENT failure
+    // here is exactly what makes oaFromMongo stay 0 (the cache never fills). One WARN per failed write.
+    logger.warn(`insights oaStore: Mongo write failed for ${dataset} (${entries.length} OAs): ${e.message}`);
+    return { persisted: 0, dbReady: true, error: e.message };
+  }
 }
 
 // Test seam: clear the in-memory layer (and optionally the Mongo-ready check) between unit tests.

@@ -166,11 +166,16 @@ async function fetchTable(def, oaCodes, rec = null) {
       // Fetch the OA batches IN PARALLEL (bounded) instead of one-after-another — a dense postcode can have ~14
       // batches, and serial fetches are what tipped some first-time lookups past 30s.
       const batches = chunk(missing, 150);
-      if (rec) rec.batches = batches.length;
+      if (rec) { rec.batches = batches.length; rec.batchMs = []; }
       const parsedBatches = await mapLimit(batches, FETCH_CONCURRENCY, async (batch) => {
         const geogParam = encodeURIComponent(batch.join(','));
         const url = `${DATA().nomisBase}/dataset/${dataset}.data.json?geography=${geogParam}&measures=${def.measures}${sel}${uid}`;
-        return { batch, parsed: parseObs(await _transport(url), def.dimension) };
+        const bT = Date.now();
+        const parsed = parseObs(await _transport(url), def.dimension);
+        // Per-batch wall time (so we can tell parallel from sequential: Σ batchMs ≈ table ms ⇒ sequual at Nomis;
+        // max(batchMs) ≈ table ms ⇒ truly parallel). The batches are dispatched concurrently (mapLimit).
+        if (rec) rec.batchMs.push(Date.now() - bT);
+        return { batch, parsed };
       });
       // Write EVERY requested-but-missing OA through to the cache — including the ones Nomis returned nothing for
       // (stored as {}), so a dataless OA isn't re-queried on the next cold start.
@@ -183,7 +188,8 @@ async function fetchTable(def, oaCodes, rec = null) {
           toPersist.set(oa, merged[oa]);
         }
       }
-      await oaStore.put(dataset, toPersist);
+      const putRes = await oaStore.put(dataset, toPersist);
+      if (rec) { rec.mongoPersisted = (putRes && putRes.persisted) || 0; if (putRes && putRes.error) rec.mongoError = putRes.error; }
     } catch (e) {
       httpStatus = (e && e.status) || 0;
       if (rec) { rec.status = httpStatus; rec.retryAfter = (e && e.retryAfter) || null; }
