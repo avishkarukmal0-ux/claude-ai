@@ -42,6 +42,8 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
   const [whoState, setWhoState] = useState('idle');  // idle | loading | ok | error
   const [radFetching, setRadFetching] = useState(false); // F8: a new radius/postcode fetch is in flight over stale figures
   const [radRetry, setRadRetry] = useState(0); // bump to re-run the radius fetch after a timeout (Retry button)
+  const [radWarmRetryS, setRadWarmRetryS] = useState(null); // server's Retry-After (s) when warming up
+  const warmTriesRef = useRef(0); // at most ONE automatic retry per postcode while the server is warming up
   // Map tiles come through /api (which the service worker never caches), so offline — or when a tile fetch fails
   // and there's no saved copy — the base map draws blank. Track connectivity + tile health so we can hide the map
   // and fall back to the slider instead of showing a grey grid. `online` seeds from navigator and follows events.
@@ -73,6 +75,17 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     if (offlineRadiusRec && offlineRadiusRec.radiusM) setRadiusM((m) => (m !== offlineRadiusRec.radiusM ? offlineRadiusRec.radiusM : m));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catchmentReadOnly, offlineRadiusRec && offlineRadiusRec.radiusM]);
+
+  // Warming up (server centroid load): auto-retry ONCE after the server's Retry-After (clamped 3–30s), on top of
+  // the manual Retry button — so the figures appear on their own after a cold start without the owner tapping.
+  // Capped at one auto-retry per postcode (warmTriesRef), reset when the postcode changes.
+  useEffect(() => {
+    if (radState !== 'warming' || warmTriesRef.current >= 1) return undefined;
+    warmTriesRef.current += 1;
+    const waitMs = Math.min(Math.max(Number(radWarmRetryS) || 15, 3), 30) * 1000;
+    const id = setTimeout(() => { setRadState('loading'); setRadRetry((n) => n + 1); }, waitMs);
+    return () => clearTimeout(id);
+  }, [radState, radWarmRetryS]);
   const prevRadPostcode = useRef(radPostcode); // F8: detect a postcode change so stale figures aren't shown for it
   const prevWhoKey = useRef(null); // R8/round3 R7: detect an area/radius change so a stale community isn't shown
   const radCache = useRef(new Map()); // `${postcode}:${radiusM}` → { state, profile, http, diag } — instant on revisit
@@ -101,7 +114,7 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
     // numbers under another's name while the new fetch is in flight.
     const postcodeChanged = prevRadPostcode.current !== radPostcode;
     prevRadPostcode.current = radPostcode;
-    if (postcodeChanged) { setRadProfile(null); setRadState('loading'); }
+    if (postcodeChanged) { setRadProfile(null); setRadState('loading'); warmTriesRef.current = 0; }
     const key = `${radPostcode}:${Math.round(radiusM)}`;
     const hit = radCache.current.get(key);
     if (hit) { // instant — no round-trip
@@ -129,7 +142,9 @@ export default function NeighbourhoodAreaCard({ defaultPostcode = '', onBack = n
         const code = (e && e.status) || 0;
         // 503 warming_up → the server's centroid warm-up is still running; a retryable "warming" state (distinct
         // from a 403 lock and a 30s AbortError timeout).
-        setRadState(code === 403 ? 'locked' : (e && e.warmingUp) || code === 503 ? 'warming' : (e && e.name === 'AbortError') ? 'timeout' : 'error');
+        const warming = (e && e.warmingUp) || code === 503;
+        if (warming) setRadWarmRetryS((e && e.retryAfterS) || null);
+        setRadState(code === 403 ? 'locked' : warming ? 'warming' : (e && e.name === 'AbortError') ? 'timeout' : 'error');
         setRadHttp(code);
         if (code === 403) radCache.current.set(key, { state: 'locked', profile: null, http: 403, diag: null });
       }

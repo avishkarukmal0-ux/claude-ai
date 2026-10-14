@@ -112,6 +112,13 @@ connectDB()
     // ~190k-row load (the biggest single chunk of the cold-path time). Fire-and-forget, insights-gated, never
     // fatal. Only when centroids come from Mongo (no file path) and a census data provider is configured.
     try {
+      // One-off self-verify of the durable refresh-token blacklist, behind an env flag, so its PASS/FAIL lands in
+      // the deploy log (the connection has no shell to run the script). Creates+deletes its own throwaway account.
+      // Turn VERIFY_REVOCATION off after reading the result so it doesn't run on every boot.
+      if (process.env.VERIFY_REVOCATION === '1') {
+        require('./scripts/verify-refresh-revocation').run((line) => logger.info(`verify-revocation: ${line}`))
+          .catch((e) => logger.warn(`verify-revocation failed: ${e.message}`));
+      }
       const ni = config.neighbourhoodInsights;
       if (ni && ni.enabled && ni.dataProvider && !(ni.data && ni.data.centroidsPath)) {
         const warmStart = Date.now();

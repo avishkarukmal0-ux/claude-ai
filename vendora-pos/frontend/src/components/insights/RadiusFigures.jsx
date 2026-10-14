@@ -51,7 +51,7 @@ export default function RadiusFigures({ state, http, diag, profile, radiusM, uni
       )}
       {state === 'warming' && (
         <div className="mt-2 flex flex-wrap items-center gap-2" role="status">
-          <span className="flex items-center gap-1.5 text-xs leading-snug text-gray-600"><Loader2 className="h-3 w-3 animate-spin" /> Getting your area ready — this takes a few seconds after an update.</span>
+          <span className="flex items-center gap-1.5 text-xs leading-snug text-gray-600"><Loader2 className="h-3 w-3 animate-spin" /> Getting your area ready — this can take up to 30 seconds after an update.</span>
           {onRetry && (
             <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary px-3 text-xs font-semibold text-white active:scale-95">
               <RefreshCw className="h-3.5 w-3.5" /> Retry
