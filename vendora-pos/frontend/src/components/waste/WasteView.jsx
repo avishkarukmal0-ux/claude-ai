@@ -268,11 +268,11 @@ export default function WasteView({ onBack }) {
             <p className="mb-2 rounded-xl bg-warning-light p-2 text-xs text-warning-dark">Heads up: from 29 Oct 2026 discounting/free distribution of nicotine products may be restricted (reported — the detail is unconfirmed). Check before promoting tobacco/vape lines.</p>
           )}
           <div className="mb-2 grid grid-cols-2 gap-2">
-            <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">Qty
-              <input value={md.qty} onChange={(e) => setMd((m) => ({ ...m, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">Qty
+              <input value={md.qty} onChange={(e) => setMd((m) => ({ ...m, qty: e.target.value }))} inputMode="numeric" aria-label="Markdown quantity" className="min-h-[44px] w-full border-none bg-transparent p-0 text-gray-900 focus:outline-none" />
             </label>
-            <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">New £
-              <input value={md.reducedPrice} onChange={(e) => setMd((m) => ({ ...m, reducedPrice: e.target.value }))} inputMode="decimal" placeholder={Number(md.row.product.price) > 0 ? `was ${money(md.row.product.price)}` : 'price'} className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+            <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">New £
+              <input value={md.reducedPrice} onChange={(e) => setMd((m) => ({ ...m, reducedPrice: e.target.value }))} inputMode="decimal" placeholder={Number(md.row.product.price) > 0 ? `was ${money(md.row.product.price)}` : 'price'} aria-label="Reduced price in pounds" className="min-h-[44px] w-full border-none bg-transparent p-0 text-gray-900 focus:outline-none" />
             </label>
           </div>
           <p className="mb-2 text-xs text-gray-400">Creates a reduced-price label to print/share. It does <strong>not</strong> change your stock or record a sale.</p>
@@ -336,10 +336,10 @@ export default function WasteView({ onBack }) {
                 {codeable.map((p) => <option key={p.id} value={p.id}>{p.name} · {undatedQty(p)} undated</option>)}
               </select>
               <div className="mb-2 grid grid-cols-2 gap-2">
-                <label className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-500">Qty
-                  <input value={dc.qty} onChange={(e) => setDc((d) => ({ ...d, qty: e.target.value }))} inputMode="numeric" aria-label="Quantity to date-code" placeholder="e.g. 2" className="w-full border-none p-0 text-gray-900 focus:outline-none" />
+                <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">Qty
+                  <input value={dc.qty} onChange={(e) => setDc((d) => ({ ...d, qty: e.target.value }))} inputMode="numeric" aria-label="Quantity to date-code" placeholder="e.g. 2" className="min-h-[44px] w-full border-none bg-transparent p-0 text-gray-900 focus:outline-none" />
                 </label>
-                <input type="date" value={dc.expiry} onChange={(e) => setDc((d) => ({ ...d, expiry: e.target.value }))} aria-label="Expiry date" className="rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:border-primary focus:outline-none" />
+                <input type="date" value={dc.expiry} onChange={(e) => setDc((d) => ({ ...d, expiry: e.target.value }))} aria-label="Expiry date" className="min-h-[44px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:border-primary focus:outline-none" />
               </div>
               <select value={dc.dateType} onChange={(e) => setDc((d) => ({ ...d, dateType: e.target.value }))} className="mb-2 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none">
                 {Object.entries(DATE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}{v.hard ? ' (legal — pull after date)' : ''}</option>)}
@@ -376,10 +376,10 @@ export default function WasteView({ onBack }) {
         <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="What is it? (e.g. Milk 2L)" aria-label="Item name" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <div className="mb-3 grid grid-cols-2 gap-2">
           <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
-            £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="0.00" aria-label="Cost in pounds" className="w-full border-none bg-transparent p-0 text-base text-gray-900 focus:outline-none" />
+            £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="0.00" aria-label="Cost in pounds" className="min-h-[44px] w-full border-none bg-transparent p-0 text-base text-gray-900 focus:outline-none" />
           </label>
           <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
-            Qty<input value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} inputMode="numeric" placeholder="1" aria-label="Quantity" className="w-full border-none bg-transparent p-0 text-base text-gray-900 focus:outline-none" />
+            Qty<input value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} inputMode="numeric" placeholder="1" aria-label="Quantity" className="min-h-[44px] w-full border-none bg-transparent p-0 text-base text-gray-900 focus:outline-none" />
           </label>
         </div>
         <div className="grid grid-cols-2 gap-2">
