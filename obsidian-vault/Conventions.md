@@ -124,6 +124,7 @@ The recurring round-3 lesson: *a passing helper test does not prove the whole us
 - `fmt(n)` → `£${Number(n||0).toFixed(2)}` for currency display.
 - Modals: fixed overlay `fixed inset-0 bg-black/50 flex items-center justify-center z-50`.
 - ⚠️ Never put `flex` directly on a `<td>` (renders as table-cell). Wrap children in a `<div className="flex">`.
+- **Long scrollable lists (hundreds of rows) are windowed with `@tanstack/react-virtual`.** Pattern (see `InventoryView.jsx` / `StocktakeView.jsx`): flatten groups into one item array; `useVirtualizer` against the page scroller `<main id="main-content">` via `getScrollElement`; set `scrollMargin` to the list's offset below the scroller top (`getBoundingClientRect` diff, remeasured in a `useLayoutEffect` when content above the list changes height); position each item absolutely with `transform: translateY(vi.start - options.scrollMargin)` and `ref={rowVirtualizer.measureElement}` for variable heights. Only engage past a threshold (`> 60` rows) so small datasets render the plain markup unchanged. Pair with a **~200ms debounced search** (input controlled by `query`, filtering off `debouncedQuery`) and a **`React.memo` row** fed primitive props + stable `useCallback` handlers, so editing one row re-renders only that row.
 
 ## UK domain rules (important!)
 - **Tax year 2025/26** constants live in `backend/src/services/payrollService.js` and are mirrored client-side in payroll components. Keep them in sync. See [[Accounting]].
