@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { Banknote, CreditCard, Coins, Wallet, Trash2, Check } from 'lucide-react';
 import ScreenBack from '../common/ScreenBack';
 import { useTakings, entryTotals } from '../../lib/takingsStore';
@@ -10,7 +11,15 @@ const FIELD_LABEL = { card: 'Card', cash: 'Cash', float: 'Float', counted: 'Coun
 // Takings & cash-up — enter the day's card + cash takings and count the drawer.
 // Shows total takings + cash variance. Local-first; feeds the Owner glance.
 export default function TakingsView({ onBack }) {
-  const { entries, saveDay, removeEntry, todayEntry, monthTakings } = useTakings();
+  const { entries, saveDay, removeEntry, restoreEntry, todayEntry, monthTakings } = useTakings();
+  function deleteDay(e) {
+    removeEntry(e.id);
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Entry deleted.
+        <button type="button" onClick={() => { restoreEntry(e); toast.dismiss(t.id); }} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-primary underline">Undo</button>
+      </span>
+    ), { duration: 6000 });
+  }
   const [f, setF] = useState({ card: '', cash: '', float: '', passThrough: '', counted: '' });
 
   // Prefill from today's saved record if there is one.
@@ -110,7 +119,7 @@ export default function TakingsView({ onBack }) {
                     )}
                   </span>
                   <span className="text-sm font-bold tabular-nums text-gray-900">£{t.takings.toFixed(2)}</span>
-                  <button type="button" onClick={() => removeEntry(e.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete">
+                  <button type="button" onClick={() => deleteDay(e)} className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={`Delete ${new Date(e.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </li>
