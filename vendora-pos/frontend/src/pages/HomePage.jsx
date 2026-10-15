@@ -13,6 +13,7 @@ import { withGlossary } from '../components/common/glossary';
 import { downloadBackup, shareBackup, readBackup, restoreBackup, getLastBackupAt } from '../lib/backup';
 import { getSavedShopType, getFamily, getMember } from '../config/shopTypes';
 import { resolveNiche } from '../config/niche';
+import { QUICK_TOOLS } from '../config/quickTools';
 import { getBusinessProfile } from '../lib/businessProfile';
 import { getPersistState, PERSIST_EVENT } from '../lib/storage';
 import TodayAtShop from '../components/home/TodayAtShop';
@@ -146,6 +147,7 @@ export default function HomePage() {
     if (['today', 'scan', 'stock', 'buy', 'more'].includes(t)) { setTab(t); setScreen(null); }
   }, [location.search]);
   const [activeTool, setActiveTool] = useState(null);
+  const [refusalPrefill, setRefusalPrefill] = useState(null); // handed from Age check's "Log this refusal"
   const [toolsExpanded, setToolsExpanded] = useState(false); // Quick tools: carousel ⇄ full grid ("See all")
   const [buyExpanded, setBuyExpanded] = useState(false); // Buy hub: top destinations vs "All buying tools"
   // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.
@@ -570,7 +572,12 @@ export default function HomePage() {
               <button type="button" onClick={() => setActiveTool(null)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close"><X className="h-5 w-5" /></button>
             </div>
             <div className="overflow-y-auto px-5 pt-5" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
-              {ToolComponent && <ToolComponent />}
+              {ToolComponent && (
+                <ToolComponent
+                  onLogRefusal={QUICK_TOOLS['refusals-log'] ? (payload) => { setRefusalPrefill(payload); setActiveTool(QUICK_TOOLS['refusals-log']); } : undefined}
+                  prefill={activeTool?.id === 'refusals-log' ? refusalPrefill : undefined}
+                />
+              )}
             </div>
           </div>
         </div>

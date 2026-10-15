@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, XCircle, AlertTriangle, ShieldX } from 'lucide-react';
 import ComplianceNote from './ComplianceNote';
 import { getBusinessProfile } from '../../lib/businessProfile';
 import { AGE_RULES } from '../../data/compliance';
@@ -21,7 +21,7 @@ function ageOn(dob, on = new Date()) {
   return age;
 }
 
-export default function AgeCheckHelper() {
+export default function AgeCheckHelper({ onLogRefusal }) {
   const today = new Date();
   const profile = getBusinessProfile();
   const nation = profile.region;
@@ -98,7 +98,7 @@ export default function AgeCheckHelper() {
       )}
 
       {age !== null && !tooOld && (
-        <div className={`mt-4 rounded-xl p-4 ${ok ? 'bg-success-light' : 'bg-danger-light'}`}>
+        <div role="status" className={`mt-4 rounded-xl p-4 ${ok ? 'bg-success-light' : 'bg-danger-light'}`}>
           <div className={`flex items-center gap-2 text-base font-bold ${ok ? 'text-success-dark' : 'text-danger-dark'}`}>
             {ok ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
             {tobaccoBlocked ? `Do not sell tobacco — born after ${new Date(AGE_RULES.tobaccoBornOnOrBefore).toLocaleDateString('en-GB')}` : ok ? `OK — ${age} years old` : `Under age — ${age} years old`}
@@ -108,6 +108,12 @@ export default function AgeCheckHelper() {
           )}
           {challenge && (
             <div className="mt-1 text-sm font-medium text-warning-dark">Under {challengeAge} — ask for photo ID.</div>
+          )}
+          {/* Refused the sale → log it for due diligence, pre-filling the Refusals log (reason + product). */}
+          {!ok && onLogRefusal && (
+            <button type="button" onClick={() => onLogRefusal({ reason: 'underage', product: spec.label })} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-danger px-3 text-sm font-semibold text-white active:scale-[0.99]">
+              <ShieldX className="h-4 w-4" /> Log this refusal
+            </button>
           )}
         </div>
       )}

@@ -8,15 +8,20 @@ import { useRefusalsLog, REFUSAL_REASONS, refusalsCsv } from '../../lib/refusals
 // premises licence. Record-only; no sale is processed here. Keep ~12 months; weekly manager sign-off; export.
 const REASON_LABEL = Object.fromEntries(REFUSAL_REASONS.map((r) => [r.id, r.label]));
 
-export default function RefusalsLogTool() {
+export default function RefusalsLogTool({ prefill }) {
   const { refusals, signoffs, addRefusal, removeRefusal, signOff } = useRefusalsLog();
-  const [f, setF] = useState({ reason: 'underage', product: '', note: '', initials: '' });
+  // Opened from the Age check's "Log this refusal" → pre-fill the reason + product it hands over.
+  const [f, setF] = useState(() => ({ reason: prefill?.reason || 'underage', product: prefill?.product || '', note: '', initials: '' }));
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   const lastSignoff = signoffs[0] || null;
   const needsSignoff = refusals.length > 0 && (!lastSignoff || refusals[0].at > lastSignoff.at);
+  // Block an empty tap: a refusal record needs at least what they tried to buy, a note, or the staff initials
+  // (every entry already carries a reason + a date/time). Keeps blank rows out of the audit trail.
+  const hasDetail = !!(f.product.trim() || f.note.trim() || f.initials.trim());
 
   function save() {
+    if (!hasDetail) { toast.error('Add the product, a note, or your initials first.'); return; }
     const res = addRefusal(f);
     if (!res.ok) { toast.error(res.error || 'Couldn’t save'); return; }
     toast.success('Refusal logged');
@@ -63,9 +68,10 @@ export default function RefusalsLogTool() {
             className="col-span-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base text-gray-900 focus:border-primary focus:outline-none" />
         </div>
       </div>
-      <button type="button" onClick={save} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-white">
+      <button type="button" onClick={save} disabled={!hasDetail} aria-describedby={!hasDetail ? 'refusal-hint' : undefined} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-semibold text-white disabled:opacity-40">
         Log refusal
       </button>
+      {!hasDetail && <p id="refusal-hint" className="mt-1 text-center text-xs text-gray-400">Add the product, a note, or your initials to log it.</p>}
 
       {/* Manager sign-off */}
       <div className={`mt-4 rounded-xl p-3 ${needsSignoff ? 'bg-warning-light' : 'bg-gray-50'}`}>
