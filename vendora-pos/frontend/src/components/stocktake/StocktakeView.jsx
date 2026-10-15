@@ -341,7 +341,7 @@ function CatChip({ label, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}
+      className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}
     >
       {label}
     </button>

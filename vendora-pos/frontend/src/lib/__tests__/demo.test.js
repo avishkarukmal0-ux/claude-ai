@@ -30,6 +30,15 @@ describe('demo data (Phase 2.6c) — isolated, never mixed with real data', () =
     expect(readJSON('inventory_v1', null, DEMO_WORKSPACE)).toBeNull();     // demo wiped
     expect(readJSON('inventory_v1', [], LOCAL_WORKSPACE)).toEqual([{ id: 'real-item' }]); // real data still there
   });
+
+  it('exitDemo restores the workspace the owner was in before the demo (not the guest picker)', () => {
+    setActiveWorkspace('shop:abc123');   // a signed-in owner's shop workspace
+    loadDemo();
+    expect(getActiveWorkspace()).toBe(DEMO_WORKSPACE);
+    exitDemo();
+    expect(isDemoActive()).toBe(false);
+    expect(getActiveWorkspace()).toBe('shop:abc123'); // back to their shop, not 'local'
+  });
 });
 
 describe('ensureSignedOutSampleMode — signed-out welcome shows SAMPLE data, never real data', () => {

@@ -7,6 +7,9 @@ import {
 } from './storage';
 
 export const DEMO_WORKSPACE = 'demo';
+// Remember the workspace the owner was in before entering the demo, so Exit demo returns them there (not to the
+// guest workspace, which would dump a signed-in owner on the shop-type picker). Global key, not workspace-scoped.
+const PRE_DEMO_KEY = 'vendora:workspace_before_demo';
 
 export function isDemoActive() { return getActiveWorkspace() === DEMO_WORKSPACE; }
 
@@ -113,6 +116,8 @@ export function demoCatalogue(familyId, memberId) {
  *  the app renders, and picks the demo catalogue that fits that shop type. Returns { ok }. */
 export function loadDemo() {
   const cur = getActiveWorkspace();
+  // Remember where we came from (unless we're somehow already in demo) so Exit demo can restore it.
+  if (cur !== DEMO_WORKSPACE) { try { localStorage.setItem(PRE_DEMO_KEY, cur); } catch { /* ignore */ } }
   const shopType = read('shop_type', null, cur) || read('shop_type', null, LOCAL_WORKSPACE) || 'grocery-age';
   const [familyId, memberId = null] = String(shopType).split(':');
   write('shop_type', shopType, DEMO_WORKSPACE);
@@ -150,7 +155,13 @@ export function demoDataStale() {
 /** Leave the demo: wipe the demo workspace and return to the real on-device (guest) workspace. */
 export function exitDemo() {
   purgeWorkspace(DEMO_WORKSPACE);
-  setActiveWorkspace(LOCAL_WORKSPACE);
+  // Restore the workspace the owner was in before the demo (their shop:<id> when signed in), falling back to
+  // the guest workspace. Never restore into the demo itself.
+  let prev = LOCAL_WORKSPACE;
+  try { prev = localStorage.getItem(PRE_DEMO_KEY) || LOCAL_WORKSPACE; } catch { /* ignore */ }
+  if (prev === DEMO_WORKSPACE) prev = LOCAL_WORKSPACE;
+  setActiveWorkspace(prev);
+  try { localStorage.removeItem(PRE_DEMO_KEY); } catch { /* ignore */ }
   return { ok: true };
 }
 
