@@ -59,6 +59,12 @@ export function useRefusalsLog() {
 
   const removeRefusal = useCallback((id) => persistAll(load().filter((r) => r.id !== id)), []);
 
+  // Re-insert an exact deleted refusal (for Undo), keeping its id/at; de-dupes by id.
+  const restoreRefusal = useCallback((entry) => {
+    if (!entry || !entry.id) return;
+    persistAll([entry, ...load().filter((r) => r.id !== entry.id)].sort((a, b) => (b.at || 0) - (a.at || 0)));
+  }, []);
+
   /** Record a weekly manager sign-off (initials + timestamp). */
   const signOff = useCallback((initials = '') => {
     const s = { id: newId('so'), initials: String(initials || '').trim().toUpperCase().slice(0, 4) || (actorName() || '—'), at: Date.now() };
@@ -68,5 +74,5 @@ export function useRefusalsLog() {
     return res.ok ? { ok: true, signoff: s } : res;
   }, []);
 
-  return { refusals, signoffs, addRefusal, removeRefusal, signOff };
+  return { refusals, signoffs, addRefusal, removeRefusal, restoreRefusal, signOff };
 }

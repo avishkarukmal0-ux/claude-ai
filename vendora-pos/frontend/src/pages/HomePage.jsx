@@ -148,10 +148,12 @@ export default function HomePage() {
   }, [location.search]);
   const [activeTool, setActiveTool] = useState(null);
   const [refusalPrefill, setRefusalPrefill] = useState(null); // handed from Age check's "Log this refusal"
+  // Close the quick-tool dialog and drop any refusals prefill, so it never carries into the next open (UX pass 4).
+  const closeTool = () => { setActiveTool(null); setRefusalPrefill(null); };
   const [toolsExpanded, setToolsExpanded] = useState(false); // Quick tools: carousel ⇄ full grid ("See all")
   const [buyExpanded, setBuyExpanded] = useState(false); // Buy hub: top destinations vs "All buying tools"
   // FE8: trap focus + close-on-Escape for the quick-tool dialog; restores focus to the tile on close.
-  const toolDialogRef = useDialog(!!activeTool, () => setActiveTool(null));
+  const toolDialogRef = useDialog(!!activeTool, () => closeTool());
   const [showPromises, setShowPromises] = useState(() => !isOnboarded());
   // Show the "What Vendora helps with" intro once, then auto-hide on the next visit (UX pass 1.8) — the owner
   // doesn't have to dismiss it. It stays visible for this session; marking onboarded stops it returning.
@@ -565,11 +567,11 @@ export default function HomePage() {
       </nav>
 
       {activeTool && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setActiveTool(null)} role="dialog" aria-modal="true" aria-label={activeTool.label}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => closeTool()} role="dialog" aria-modal="true" aria-label={activeTool.label}>
           <div ref={toolDialogRef} className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <h3 className="text-base font-bold text-gray-900">{withGlossary(activeTool.label)}</h3>
-              <button type="button" onClick={() => setActiveTool(null)} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close"><X className="h-5 w-5" /></button>
+              <button type="button" onClick={() => closeTool()} className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close"><X className="h-5 w-5" /></button>
             </div>
             <div className="overflow-y-auto px-5 pt-5" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
               {ToolComponent && (

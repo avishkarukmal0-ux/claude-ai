@@ -75,10 +75,20 @@ export function useTakings() {
     setEntries((prev) => { const next = prev.filter((e) => e.id !== id); persist(next); return next; });
   }, []);
 
+  // Re-insert an exact deleted entry (for Undo) — keeps its id/date, de-dupes, re-sorts by date.
+  const restoreEntry = useCallback((entry) => {
+    if (!entry || !entry.id) return;
+    setEntries((prev) => {
+      const next = [entry, ...prev.filter((e) => e.id !== entry.id)].sort((a, b) => (a.date < b.date ? 1 : -1));
+      persist(next);
+      return next;
+    });
+  }, []);
+
   const todayEntry = entries.find((e) => e.date === todayKey()) || null;
   const monthTakings = entries.filter((e) => sameMonthByDate(e.date)).reduce((s, e) => s + entryTotals(e).takings, 0);
 
-  return { entries, saveDay, removeEntry, todayEntry, monthTakings };
+  return { entries, saveDay, removeEntry, restoreEntry, todayEntry, monthTakings };
 }
 
 // Non-hook reads for the Owner glance / home summary.

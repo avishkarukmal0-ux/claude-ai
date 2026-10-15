@@ -29,3 +29,15 @@ On the canonical line (`ebd54ca`, Vercel production). The earlier `58deaa3` chec
 
 ## Verify
 - `npm run build` ✓. Full vitest **547 passed / 80 files**. SW v52→v53.
+
+## Pass 4 follow-ups (v54)
+1. **44×44 delete buttons:** Refusals-log "Delete entry" and Takings "Recent days" delete are now `h-11 w-11`
+   flex-centred (icon stays small).
+2. **Delete isn't silent:** both show an **"Entry deleted — Undo"** toast (~6s); Undo restores the exact entry.
+   New store methods `takingsStore.restoreEntry` and `refusalsLog.restoreRefusal` (re-insert by id, re-sorted).
+3. **Prefill doesn't carry over:** logging a refusal already clears the product field; `HomePage.closeTool()`
+   now also drops `refusalPrefill` on every dialog-close path (overlay / X / Esc), so the Age-check product
+   never leaks into the next manual entry.
+4. **Field-named validation:** Takings errors now read "Card: enter a number, e.g. 1.20" (field label + message).
+
+- `npm run build` ✓. Full vitest **547**. SW v53→v54.

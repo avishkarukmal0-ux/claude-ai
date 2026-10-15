@@ -5,6 +5,7 @@ import { useTakings, entryTotals } from '../../lib/takingsStore';
 import { parseMoneyInput } from '../../lib/numberInput';
 
 const MONEY_FIELDS = ['card', 'cash', 'float', 'counted', 'passThrough'];
+const FIELD_LABEL = { card: 'Card', cash: 'Cash', float: 'Float', counted: 'Counted', passThrough: 'Pass-through' };
 
 // Takings & cash-up — enter the day's card + cash takings and count the drawer.
 // Shows total takings + cash variance. Local-first; feeds the Owner glance.
@@ -29,7 +30,11 @@ export default function TakingsView({ onBack }) {
   const set = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
   // Validate like the product form: accept "1,20", reject text/negatives inline, keep what was typed.
   const parsed = Object.fromEntries(MONEY_FIELDS.map((k) => [k, parseMoneyInput(f[k])]));
-  const errors = Object.fromEntries(MONEY_FIELDS.map((k) => [k, parsed[k].error]));
+  // Name the field in the message, e.g. "Card: enter a number, e.g. 1.20".
+  const errors = Object.fromEntries(MONEY_FIELDS.map((k) => {
+    const e = parsed[k].error;
+    return [k, e ? `${FIELD_LABEL[k]}: ${e.charAt(0).toLowerCase()}${e.slice(1)}` : null];
+  }));
   const anyError = MONEY_FIELDS.some((k) => errors[k]);
   // Totals + the saved record run off the PARSED values, so "1,20" isn't silently read as £0.
   const pf = {

@@ -9,7 +9,15 @@ import { useRefusalsLog, REFUSAL_REASONS, refusalsCsv } from '../../lib/refusals
 const REASON_LABEL = Object.fromEntries(REFUSAL_REASONS.map((r) => [r.id, r.label]));
 
 export default function RefusalsLogTool({ prefill }) {
-  const { refusals, signoffs, addRefusal, removeRefusal, signOff } = useRefusalsLog();
+  const { refusals, signoffs, addRefusal, removeRefusal, restoreRefusal, signOff } = useRefusalsLog();
+  function deleteRefusal(r) {
+    removeRefusal(r.id);
+    toast((t) => (
+      <span className="flex items-center gap-3 text-sm">Entry deleted.
+        <button type="button" onClick={() => { restoreRefusal(r); toast.dismiss(t.id); }} className="inline-flex min-h-[44px] items-center px-2 font-semibold text-primary underline">Undo</button>
+      </span>
+    ), { duration: 6000 });
+  }
   // Opened from the Age check's "Log this refusal" → pre-fill the reason + product it hands over.
   const [f, setF] = useState(() => ({ reason: prefill?.reason || 'underage', product: prefill?.product || '', note: '', initials: '' }));
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -99,7 +107,7 @@ export default function RefusalsLogTool({ prefill }) {
                   <span className="block text-sm font-semibold text-gray-900">{REASON_LABEL[r.reason] || r.reason}{r.product ? ` · ${r.product}` : ''}</span>
                   <span className="block text-xs text-gray-500">{new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{r.initials ? ` · ${r.initials}` : ''}{r.note ? ` · ${r.note}` : ''}</span>
                 </span>
-                <button type="button" onClick={() => removeRefusal(r.id)} className="p-1 text-gray-300 hover:text-danger" aria-label="Delete entry"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => deleteRefusal(r)} className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label="Delete entry"><Trash2 className="h-4 w-4" /></button>
               </li>
             ))}
           </ul>
