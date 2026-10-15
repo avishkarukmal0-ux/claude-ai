@@ -58,6 +58,8 @@ const healthHandler = (req, res) => {
 };
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
+// Ultra-light liveness probe for an uptime pinger / Render health check: 200 + {ok:true}, no DB, no work.
+app.get('/healthz', (req, res) => res.json({ ok: true }));
 // A tiny dedicated version probe (commit + version), handy for a quick "what's live?" check.
 app.get('/version', (req, res) => res.json({ version: '3.0.0', commit: BUILD_COMMIT, env: process.env.NODE_ENV }));
 app.get('/', (req, res) => {

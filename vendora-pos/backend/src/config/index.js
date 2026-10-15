@@ -119,8 +119,10 @@ module.exports = {
     },
     // TESTING ONLY: when true, the radius-aggregated figures can be computed for an owner/manager WITHOUT a paid
     // subscription (e.g. on the free "Your area" card), so the feature can be tested before billing is wired up.
-    // Default false → the radius figures stay behind the paid entitlement for real customers.
-    testUnlock: process.env.INSIGHTS_TEST_UNLOCK === 'true',
+    // Default false → the radius figures stay behind the paid entitlement for real customers. HARD-OFF in
+    // production: even if INSIGHTS_TEST_UNLOCK is somehow set in the prod env, it's ignored so paid figures
+    // can never be unlocked for free on the live service.
+    testUnlock: process.env.NODE_ENV !== 'production' && process.env.INSIGHTS_TEST_UNLOCK === 'true',
     // Configurable price (minor units, e.g. pence) + interval — unset until the operator decides commercial terms.
     priceMinor: process.env.INSIGHTS_PRICE_MINOR ? parseInt(process.env.INSIGHTS_PRICE_MINOR, 10) : null,
     priceCurrency: process.env.INSIGHTS_PRICE_CURRENCY || 'GBP',

@@ -164,11 +164,11 @@ async function radiusHandler(req, res, next) {
     const exposeDiag = process.env.NODE_ENV !== 'production' || process.env.INSIGHTS_DIAG_PUBLIC === 'true';
     const body = { success: true, ...out };
     if (!exposeDiag) delete body.diag;
-    // Minimal, non-sensitive cache counts — ALWAYS returned (even in prod, even with diag hidden) so the per-OA
-    // cache is auditable from the response alone: per-table COUNTS + dataset ids only (no OA codes, no sample
-    // data, no timing internals). Lets you verify persisted == fetched on a cold call and oaFromMongo > 0 on a
-    // repeat/after-restart. durationMs is here too, to sanity-check against the client-observed time.
-    if (Array.isArray(tables) && tables.length) {
+    // Minimal, non-sensitive cache counts for auditing the per-OA cache (per-table COUNTS + dataset ids only;
+    // no OA codes, no sample data). Pre-launch hardening: kept OUT of the production response — gated behind the
+    // same switch as diag (dev, or an explicit INSIGHTS_DIAG_PUBLIC=true opt-in), so nothing internal ships to
+    // live clients by default.
+    if (exposeDiag && Array.isArray(tables) && tables.length) {
       // centroid warm status is readable here (from the /radius response you can already see), so the one-time
       // boot warm duration doesn't require the Render log: warm=true + loadMs=<the "warmed in N ms" number>.
       const cs = centroids.status();
