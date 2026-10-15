@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import toast from 'react-hot-toast';
 import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical, ShoppingCart, Check } from 'lucide-react';
 import ConfirmDialog from '../common/ConfirmDialog';
@@ -62,6 +63,10 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const { suppliers } = useSuppliers();
   const { records } = useMovements(); // sales velocity → the same reorder suggestion the Buy list uses
   const [query, setQuery] = useState('');
+  // Debounce the search so typing doesn't re-filter hundreds of products on every keystroke. The input stays
+  // controlled by `query` (instant feedback); the heavy filter/group work runs off `debouncedQuery` ~200ms later.
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => { const t = setTimeout(() => setDebouncedQuery(query), 200); return () => clearTimeout(t); }, [query]);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null); // product being edited, or null
   const [viewingId, setViewingId] = useState(null); // product whose movement history is open
@@ -71,7 +76,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const dupCount = useMemo(() => findDuplicateProducts(products).length, [products]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q) return products;
     return products.filter(
       (p) => p.name.toLowerCase().includes(q)
@@ -79,7 +84,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
         || (p.caseBarcode || '').includes(q)
         || (p.category || '').toLowerCase().includes(q)
     );
-  }, [products, query]);
+  }, [products, debouncedQuery]);
 
   // Group the visible products by category (Uncategorised sinks to the bottom) so the list reads like a
   // shop — confectionery together, tobacco together — instead of one long undifferentiated roll.
@@ -107,6 +112,49 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   }, [products]);
 
   const lowCount = products.filter(isLowStock).length;
+
+  // Flatten the category groups into a single list of items (a header per category, then its rows) so the
+  // whole thing can be windowed — only the ~20 rows on screen are ever in the DOM. With 600 products the old
+  // render built ~26k nodes up front and blocked for seconds; this keeps it to a couple of hundred.
+  const flat = useMemo(() => {
+    const items = [];
+    for (const [cat, rows] of grouped) {
+      items.push({ type: 'header', key: `h:${cat}`, cat, count: rows.length });
+      for (const p of rows) items.push({ type: 'row', key: p.id, product: p });
+    }
+    return items;
+  }, [grouped]);
+  // Only virtualise once the list is big enough to matter — a typical small shop renders exactly as before
+  // (no scroll container, no absolute positioning), so there's zero behaviour change for the common case.
+  const virtual = flat.length > 60;
+
+  // Stable callbacks so a memoised ProductRow isn't invalidated every render by fresh inline closures. The row
+  // calls onEdit(p) / onHistory(p.id) itself instead of each row capturing its own product in a new closure.
+  const onEditProduct = useCallback((p) => setEditing(p), []);
+  const onHistoryProduct = useCallback((id) => setViewingId(id), []);
+
+  // Window against the app's scroll container (HomePage's <main id="main-content">). scrollMargin tells the
+  // virtualiser how far the list sits below the top of that scroller (the header + search above it), remeasured
+  // whenever the content above the list changes height. getBoundingClientRect is used rather than offsetTop so
+  // it's correct regardless of which ancestor is the offset parent.
+  const listWrapRef = useRef(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  const rowVirtualizer = useVirtualizer({
+    count: flat.length,
+    getScrollElement: () => document.getElementById('main-content'),
+    estimateSize: (i) => (flat[i]?.type === 'header' ? 34 : 128),
+    overscan: 8,
+    scrollMargin,
+    getItemKey: (i) => flat[i]?.key ?? i,
+  });
+  useLayoutEffect(() => {
+    if (!virtual) return;
+    const scroller = document.getElementById('main-content');
+    const el = listWrapRef.current;
+    if (!scroller || !el) return;
+    const m = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    setScrollMargin((prev) => (Math.abs(prev - m) > 1 ? m : prev));
+  }, [virtual, adding, editing, debouncedQuery, products.length, filtered.length]);
 
   if (viewing) return <ProductHistory product={viewing} onBack={() => setViewingId(null)} />;
   if (merging) return <MergeView onBack={() => setMerging(false)} />;
@@ -183,6 +231,34 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
       {products.length === 0 && !adding ? (
         <EmptyState onAdd={() => setAdding(true)} onImport={onOpenImport} />
+      ) : virtual ? (
+        // Windowed list: one absolutely-positioned element per visible item inside a spacer sized to the full
+        // list height. Each item measures itself (ref=measureElement) so variable-height rows don't overlap.
+        <div ref={listWrapRef} style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
+          {rowVirtualizer.getVirtualItems().map((vi) => {
+            const item = flat[vi.index];
+            if (!item) return null;
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={rowVirtualizer.measureElement}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start - rowVirtualizer.options.scrollMargin}px)` }}
+              >
+                {item.type === 'header' ? (
+                  <div className="mb-1.5 mt-2 flex items-center gap-2 px-1">
+                    <h3 className="text-xs font-bold uppercase tracking-wide text-gray-400">{item.cat}</h3>
+                    <span className="text-xs text-gray-300">{item.count}</span>
+                  </div>
+                ) : (
+                  <div className="pb-2">
+                    <ProductRow p={item.product} suppliers={suppliers} records={records} updateProduct={updateProduct} removeProduct={removeProduct} restoreProduct={restoreProduct} onEdit={onEditProduct} onHistory={onHistoryProduct} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="space-y-4">
           {grouped.map(([cat, items]) => (
@@ -193,7 +269,7 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
               </div>
               <ul className="space-y-2">
                 {items.map((p) => (
-                  <ProductRow key={p.id} p={p} suppliers={suppliers} records={records} updateProduct={updateProduct} removeProduct={removeProduct} restoreProduct={restoreProduct} onEdit={() => setEditing(p)} onHistory={() => setViewingId(p.id)} />
+                  <ProductRow key={p.id} p={p} suppliers={suppliers} records={records} updateProduct={updateProduct} removeProduct={removeProduct} restoreProduct={restoreProduct} onEdit={onEditProduct} onHistory={onHistoryProduct} />
                 ))}
               </ul>
             </div>
@@ -206,7 +282,10 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
 
 // One product row. Shows category + pack ("Case of N") alongside the existing barcode/price/margin so
 // the shopkeeper can see at a glance what the item is and how it's bought.
-function ProductRow({ p, suppliers, records, updateProduct, removeProduct, restoreProduct, onEdit, onHistory }) {
+// Memoised so adjusting the quantity on one row (which replaces just that product in the store) re-renders
+// only that row, not every visible row. Relies on the parent passing stable callbacks and the store keeping
+// unchanged product references identical. onEdit/onHistory take the product so no per-row closure is needed.
+const ProductRow = React.memo(function ProductRow({ p, suppliers, records, updateProduct, removeProduct, restoreProduct, onEdit, onHistory }) {
   const m = margin(p);
   const low = isLowStock(p);
   const buyList = useBuyList();
@@ -248,7 +327,7 @@ function ProductRow({ p, suppliers, records, updateProduct, removeProduct, resto
             {unitPrice(p) && <span className="text-gray-400">{unitPrice(p).text}</span>}
             {m != null && <span className={m < 0 ? 'text-danger' : 'text-success-dark'}>{(m * 100).toFixed(0)}% margin</span>}
             {!(Number.isFinite(Number(p.price)) && Number(p.price) > 0) && (
-              <button type="button" onClick={onEdit} className="inline-flex min-h-[44px] items-center text-primary underline">Add a price to see your margin</button>
+              <button type="button" onClick={() => onEdit(p)} className="inline-flex min-h-[44px] items-center text-primary underline">Add a price to see your margin</button>
             )}
             {isFoodShop() && (!Array.isArray(p.allergens) || p.allergens.length === 0) && !p.ingredients && (
               <span className="inline-flex items-center gap-1 rounded-full bg-warning-light px-1.5 py-0.5 text-xs font-semibold text-warning-dark">⚠ no allergens</span>
@@ -313,10 +392,10 @@ function ProductRow({ p, suppliers, records, updateProduct, removeProduct, resto
             <>
               <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
               <div role="menu" aria-label={`Actions for ${p.name}`} onKeyDown={(e) => { if (e.key === 'Escape') { setMenuOpen(false); menuTriggerRef.current?.focus(); } }} className="absolute right-0 top-11 z-20 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-                <button ref={firstMenuItemRef} type="button" role="menuitem" onClick={() => { setMenuOpen(false); onHistory(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
+                <button ref={firstMenuItemRef} type="button" role="menuitem" onClick={() => { setMenuOpen(false); onHistory(p.id); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
                   <History className="h-4 w-4 text-gray-400" /> Stock history
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(p); }} className="flex min-h-[44px] w-full items-center gap-2 px-3 text-sm text-gray-700 hover:bg-gray-50">
                   <Pencil className="h-4 w-4 text-gray-400" /> Edit product
                 </button>
                 <div className="my-1 border-t border-gray-100" />
@@ -363,7 +442,7 @@ function ProductRow({ p, suppliers, records, updateProduct, removeProduct, resto
       />
     </li>
   );
-}
+});
 
 function AddForm({ onAdd, onCancel, suppliers = [], categorySuggestions = [] }) {
   // Draft-backed so a half-typed product survives a tab switch (Phase 3.9f).

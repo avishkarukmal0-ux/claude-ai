@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import toast from 'react-hot-toast';
 import {
   ClipboardCheck, Camera, Search, Check, Play, X,
@@ -20,16 +21,20 @@ export default function StocktakeView({ onBack }) {
   const recovery = useRecoveryGuard();
   const countBlocked = recovery.has('stocktake'); // R4: a prior count apply left an unsafe needs-recovery state
   const [query, setQuery] = useState('');
+  // Debounce the search so typing doesn't re-filter/re-sort hundreds of products on every keystroke.
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => { const t = setTimeout(() => setDebouncedQuery(query), 200); return () => clearTimeout(t); }, [query]);
   const [cat, setCat] = useState('all'); // quick-count scope by category (Phase 2.8c)
   const [scanning, setScanning] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [negIds, setNegIds] = useState({}); // products where a negative count was typed (rejected)
   // A count can't be negative — reject the keystroke (keep the prior count) and flag it with a visible message.
-  function onCountInput(p, raw, expected) {
+  // Stable (useCallback) so the memoised count rows aren't invalidated every render.
+  const onCountInput = useCallback((p, raw, expected) => {
     if (Number(raw) < 0) { setNegIds((m) => ({ ...m, [p.id]: true })); return; }
     setNegIds((m) => { if (!m[p.id]) return m; const n = { ...m }; delete n[p.id]; return n; });
     countItem(p.id, raw, expected);
-  }
+  }, [countItem]);
 
   const categories = useMemo(() => {
     const set = new Set();
@@ -44,7 +49,7 @@ export default function StocktakeView({ onBack }) {
 
   const countedIds = session ? Object.keys(session.counts) : [];
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     const list = products.filter((p) => {
       if (cat !== 'all' && (p.category || '') !== cat) return false;        // scope the count to one category
       if (!q) return true;
@@ -56,7 +61,30 @@ export default function StocktakeView({ onBack }) {
       const bc = session?.counts[b.id] != null ? 1 : 0;
       return ac - bc;
     });
-  }, [products, query, cat, session]);
+  }, [products, debouncedQuery, cat, session]);
+
+  // Window the counting list so 600+ products don't all mount at once. Virtualise against the page scroller
+  // (<main id="main-content">); scrollMargin is how far the list sits below the top of that scroller. Only
+  // kicks in past 60 rows, so a small count renders exactly as before.
+  const virtual = filtered.length > 60;
+  const listWrapRef = useRef(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => document.getElementById('main-content'),
+    estimateSize: () => 84,
+    overscan: 8,
+    scrollMargin,
+    getItemKey: (i) => filtered[i]?.id ?? i,
+  });
+  useLayoutEffect(() => {
+    if (!virtual) return;
+    const scroller = document.getElementById('main-content');
+    const el = listWrapRef.current;
+    if (!scroller || !el) return;
+    const m = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    setScrollMargin((prev) => (Math.abs(prev - m) > 1 ? m : prev));
+  }, [virtual, scanning, debouncedQuery, cat, filtered.length, categories.length]);
 
   function onScan(code) {
     setScanning(false);
@@ -274,53 +302,34 @@ export default function StocktakeView({ onBack }) {
         </div>
       )}
 
-      <ul className="space-y-2">
-        {filtered.map((p) => {
-          const counted = session.counts[p.id];
-          const isCounted = counted != null;
-          const expected = Number(p.qty) || 0;
-          const variance = isCounted ? (Number(counted) || 0) - expected : 0;
-          return (
-            <li key={p.id} className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${isCounted ? 'border-primary/30 bg-primary-50/40' : 'border-gray-100 bg-white'}`}>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
-                <span className="block text-xs text-gray-500">
-                  {p.countedAt ? 'Counted' : 'Recorded'} {expected}
-                  {p.countedAt && <span className="text-gray-400"> · last {dateLabel(p.countedAt)}</span>}
-                  {isCounted && variance !== 0 && (
-                    <span className={`ml-1 font-semibold ${variance < 0 ? 'text-danger' : 'text-success'}`}>
-                      · {variance > 0 ? '+' : ''}{variance}
-                    </span>
-                  )}
-                  {isCounted && variance === 0 && <span className="ml-1 font-semibold text-success">· match</span>}
-                  {negIds[p.id] && <span role="alert" className="ml-1 font-semibold text-danger">· counts can’t be negative</span>}
-                </span>
-              </span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
-                value={counted ?? ''}
-                onChange={(e) => onCountInput(p, e.target.value, expected)}
-                placeholder="—"
-                aria-label={`Counted quantity for ${p.name}`}
-                aria-invalid={!!negIds[p.id]}
-                className={`min-h-[44px] w-16 rounded-xl border py-2 text-center text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 ${negIds[p.id] ? 'border-danger' : 'border-gray-200 focus:border-primary'}`}
-              />
-              <button
-                type="button"
-                onClick={() => onCountInput(p, expected, expected)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 active:scale-95"
-                aria-label={`Mark ${p.name} as matching expected`}
-                title="Counts match expected"
+      {filtered.length === 0 ? (
+        <p className="py-6 text-center text-sm text-gray-400">No products match “{query}”.</p>
+      ) : virtual ? (
+        <div ref={listWrapRef} style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative', width: '100%' }}>
+          {rowVirtualizer.getVirtualItems().map((vi) => {
+            const p = filtered[vi.index];
+            if (!p) return null;
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={rowVirtualizer.measureElement}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vi.start - rowVirtualizer.options.scrollMargin}px)` }}
               >
-                <Check className="h-4 w-4" />
-              </button>
-            </li>
-          );
-        })}
-        {filtered.length === 0 && <li className="py-6 text-center text-sm text-gray-400">No products match “{query}”.</li>}
-      </ul>
+                <div className="pb-2">
+                  <CountRow p={p} counted={session.counts[p.id]} isNeg={!!negIds[p.id]} onCount={onCountInput} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {filtered.map((p) => (
+            <CountRow key={p.id} p={p} counted={session.counts[p.id]} isNeg={!!negIds[p.id]} onCount={onCountInput} />
+          ))}
+        </ul>
+      )}
 
       {/* Finish bar */}
       {countedIds.length > 0 && (
@@ -335,6 +344,52 @@ export default function StocktakeView({ onBack }) {
     </div>
   );
 }
+
+// One counting row. Memoised with primitive props (counted/isNeg) + a stable onCount callback so typing a
+// count on one row re-renders only that row, not the whole visible list.
+const CountRow = React.memo(function CountRow({ p, counted, isNeg, onCount }) {
+  const isCounted = counted != null;
+  const expected = Number(p.qty) || 0;
+  const variance = isCounted ? (Number(counted) || 0) - expected : 0;
+  return (
+    <li className={`flex items-center gap-3 rounded-2xl border p-3 shadow-sm ${isCounted ? 'border-primary/30 bg-primary-50/40' : 'border-gray-100 bg-white'}`}>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
+        <span className="block text-xs text-gray-500">
+          {p.countedAt ? 'Counted' : 'Recorded'} {expected}
+          {p.countedAt && <span className="text-gray-400"> · last {dateLabel(p.countedAt)}</span>}
+          {isCounted && variance !== 0 && (
+            <span className={`ml-1 font-semibold ${variance < 0 ? 'text-danger' : 'text-success'}`}>
+              · {variance > 0 ? '+' : ''}{variance}
+            </span>
+          )}
+          {isCounted && variance === 0 && <span className="ml-1 font-semibold text-success">· match</span>}
+          {isNeg && <span role="alert" className="ml-1 font-semibold text-danger">· counts can’t be negative</span>}
+        </span>
+      </span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min="0"
+        value={counted ?? ''}
+        onChange={(e) => onCount(p, e.target.value, expected)}
+        placeholder="—"
+        aria-label={`Counted quantity for ${p.name}`}
+        aria-invalid={isNeg}
+        className={`min-h-[44px] w-16 rounded-xl border py-2 text-center text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 ${isNeg ? 'border-danger' : 'border-gray-200 focus:border-primary'}`}
+      />
+      <button
+        type="button"
+        onClick={() => onCount(p, expected, expected)}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 active:scale-95"
+        aria-label={`Mark ${p.name} as matching expected`}
+        title="Counts match expected"
+      >
+        <Check className="h-4 w-4" />
+      </button>
+    </li>
+  );
+});
 
 function CatChip({ label, active, onClick }) {
   return (
