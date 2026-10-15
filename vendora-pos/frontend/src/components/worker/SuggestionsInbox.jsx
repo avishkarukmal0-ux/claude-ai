@@ -42,9 +42,11 @@ export default function SuggestionsInbox({ onBack }) {
           {items.map((s) => (
             <li key={s.id} className={`flex items-center gap-3 rounded-2xl border border-gray-100 p-3 shadow-sm ${s.done ? 'bg-gray-50' : 'bg-white'}`}>
               <button type="button" onClick={() => toggleDone(s.id)}
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 ${s.done ? 'border-success bg-success text-white' : 'border-gray-300 text-transparent'}`}
+                className="flex h-11 w-11 shrink-0 items-center justify-center"
                 aria-label={s.done ? 'Mark not done' : 'Mark done'}>
-                <Check className="h-4 w-4" strokeWidth={3} />
+                <span className={`flex h-7 w-7 items-center justify-center rounded-full border-2 ${s.done ? 'border-success bg-success text-white' : 'border-gray-300 text-transparent'}`}>
+                  <Check className="h-4 w-4" strokeWidth={3} />
+                </span>
               </button>
               <span className="min-w-0 flex-1">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${KIND_STYLE[s.kind] || KIND_STYLE.note}`}>{SUGGESTION_KINDS[s.kind]?.label || 'Note'}</span>
@@ -53,7 +55,7 @@ export default function SuggestionsInbox({ onBack }) {
                 </span>
                 {s.productName && s.text && <span className="block text-xs text-gray-500">{s.text}</span>}
               </span>
-              <button type="button" onClick={() => remove(s.id)} className="shrink-0 p-1 text-gray-300 hover:text-danger" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+              <button type="button" onClick={() => remove(s.id)} className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
             </li>
           ))}
         </ul>

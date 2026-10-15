@@ -376,10 +376,10 @@ export default function WasteView({ onBack }) {
         <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="What is it? (e.g. Milk 2L)" aria-label="Item name" className="mb-2 min-h-[44px] w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-primary focus:outline-none" />
         <div className="mb-3 grid grid-cols-2 gap-2">
           <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
-            £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="value" className="w-full border-none p-0 text-base text-gray-900 focus:outline-none" />
+            £<input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} inputMode="decimal" placeholder="0.00" aria-label="Cost in pounds" className="w-full border-none bg-transparent p-0 text-base text-gray-900 focus:outline-none" />
           </label>
           <label className="flex min-h-[44px] items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm text-gray-500">
-            Qty<input value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} inputMode="numeric" className="w-full border-none p-0 text-base text-gray-900 focus:outline-none" />
+            Qty<input value={form.qty} onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))} inputMode="numeric" placeholder="1" aria-label="Quantity" className="w-full border-none bg-transparent p-0 text-base text-gray-900 focus:outline-none" />
           </label>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -416,7 +416,7 @@ export default function WasteView({ onBack }) {
                 <span className={`text-sm font-bold tabular-nums ${e.type === 'saved' ? 'text-success' : 'text-danger'}`}>
                   {e.type === 'saved' ? '+' : '−'}£{e.value.toFixed(2)}
                 </span>
-                <button type="button" onClick={() => undoEntry(e)} className="p-1 text-gray-300 hover:text-danger" aria-label={e.productId ? 'Undo — restores stock' : 'Delete'} title={e.productId ? 'Undo — restores stock' : 'Delete'}>
+                <button type="button" onClick={() => undoEntry(e)} className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-danger" aria-label={e.productId ? 'Undo — restores stock' : 'Delete'} title={e.productId ? 'Undo — restores stock' : 'Delete'}>
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>

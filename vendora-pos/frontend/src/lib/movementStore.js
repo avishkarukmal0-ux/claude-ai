@@ -268,9 +268,12 @@ export function salesCoverage(records, windowDays = 28, now = Date.now()) {
  * explains how the current quantity was reached (Phase 1.2c). Oldest→newest internally so the balance is
  * correct; returned newest-first by default for display.
  */
-export function movementHistory(records, productId, { newestFirst = true } = {}) {
+// `opening` is the stock that existed BEFORE tracking began (reconcileQty's `difference`). Starting the running
+// balance from it means each row's balance is the true on-hand after that movement — so the newest row equals
+// the current quantity, not just the sum of recorded deltas.
+export function movementHistory(records, productId, { newestFirst = true, opening = 0 } = {}) {
   const rows = (records || []).filter((r) => r && r.productId === productId).slice().sort((a, b) => a.at - b.at);
-  let balance = 0;
+  let balance = Number(opening) || 0;
   const withBalance = rows.map((r) => { balance += r.delta; return { ...r, balance }; });
   return newestFirst ? withBalance.reverse() : withBalance;
 }

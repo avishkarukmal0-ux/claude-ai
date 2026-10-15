@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Flag, Send, AlertTriangle } from 'lucide-react';
+import { Flag, Send, AlertTriangle, Check } from 'lucide-react';
 import ScreenBack from '../common/ScreenBack';
 import { useInventory, isLowStock, worstExpiry } from '../../lib/inventoryStore';
 import { useSuggestions } from '../../lib/suggestionsStore';
@@ -11,6 +11,8 @@ export default function WorkerBoard({ onBack }) {
   const { products } = useInventory();
   const { add } = useSuggestions();
   const [note, setNote] = useState('');
+  const [flagged, setFlagged] = useState({}); // `${kind}:${product}` → true, so the same flag can't be sent twice
+  const isFlagged = (kind, productName) => !!flagged[`${kind}:${productName}`];
 
   const expiring = useMemo(
     () => products.map((p) => ({ p, info: worstExpiry(p) })).filter((x) => x.info && x.info.status !== 'ok').sort((a, b) => a.info.daysLeft - b.info.daysLeft),
@@ -19,7 +21,9 @@ export default function WorkerBoard({ onBack }) {
   const low = useMemo(() => products.filter(isLowStock), [products]);
 
   function flag(kind, productName) {
+    if (isFlagged(kind, productName)) return;
     add({ kind, productName });
+    setFlagged((m) => ({ ...m, [`${kind}:${productName}`]: true }));
     toast.success('Flagged to owner');
   }
   function sendNote() {
@@ -60,9 +64,15 @@ export default function WorkerBoard({ onBack }) {
                   {info.daysLeft < 0 ? `${Math.abs(info.daysLeft)}d over` : `in ${info.daysLeft}d`}{info.mustPull ? ' · pull now' : ''}
                 </span>
               </span>
-              <button type="button" onClick={() => flag('markdown', p.name)} aria-label={`Flag ${p.name} to mark down`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-warning-light px-3 text-xs font-semibold text-warning-dark active:scale-95">
-                <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Mark down
-              </button>
+              {isFlagged('markdown', p.name) ? (
+                <span className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-500" aria-label={`${p.name} flagged to mark down`}>
+                  <Check className="mr-1 inline h-3 w-3" aria-hidden="true" />Flagged ✓
+                </span>
+              ) : (
+                <button type="button" onClick={() => flag('markdown', p.name)} aria-label={`Flag ${p.name} to mark down`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-warning-light px-3 text-xs font-semibold text-warning-dark active:scale-95">
+                  <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Mark down
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -80,9 +90,15 @@ export default function WorkerBoard({ onBack }) {
                 <span className="block truncate text-sm font-semibold text-gray-900">{p.name}</span>
                 <span className="block text-xs text-gray-500">{Number(p.qty) || 0} left</span>
               </span>
-              <button type="button" onClick={() => flag('stock', p.name)} aria-label={`Flag ${p.name} to restock`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95">
-                <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Stock this
-              </button>
+              {isFlagged('stock', p.name) ? (
+                <span className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-gray-100 px-3 text-xs font-semibold text-gray-500" aria-label={`${p.name} flagged to restock`}>
+                  <Check className="mr-1 inline h-3 w-3" aria-hidden="true" />Flagged ✓
+                </span>
+              ) : (
+                <button type="button" onClick={() => flag('stock', p.name)} aria-label={`Flag ${p.name} to restock`} className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-primary-50 px-3 text-xs font-semibold text-primary active:scale-95">
+                  <Flag className="mr-1 inline h-3 w-3" aria-hidden="true" />Stock this
+                </button>
+              )}
             </li>
           ))}
         </ul>

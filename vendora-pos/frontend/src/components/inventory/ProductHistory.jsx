@@ -27,8 +27,9 @@ function when(ts) {
  */
 export default function ProductHistory({ product, onBack }) {
   const { records } = useMovements();
-  const rows = useMemo(() => movementHistory(records, product.id), [records, product.id]);
   const recon = useMemo(() => reconcileQty(records, product.id, product.qty), [records, product.id, product.qty]);
+  // Start the running balance from the opening stock (difference) so the newest row equals "In stock now".
+  const rows = useMemo(() => movementHistory(records, product.id, { opening: recon.difference }), [records, product.id, recon.difference]);
 
   return (
     <div>

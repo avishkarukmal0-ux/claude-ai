@@ -88,6 +88,21 @@ describe('movementStore — Phase 1.2 traceability', () => {
     expect(recon.difference).toBe(2);
     expect(recon.matches).toBe(false);
   });
+
+  it('movementHistory started from the opening balance makes the newest row equal the current quantity', () => {
+    const now = 1_700_000_000_000;
+    // Current stock is 3, but the ledger only sums to -2 (e.g. an adjustment), so opening balance = 5.
+    const recs = [
+      { id: 'a', productId: 'p1', type: 'sale', delta: -1, at: now - 2000 },
+      { id: 'b', productId: 'p1', type: 'stock_adjustment', delta: -1, at: now - 1000 },
+    ];
+    const recon = reconcileQty(recs, 'p1', 3);
+    expect(recon.ledgerSum).toBe(-2);
+    expect(recon.difference).toBe(5);
+    const hist = movementHistory(recs, 'p1', { opening: recon.difference }); // newest first
+    expect(hist[0].balance).toBe(3); // newest balance == "In stock now", not -2
+    expect(hist[hist.length - 1].balance).toBe(4); // 5 opening − 1 first sale
+  });
 });
 
 describe('movementStore — velocity uses sales evidence only', () => {

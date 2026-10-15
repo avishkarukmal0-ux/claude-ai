@@ -23,6 +23,13 @@ export default function StocktakeView({ onBack }) {
   const [cat, setCat] = useState('all'); // quick-count scope by category (Phase 2.8c)
   const [scanning, setScanning] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [negIds, setNegIds] = useState({}); // products where a negative count was typed (rejected)
+  // A count can't be negative — reject the keystroke (keep the prior count) and flag it with a visible message.
+  function onCountInput(p, raw, expected) {
+    if (Number(raw) < 0) { setNegIds((m) => ({ ...m, [p.id]: true })); return; }
+    setNegIds((m) => { if (!m[p.id]) return m; const n = { ...m }; delete n[p.id]; return n; });
+    countItem(p.id, raw, expected);
+  }
 
   const categories = useMemo(() => {
     const set = new Set();
@@ -187,7 +194,7 @@ export default function StocktakeView({ onBack }) {
                         placeholder={l.material ? 'Reason required — e.g. damaged, miscount, theft' : 'Reason (optional) — e.g. damaged, miscount'}
                         aria-label={`Reason for ${l.name}`}
                         aria-required={l.material || undefined}
-                        className={`mt-1 w-full rounded-lg border px-2 py-1 text-xs text-gray-900 focus:outline-none ${needsReason ? 'border-danger focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
+                        className={`mt-1 min-h-[44px] w-full rounded-lg border px-2 py-1 text-xs text-gray-900 focus:outline-none ${needsReason ? 'border-danger focus:border-danger' : 'border-gray-200 focus:border-primary'}`}
                       />
                     );
                   })()}
@@ -233,7 +240,7 @@ export default function StocktakeView({ onBack }) {
           <h2 className="text-base font-bold text-gray-900">Counting…</h2>
           <p className="text-xs text-gray-400">{countedIds.length} of {products.length} counted{net !== 0 ? ` · net ${net < 0 ? '−' : '+'}${money(net)}` : ''}</p>
         </div>
-        <button type="button" onClick={() => { if (confirm('Cancel this count? Your counts will be discarded.')) cancel(); }} className="text-xs font-medium text-gray-400 hover:text-danger">Cancel</button>
+        <button type="button" onClick={() => { if (confirm('Cancel this count? Your counts will be discarded.')) cancel(); }} className="inline-flex min-h-[44px] items-center px-2 text-xs font-medium text-gray-400 hover:text-danger">Cancel</button>
       </div>
 
       {/* Scan + search */}
@@ -252,7 +259,8 @@ export default function StocktakeView({ onBack }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search stock to count…"
-          className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          aria-label="Search stock to count"
+          className="min-h-[44px] w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
 
@@ -285,6 +293,7 @@ export default function StocktakeView({ onBack }) {
                     </span>
                   )}
                   {isCounted && variance === 0 && <span className="ml-1 font-semibold text-success">· match</span>}
+                  {negIds[p.id] && <span role="alert" className="ml-1 font-semibold text-danger">· counts can’t be negative</span>}
                 </span>
               </span>
               <input
@@ -292,15 +301,16 @@ export default function StocktakeView({ onBack }) {
                 inputMode="numeric"
                 min="0"
                 value={counted ?? ''}
-                onChange={(e) => countItem(p.id, e.target.value, expected)}
+                onChange={(e) => onCountInput(p, e.target.value, expected)}
                 placeholder="—"
                 aria-label={`Counted quantity for ${p.name}`}
-                className="w-16 rounded-xl border border-gray-200 py-2 text-center text-sm font-bold tabular-nums focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                aria-invalid={!!negIds[p.id]}
+                className={`min-h-[44px] w-16 rounded-xl border py-2 text-center text-sm font-bold tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/20 ${negIds[p.id] ? 'border-danger' : 'border-gray-200 focus:border-primary'}`}
               />
               <button
                 type="button"
-                onClick={() => countItem(p.id, expected, expected)}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 active:scale-95"
+                onClick={() => onCountInput(p, expected, expected)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 active:scale-95"
                 aria-label={`Mark ${p.name} as matching expected`}
                 title="Counts match expected"
               >
