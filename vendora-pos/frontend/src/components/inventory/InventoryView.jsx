@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import toast from 'react-hot-toast';
 import { Plus, Search, Trash2, Minus, PackagePlus, Truck, Upload, Package2, Pencil, History, Merge, MoreVertical, ShoppingCart, Check } from 'lucide-react';
 import ConfirmDialog from '../common/ConfirmDialog';
@@ -133,26 +133,25 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
   const onEditProduct = useCallback((p) => setEditing(p), []);
   const onHistoryProduct = useCallback((id) => setViewingId(id), []);
 
-  // Window against the app's scroll container (HomePage's <main id="main-content">). scrollMargin tells the
-  // virtualiser how far the list sits below the top of that scroller (the header + search above it), remeasured
-  // whenever the content above the list changes height. getBoundingClientRect is used rather than offsetTop so
-  // it's correct regardless of which ancestor is the offset parent.
+  // The real scroller is the WINDOW/document — the app shell's <main> has overflow-y:auto but no height cap, so
+  // its clientHeight equals its content height and it never actually scrolls. useWindowVirtualizer windows
+  // against window scroll. scrollMargin tells it how far the list's top sits down the document (the header +
+  // search + any open form above it), measured as the list's absolute document offset and remeasured whenever
+  // that content changes height.
   const listWrapRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useWindowVirtualizer({
     count: flat.length,
-    getScrollElement: () => document.getElementById('main-content'),
     estimateSize: (i) => (flat[i]?.type === 'header' ? 34 : 128),
-    overscan: 8,
+    overscan: 6,
     scrollMargin,
     getItemKey: (i) => flat[i]?.key ?? i,
   });
   useLayoutEffect(() => {
     if (!virtual) return;
-    const scroller = document.getElementById('main-content');
     const el = listWrapRef.current;
-    if (!scroller || !el) return;
-    const m = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    if (!el) return;
+    const m = el.getBoundingClientRect().top + window.scrollY;
     setScrollMargin((prev) => (Math.abs(prev - m) > 1 ? m : prev));
   }, [virtual, adding, editing, debouncedQuery, products.length, filtered.length]);
 

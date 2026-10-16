@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import toast from 'react-hot-toast';
 import {
   ClipboardCheck, Camera, Search, Check, Play, X,
@@ -63,26 +63,25 @@ export default function StocktakeView({ onBack }) {
     });
   }, [products, debouncedQuery, cat, session]);
 
-  // Window the counting list so 600+ products don't all mount at once. Virtualise against the page scroller
-  // (<main id="main-content">); scrollMargin is how far the list sits below the top of that scroller. Only
-  // kicks in past 60 rows, so a small count renders exactly as before.
+  // Window the counting list so 600+ products don't all mount at once. The real scroller is the WINDOW — the
+  // app shell's <main> has overflow-y:auto but no height cap, so it never actually scrolls. useWindowVirtualizer
+  // windows against window scroll; scrollMargin is the list's absolute document offset (everything above it).
+  // Only kicks in past 60 rows, so a small count renders exactly as before.
   const virtual = filtered.length > 60;
   const listWrapRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useWindowVirtualizer({
     count: filtered.length,
-    getScrollElement: () => document.getElementById('main-content'),
     estimateSize: () => 84,
-    overscan: 8,
+    overscan: 6,
     scrollMargin,
     getItemKey: (i) => filtered[i]?.id ?? i,
   });
   useLayoutEffect(() => {
     if (!virtual) return;
-    const scroller = document.getElementById('main-content');
     const el = listWrapRef.current;
-    if (!scroller || !el) return;
-    const m = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    if (!el) return;
+    const m = el.getBoundingClientRect().top + window.scrollY;
     setScrollMargin((prev) => (Math.abs(prev - m) > 1 ? m : prev));
   }, [virtual, scanning, debouncedQuery, cat, filtered.length, categories.length]);
 
@@ -396,7 +395,7 @@ function CatChip({ label, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-[44px] shrink-0 items-center rounded-full border px-3 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}
+      className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border px-3 text-xs font-semibold active:scale-95 ${active ? 'border-primary bg-primary text-white' : 'border-gray-200 bg-white text-gray-700'}`}
     >
       {label}
     </button>
