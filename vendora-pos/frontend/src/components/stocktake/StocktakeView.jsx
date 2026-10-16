@@ -63,11 +63,13 @@ export default function StocktakeView({ onBack }) {
     });
   }, [products, debouncedQuery, cat, session]);
 
-  // Window the counting list so 600+ products don't all mount at once. The real scroller is the WINDOW — the
-  // app shell's <main> has overflow-y:auto but no height cap, so it never actually scrolls. useWindowVirtualizer
-  // windows against window scroll; scrollMargin is the list's absolute document offset (everything above it).
-  // Only kicks in past 60 rows, so a small count renders exactly as before.
-  const virtual = filtered.length > 60;
+  // Window the counting list so a long list (or a long FILTERED list, e.g. a category with hundreds of items)
+  // doesn't all mount at once. The real scroller is the WINDOW — the app shell's <main> has overflow-y:auto but
+  // no height cap, so it never actually scrolls. useWindowVirtualizer windows against window scroll; scrollMargin
+  // is the list's absolute document offset (everything above it). The threshold is the *filtered* length, and
+  // is kept just above the on-screen row budget so any filter result big enough to matter still windows (a
+  // 60-row "Beer" category used to miss a >60 cut-off and render all 60).
+  const virtual = filtered.length > 30;
   const listWrapRef = useRef(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const rowVirtualizer = useWindowVirtualizer({
@@ -84,6 +86,13 @@ export default function StocktakeView({ onBack }) {
     const m = el.getBoundingClientRect().top + window.scrollY;
     setScrollMargin((prev) => (Math.abs(prev - m) > 1 ? m : prev));
   }, [virtual, scanning, debouncedQuery, cat, filtered.length, categories.length]);
+  // Switching category/search can shorten the list under your current scroll position, leaving the window parked
+  // in a blank gap past the new end. Reset to the top of the page when the filter changes (skip the first run).
+  const didFilterMount = useRef(false);
+  useEffect(() => {
+    if (!didFilterMount.current) { didFilterMount.current = true; return; }
+    window.scrollTo(0, 0);
+  }, [cat, debouncedQuery]);
 
   function onScan(code) {
     setScanning(false);

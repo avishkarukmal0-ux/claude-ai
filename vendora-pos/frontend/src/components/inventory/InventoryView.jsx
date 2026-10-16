@@ -124,9 +124,10 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
     }
     return items;
   }, [grouped]);
-  // Only virtualise once the list is big enough to matter — a typical small shop renders exactly as before
-  // (no scroll container, no absolute positioning), so there's zero behaviour change for the common case.
-  const virtual = flat.length > 60;
+  // Only virtualise once the list is big enough to matter — a small shop (or a search that narrows to a handful)
+  // renders exactly as before (no absolute positioning). The threshold tracks the *filtered* length (via flat)
+  // and sits just above the on-screen row budget, so a search that still returns dozens of rows keeps windowing.
+  const virtual = flat.length > 30;
 
   // Stable callbacks so a memoised ProductRow isn't invalidated every render by fresh inline closures. The row
   // calls onEdit(p) / onHistory(p.id) itself instead of each row capturing its own product in a new closure.
@@ -154,6 +155,13 @@ export default function InventoryView({ onOpenSuppliers, onOpenImport }) {
     const m = el.getBoundingClientRect().top + window.scrollY;
     setScrollMargin((prev) => (Math.abs(prev - m) > 1 ? m : prev));
   }, [virtual, adding, editing, debouncedQuery, products.length, filtered.length]);
+  // A search can shorten the list under the current scroll position, leaving the window parked past the new end
+  // in a blank gap. Reset to the top of the page when the search changes (skip the first run).
+  const didFilterMount = useRef(false);
+  useEffect(() => {
+    if (!didFilterMount.current) { didFilterMount.current = true; return; }
+    window.scrollTo(0, 0);
+  }, [debouncedQuery]);
 
   if (viewing) return <ProductHistory product={viewing} onBack={() => setViewingId(null)} />;
   if (merging) return <MergeView onBack={() => setMerging(false)} />;
