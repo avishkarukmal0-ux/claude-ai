@@ -7,6 +7,7 @@
 // or two devices almost never edits the same store on both at once, so a genuine concurrent conflict is
 // resolved last-write-wins by the client's modification time (`mtime`) — simple and predictable. Every
 // query is scoped to the authenticated account id, so one shop can never read or write another's data.
+const crypto = require('crypto');
 const AppError = require('../utils/AppError');
 const config = require('../config');
 const SyncBlob = require('../models/SyncBlob');
@@ -53,6 +54,13 @@ function historyOn() { return !!config.sync.historyEnabled; }
 async function recordHistory(accountId, name, value, rev, mtime, kind = 'write') {
   if (!historyOn()) return;
   try {
+    // Only snapshot a MEANINGFUL change (Phase: scale) — if the newest kept revision already holds this exact
+    // value (e.g. a client re-pushed unchanged content with a bumped mtime), don't store a duplicate copy.
+    // Keeps SyncBlobHistory from growing with no-op snapshots. A 'restore' always records (audit trail).
+    if (kind !== 'restore') {
+      const last = await SyncBlobHistory.findOne({ account: accountId, name }).sort({ rev: -1 }).select('value').lean();
+      if (last && last.value === value) return;
+    }
     await SyncBlobHistory.create({ account: accountId, name, value, rev, mtime, kind, at: new Date() });
     const keep = Math.max(1, config.sync.historyKeep || 10);
     const old = await SyncBlobHistory.find({ account: accountId, name })
@@ -116,14 +124,34 @@ async function restore(accountId, name, rev, role) {
   return { name, rev: saved.rev, fromRev: Number(rev) };
 }
 
-/** All of an account's blobs the role may see, so the client can adopt anything newer it's allowed. */
-async function pull(accountId, role) {
-  const docs = await SyncBlob.find({ account: accountId }).lean();
-  return {
-    blobs: docs
-      .filter((d) => canReadStore(role, d.name))
-      .map((d) => ({ name: d.name, value: d.value, rev: d.rev, mtime: d.mtime })),
-  };
+/** A weak ETag over the role-visible (name:rev) set. Changes whenever ANY visible store's rev bumps (including
+ *  a delete, which bumps rev on an empty value), so a matching If-None-Match means "you have everything". */
+function etagFor(visibleDocs) {
+  const sig = visibleDocs.map((d) => `${d.name}:${d.rev}`).sort().join(',');
+  return `W/"${crypto.createHash('sha1').update(sig).digest('base64').replace(/=+$/, '')}"`;
+}
+
+/**
+ * Delta pull (Phase: scale). Returns ONLY the stores the role may see whose rev is newer than what the
+ * client already has, so a 60s/5min poll from each of ~500 devices no longer ships every store's full value
+ * every time. `knownRevs` is `{ name: rev }` the client sends (e.g. `?revs=inventory_v1:4,...`); omit it and
+ * every store is returned (first sync / legacy client — unchanged behaviour).
+ *
+ * ETag/If-None-Match short-circuits the common "nothing changed" poll: when `opts.ifNoneMatch` equals the
+ * current ETag the result is `{ notModified: true }` and the route replies 304 with no body.
+ *
+ * Returns `{ etag, blobs }` or `{ notModified: true, etag }`.
+ */
+async function pull(accountId, role, knownRevs = {}, opts = {}) {
+  const docs = await SyncBlob.find({ account: accountId }).select('name value rev mtime').lean();
+  const visible = docs.filter((d) => canReadStore(role, d.name));
+  const etag = etagFor(visible);
+  if (opts.ifNoneMatch && opts.ifNoneMatch === etag) return { notModified: true, etag };
+  const known = knownRevs && typeof knownRevs === 'object' ? knownRevs : {};
+  const blobs = visible
+    .filter((d) => (Number(known[d.name]) || 0) < d.rev) // only stores the client hasn't caught up to
+    .map((d) => ({ name: d.name, value: d.value, rev: d.rev, mtime: d.mtime }));
+  return { etag, blobs };
 }
 
 /**
@@ -214,6 +242,6 @@ async function push(accountId, changes, role) {
 }
 
 module.exports = {
-  pull, push, listHistory, getHistoryVersion, restore,
+  pull, push, listHistory, getHistoryVersion, restore, etagFor,
   ALLOWED, MAX_VALUE_BYTES, canWriteStore, canReadStore, FINANCIAL_STORES,
 };

@@ -34,19 +34,41 @@ const API_BASE = (() => {
 const SYNC_BASE = `${API_BASE}/api/pwa-sync`;
 
 export const SYNC_EVENT = 'vendora:sync';
-const PUSH_DEBOUNCE_MS = 2000;
-const POLL_MS = 60000;
+// Batch a burst of edits into ONE push (≥5s), coalescing every dirty store — so rapid +/- taps or a quick
+// multi-field edit become a single request instead of a push per keystroke (scale: ~500 devices).
+const PUSH_DEBOUNCE_MS = 5000;
+// Poll cadence (scale): slow in the background, fast only while the user is actively editing, and NOTHING
+// while the tab is hidden (a backgrounded phone in someone's pocket shouldn't poll every minute). The
+// delta-pull + ETag means an idle poll that finds nothing is a tiny 304, but fewer of them still helps 500×.
+const IDLE_POLL_MS = 5 * 60 * 1000;      // background drift-catch when nobody's editing
+const ACTIVE_POLL_MS = 60 * 1000;        // while the user is actively editing
+const ACTIVE_WINDOW_MS = 2 * 60 * 1000;  // "actively editing" = an edit within this window
 
 // --- pluggable transport ---------------------------------------------------
-async function fetchTransport(path, { method = 'GET', body, token } = {}) {
-  const res = await fetch(`${SYNC_BASE}${path}`, {
+async function fetchTransport(path, { method = 'GET', body, token, query, ifNoneMatch } = {}) {
+  let url = `${SYNC_BASE}${path}`;
+  if (query && typeof query === 'object') {
+    const qs = Object.entries(query)
+      .filter(([, v]) => v != null && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    if (qs) url += (url.includes('?') ? '&' : '?') + qs;
+  }
+  const res = await fetch(url, {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(ifNoneMatch ? { 'If-None-Match': ifNoneMatch } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  // 304 Not Modified (delta pull, nothing changed) — no body; tell the caller to skip the adopt phase.
+  if (res.status === 304) {
+    let etag = ifNoneMatch;
+    try { etag = res.headers.get('ETag') || ifNoneMatch; } catch { /* no headers in some environments */ }
+    return { __notModified: true, __etag: etag };
+  }
   let data = null;
   try { data = await res.json(); } catch { /* non-JSON */ }
   if (!res.ok) {
@@ -54,7 +76,9 @@ async function fetchTransport(path, { method = 'GET', body, token } = {}) {
     err.status = res.status;
     throw err;
   }
-  return data || {};
+  const out = data || {};
+  try { const et = res.headers.get('ETag'); if (et) out.__etag = et; } catch { /* no headers (tests) */ }
+  return out;
 }
 let _transport = fetchTransport;
 /** Inject a transport (tests). Pass nothing to restore real fetch. */
@@ -157,11 +181,22 @@ export async function syncNow() {
     let writeFailed = false;
     let stashed = 0;           // local edits preserved to recovery because another device's copy won
 
-    // 1) PULL — adopt anything the server has that we haven't seen.
-    const pull = await authedRequest('/pull', { method: 'GET' }, ctx);
+    // 1) PULL — adopt anything the server has that we haven't seen. DELTA pull: send the revs we already
+    // hold so the server returns only newer stores (and a 304 when nothing changed), plus our last ETag as
+    // If-None-Match. On first sync (no meta) we send neither, so the server returns everything (safe bootstrap).
+    const revsParam = STORE_NAMES
+      .filter((n) => meta[n] && (meta[n].rev || 0) > 0)
+      .map((n) => `${n}:${meta[n].rev}`)
+      .join(',');
+    const pull = await authedRequest(
+      '/pull',
+      { method: 'GET', query: revsParam ? { revs: revsParam } : undefined, ifNoneMatch: meta.__etag || undefined },
+      ctx,
+    );
     guard();
+    const pulledEtag = pull && pull.__etag;       // remember for the next poll's If-None-Match (saved into fresh meta)
     const serverNames = new Set();
-    for (const b of pull.blobs || []) {
+    for (const b of pull.blobs || []) {           // undefined on a 304 → adopt loop is simply skipped
       if (!STORE_NAMES.includes(b.name)) continue;
       serverNames.add(b.name);
       const lm = meta[b.name] || { rev: 0, mtime: 0, dirty: false };
@@ -242,6 +277,8 @@ export async function syncNow() {
     // Clear dirty on role-rejected stores so we don't keep re-sending a write the server will always refuse.
     for (const name of rejected) { const cur = fresh[name] || {}; fresh[name] = { ...cur, dirty: false }; }
     fresh.__boot = true;
+    // Remember the server's ETag so the next poll can send If-None-Match and get a cheap 304 when idle.
+    if (pulledEtag) fresh.__etag = pulledEtag;
     saveMeta(ws, fresh);
 
     const changedLocal = adoptions.length > 0 || conflicts.length > 0;
@@ -285,13 +322,33 @@ export function markStoreDirty(name, mtime = Date.now()) {
   setState({ pending: countDirty(m) });
 }
 
+// --- adaptive polling ------------------------------------------------------
+// A self-rescheduling timer rather than a fixed interval: fast cadence right after an edit, slow when idle,
+// and fully paused while the tab is hidden (resumes on return). This is the main request-volume lever at
+// ~500 devices — a backgrounded phone makes zero sync calls, and idle shops poll 5× less than before.
+let lastEditAt = 0;
+let pollTimer = null;
+function isHidden() { try { return typeof document !== 'undefined' && document.visibilityState === 'hidden'; } catch { return false; } }
+function nextPollDelay() { return (Date.now() - lastEditAt < ACTIVE_WINDOW_MS) ? ACTIVE_POLL_MS : IDLE_POLL_MS; }
+function scheduleNextPoll() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  if (!started || isHidden()) return; // no polling while hidden; onVisibility() resumes it
+  pollTimer = setTimeout(async () => {
+    pollTimer = null;
+    if (!isHidden() && canSync()) { try { await syncNow(); } catch { /* transient; next tick retries */ } }
+    scheduleNextPoll();
+  }, nextPollDelay());
+}
+
 function onLocalWrite(e) {
   if (applyingRemote) return; // ignore writes we made while applying remote data
   const name = e && e.detail && e.detail.name;
   const ws = e && e.detail && e.detail.ws;
   if (ws !== activeShopWs() || !STORE_NAMES.includes(name)) return;
+  lastEditAt = Date.now();  // enter the fast-poll window
   markStoreDirty(name);
   schedulePush();
+  scheduleNextPoll();       // shorten a pending idle poll to the active cadence
 }
 
 function onWorkspaceOrSession(e) {
@@ -300,10 +357,14 @@ function onWorkspaceOrSession(e) {
   setTimeout(() => syncNow(), 300);
 }
 function onOnlineVisible() { if (canSync()) syncNow(); }
+function onVisibility() {
+  if (isHidden()) { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } return; } // pause while hidden
+  if (canSync()) syncNow();  // catch up immediately on return to the tab
+  scheduleNextPoll();        // and resume polling
+}
 
 // --- lifecycle -------------------------------------------------------------
 let started = false;
-let pollId = null;
 /** Wire background sync. Respects ACCOUNTS_ENABLED (no-op when accounts are off). Idempotent. */
 export function startSync() {
   if (started || !ACCOUNTS_ENABLED) return;
@@ -313,8 +374,8 @@ export function startSync() {
     window.addEventListener(WORKSPACE_EVENT, onWorkspaceOrSession);
     window.addEventListener('vendora:session', onWorkspaceOrSession);
     window.addEventListener('online', onOnlineVisible);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') onOnlineVisible(); });
-    pollId = setInterval(() => { if (canSync()) syncNow(); }, POLL_MS);
+    document.addEventListener('visibilitychange', onVisibility);
+    scheduleNextPoll();
   } catch { /* non-browser */ }
   if (canSync()) syncNow();
 }
@@ -326,16 +387,17 @@ export function stopSync() {
     window.removeEventListener(WORKSPACE_EVENT, onWorkspaceOrSession);
     window.removeEventListener('vendora:session', onWorkspaceOrSession);
     window.removeEventListener('online', onOnlineVisible);
-    if (pollId) clearInterval(pollId);
+    document.removeEventListener('visibilitychange', onVisibility);
+    if (pollTimer) clearTimeout(pollTimer);
   } catch { /* ignore */ }
-  pollId = null;
+  pollTimer = null;
 }
 
 /** Test hook: reset internal flags/timers between tests. */
 export function __resetSyncForTest() {
-  started = false; syncing = false; applyingRemote = false;
+  started = false; syncing = false; applyingRemote = false; lastEditAt = 0;
   if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
-  if (pollId) { clearInterval(pollId); pollId = null; }
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   Object.assign(state, { status: 'idle', lastSyncedAt: 0, pending: 0, error: null, conflicts: 0 });
 }
 

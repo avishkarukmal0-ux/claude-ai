@@ -24,10 +24,11 @@ if (secretCheck.fatal) {
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const requestLogger = require('./middleware/requestLogger');
 const auditLog = require('./middleware/auditLog');
 const errorHandler = require('./middleware/errorHandler');
-const { generalLimiter } = require('./middleware/rateLimit');
+const { generalLimiter, syncLimiter } = require('./middleware/rateLimit');
 const routes = require('./routes');
 const path = require('path');
 const fs = require('fs');
@@ -65,6 +66,12 @@ app.get('/version', (req, res) => res.json({ version: '3.0.0', commit: BUILD_COM
 app.get('/', (req, res) => {
   res.json({ message: 'Vendora POS API', version: '3.0.0', status: 'running' });
 });
+
+// Response compression (gzip/brotli negotiated per request). Render's *.onrender.com edge (Cloudflare)
+// already compresses application/json, but this makes compression hold on ANY host/domain and for direct
+// origin hits. The big sync JSON payloads (pull) shrink ~5-10x on the wire; small bodies are skipped by the
+// library's own threshold. Cheap on CPU for JSON at this scale.
+app.use(compression());
 
 // Security headers
 app.use(helmet({
@@ -146,7 +153,10 @@ app.use(requestLogger);
 // Security audit log (sensitive routes)
 app.use('/api', auditLog);
 
-// Rate limiting
+// Rate limiting. The sync path gets its own generous PER-SHOP bucket FIRST (a shop's many devices poll it
+// constantly); the general limiter then covers everything else and skips /api/pwa-sync so the two don't
+// double-count. Both key by shop when a valid token is present (see middleware/rateLimit.js).
+app.use('/api/pwa-sync', syncLimiter);
 app.use('/api', generalLimiter);
 
 // Uploads directory

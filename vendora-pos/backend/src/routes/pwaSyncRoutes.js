@@ -20,12 +20,32 @@ router.use(async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/pwa-sync/pull  → { success, blobs: [{ name, value, rev, mtime }] }
-// Scoped to the token's shopId; a staff role only receives the stores it's allowed to see.
+// Parse the client's known revisions from `?revs=inventory_v1:4,suppliers_v1:2` into `{ name: rev }`.
+// A name may itself contain no ':' (our store names don't), so split on the LAST ':' for safety.
+function parseRevs(raw) {
+  const out = {};
+  if (typeof raw !== 'string' || !raw) return out;
+  for (const pair of raw.split(',')) {
+    const i = pair.lastIndexOf(':');
+    if (i <= 0) continue;
+    const name = pair.slice(0, i);
+    const rev = parseInt(pair.slice(i + 1), 10);
+    if (name && Number.isFinite(rev)) out[name] = rev;
+  }
+  return out;
+}
+
+// GET /api/pwa-sync/pull[?revs=name:rev,...]  → { success, blobs: [{ name, value, rev, mtime }], etag }
+// Delta pull: returns only stores newer than the client's known revs (all, when no revs given). With a
+// matching If-None-Match it replies 304 (empty body). Scoped to the token's shopId; a staff role only
+// receives the stores it's allowed to see. The ETag is set on every response so the client can echo it back.
 router.get('/pull', async (req, res, next) => {
   try {
-    const out = await sync.pull(req.pwa.sub, req.pwa.role);
-    res.json({ success: true, ...out });
+    const knownRevs = parseRevs(req.query.revs);
+    const out = await sync.pull(req.pwa.sub, req.pwa.role, knownRevs, { ifNoneMatch: req.headers['if-none-match'] });
+    if (out.etag) res.set('ETag', out.etag);
+    if (out.notModified) return res.status(304).end();
+    res.json({ success: true, blobs: out.blobs });
   } catch (err) { next(err); }
 });
 
