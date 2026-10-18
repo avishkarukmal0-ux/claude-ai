@@ -76,3 +76,25 @@ These are **operator/console changes** (not code); the code-side scale hardening
    **staging** at 700 devices — target p95 < 500ms, 0 × 429. **Staging only; never production.**
 
 Cost note: this is the "real 24/7" tier — budget for a paid Render instance **plus** Atlas M10 (both EU).
+
+### ⚠️ Scaling out requires shared rate-limit + lockout state
+
+The API's rate limiters (`middleware/rateLimit.js`, express-rate-limit **MemoryStore**) and the login lockout
+(`services/pwaAuthService.js`, an in-memory `Map`) are **per process**. On ONE instance that's correct. The
+moment you run **more than one** Render instance (horizontal scale / autoscaling), each process keeps its own
+counters, so the effective caps multiply by the instance count and the lockout only sees a fraction of the
+failures — i.e. the limits silently weaken. **Before** increasing instance count:
+
+1. **Rate limiters → Redis.** `npm install rate-limit-redis` and set `REDIS_URL` (e.g. Upstash). The code is
+   already wired: `makeStore(prefix)` in `rateLimit.js` returns a Redis-backed store (own key prefix per
+   limiter) once BOTH that package and `REDIS_URL` are present; otherwise it falls back to MemoryStore. No code
+   change needed — just install + env — but **load-test the limited routes once enabled** (this path isn't
+   exercised on the single-instance setup).
+2. **Login lockout → shared store.** Move the `_loginFails` map in `pwaAuthService.js` to Redis (a key per
+   `email|ip` with a TTL = the lockout window) or a small Mongo collection. It's deliberately isolated behind
+   `assertNotLockedOut` / `noteLoginFailure` / `noteLoginSuccess`, so this is a localized change.
+3. Keep `app.set('trust proxy', 1)` correct for the instance topology so `req.ip` (the limiter/lockout key)
+   is the real client IP, not the load balancer's.
+
+Until all three are done, **pin the service to a single instance.** The member-status cache (30s) and the
+sync ETag are fine multi-instance (eventually consistent / derived from Mongo), so they need no change.
