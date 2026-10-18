@@ -146,13 +146,23 @@ function etagFor(visibleDocs) {
  * Returns `{ etag, blobs }` or `{ notModified: true, etag }`.
  */
 async function pull(accountId, role, knownRevs = {}, opts = {}) {
-  const docs = await SyncBlob.find({ account: accountId }).select('name value rev mtime').lean();
-  const visible = docs.filter((d) => canReadStore(role, d.name));
+  // (scale #4) Read METADATA ONLY first — never the (potentially ~MB) values on a poll that returns nothing.
+  // The ETag is a function of the role-visible (name:rev) set, so it's computed from this cheap query.
+  const metas = await SyncBlob.find({ account: accountId }).select('name rev mtime').lean();
+  const visible = metas.filter((m) => canReadStore(role, m.name));
   const etag = etagFor(visible);
   if (opts.ifNoneMatch && opts.ifNoneMatch === etag) return { notModified: true, etag };
+
   const known = knownRevs && typeof knownRevs === 'object' ? knownRevs : {};
-  const blobs = visible
-    .filter((d) => (Number(known[d.name]) || 0) < d.rev) // only stores the client hasn't caught up to
+  const newer = visible.filter((m) => (Number(known[m.name]) || 0) < m.rev); // only stores the client lacks
+  if (!newer.length) return { etag, blobs: [] };
+
+  // Fetch VALUES only for the stores that actually changed for this client.
+  const names = newer.map((m) => m.name);
+  const full = await SyncBlob.find({ account: accountId, name: { $in: names } })
+    .select('name value rev mtime').lean();
+  const blobs = full
+    .filter((d) => canReadStore(role, d.name))
     .map((d) => ({ name: d.name, value: d.value, rev: d.rev, mtime: d.mtime }));
   return { etag, blobs };
 }

@@ -5,7 +5,7 @@
 //  - the sync ETag (stable, order-independent, changes when any visible rev bumps)
 const jwt = require('jsonwebtoken');
 const config = require('../config');
-const { shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey } = require('../middleware/rateLimit');
+const { shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey } = require('../middleware/rateLimit');
 const sync = require('../services/pwaSyncService');
 
 function pwaToken(shopId, extra = {}) {
@@ -46,6 +46,18 @@ describe('rate-limit keying (scale)', () => {
     expect(k1).toBe('a@shop.com|1.2.3.4'); // lower-cased
     expect(k1).not.toBe(k2);
     expect(emailIpKey({ body: {}, ip: '1.2.3.4' })).toBe('anon|1.2.3.4');
+  });
+
+  test('credential routes also cap per-IP (across all emails) and per-email (across all IPs)', () => {
+    // per-IP key ignores email → one IP trying many emails shares ONE bucket (stops credential stuffing)
+    const ipA = ipKey({ ip: '1.2.3.4' });
+    expect(emailIpKey({ body: { email: 'x@a.com' }, ip: '1.2.3.4' })).not.toBe(ipA); // email|ip is a different axis
+    // per-email key ignores IP → guessing one account from many IPs shares ONE bucket
+    const fromHome = emailOnlyKey({ body: { email: 'Owner@Shop.com' }, ip: '1.1.1.1' });
+    const fromCafe = emailOnlyKey({ body: { email: 'owner@shop.com' }, ip: '2.2.2.2' });
+    expect(fromHome).toBe('email:owner@shop.com');
+    expect(fromHome).toBe(fromCafe);                 // same account, different IPs → same bucket
+    expect(emailOnlyKey({ body: {}, ip: '9.9.9.9' })).toBe('9.9.9.9'); // no email → falls back to IP
   });
 });
 

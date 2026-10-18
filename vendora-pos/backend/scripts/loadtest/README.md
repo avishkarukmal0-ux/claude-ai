@@ -6,8 +6,9 @@ devices) doing the real poll/push cycle.
 ## ⚠️ Staging only
 
 This **registers accounts and writes sync blobs**. Point `BASE_URL` at a **staging** deployment, never
-production. The script's init guard refuses the known production host (`vendora-api-5pyt.onrender.com`) and
-aborts before spinning any VUs.
+production. Two guards abort before any VU spins: you must pass **`-e STAGING=1`** explicitly, and the
+`BASE_URL` host must not be on the production denylist (the Render API host today — add the custom production
+domain to `PROD_DENY` in `sync-load.js` before go-live).
 
 ## Install k6
 
@@ -18,11 +19,11 @@ k6 is a single static binary (not an npm package) — see https://grafana.com/do
 
 ```bash
 # full target: 140 shops × 5 devices = 700 virtual devices, hold 3 minutes
-k6 run -e BASE_URL=https://YOUR-STAGING.onrender.com \
+k6 run -e STAGING=1 -e BASE_URL=https://YOUR-STAGING.onrender.com \
   vendora-pos/backend/scripts/loadtest/sync-load.js
 
 # smaller smoke run first
-k6 run -e BASE_URL=https://YOUR-STAGING.onrender.com -e SHOPS=20 -e DURATION=1m \
+k6 run -e STAGING=1 -e BASE_URL=https://YOUR-STAGING.onrender.com -e SHOPS=20 -e DURATION=1m \
   vendora-pos/backend/scripts/loadtest/sync-load.js
 ```
 

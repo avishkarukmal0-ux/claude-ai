@@ -44,6 +44,13 @@ function emailIpKey(req) {
   return `${email || 'anon'}|${ipKey(req)}`;
 }
 
+// Email ONLY (ignoring IP): bounds attempts against a SINGLE account from anywhere (distributed guessing of
+// one password). Falls back to IP when no email is present so it never collapses to one global bucket.
+function emailOnlyKey(req) {
+  const email = (req.body && typeof req.body.email === 'string' ? req.body.email : '').toLowerCase().trim();
+  return email ? `email:${email}` : ipKey(req);
+}
+
 const RATE_MSG = (code, message) => ({ success: false, error: { code, message } });
 const COMMON = { windowMs: 60 * 1000, standardHeaders: true, legacyHeaders: false };
 
@@ -67,13 +74,32 @@ const syncLimiter = rateLimit({
   message: RATE_MSG('RATE_LIMIT', 'Sync is busy — it will catch up in a moment.'),
 });
 
-// Login/register limiter — keyed by email+IP (not IP alone) so a shop's devices share neither a single
-// bucket nor a single attacker's. Tight cap: these are credential endpoints.
+// Login/register limiter — keyed by email+IP. Kept for compatibility; the credential routes now ALSO stack
+// the two limiters below (per-IP across all emails, and per-email across all IPs) so neither dimension is
+// unbounded.
 const authLimiter = rateLimit({
   ...COMMON,
   max: isTest ? 100000 : 10,
   keyGenerator: emailIpKey,
   message: RATE_MSG('RATE_LIMIT', 'Too many login attempts, please wait a minute.'),
+});
+
+// Credential endpoints (/login, /register) stack TWO limiters so neither axis is open:
+//  - loginIpLimiter   caps TOTAL attempts from one IP across ALL emails (stops credential stuffing / mass
+//    register from a single source — the email|ip key alone let one IP try unlimited different emails).
+//  - loginEmailLimiter caps attempts against ONE email from ANY IP (stops distributed guessing of one account).
+const loginIpLimiter = rateLimit({
+  ...COMMON,
+  max: isTest ? 100000 : 60,
+  keyGenerator: ipKey,
+  message: RATE_MSG('RATE_LIMIT', 'Too many attempts from this network — please wait a minute.'),
+});
+
+const loginEmailLimiter = rateLimit({
+  ...COMMON,
+  max: isTest ? 100000 : 10,
+  keyGenerator: emailOnlyKey,
+  message: RATE_MSG('RATE_LIMIT', 'Too many attempts for this account — please wait a minute.'),
 });
 
 const strictLimiter = rateLimit({
@@ -84,7 +110,7 @@ const strictLimiter = rateLimit({
 });
 
 module.exports = {
-  generalLimiter, authLimiter, strictLimiter, syncLimiter,
+  generalLimiter, authLimiter, strictLimiter, syncLimiter, loginIpLimiter, loginEmailLimiter,
   // exported for unit tests
-  shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey,
+  shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey,
 };

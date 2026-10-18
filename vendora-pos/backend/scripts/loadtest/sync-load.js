@@ -9,7 +9,7 @@
 // never production — the init guard below refuses the known production host.
 //
 // Run:
-//   k6 run -e BASE_URL=https://vendora-staging.onrender.com src/../scripts/loadtest/sync-load.js
+//   k6 run -e STAGING=1 -e BASE_URL=https://vendora-staging.onrender.com src/../scripts/loadtest/sync-load.js
 //   # tune: -e SHOPS=140 -e DEVICES_PER_SHOP=5 -e DURATION=3m
 //
 // Target (acceptance): 700 virtual devices, p95 < 500ms, http_req_failed ~0, zero 429s for this normal-use
@@ -29,10 +29,22 @@ const ITEMS = parseInt(__ENV.ITEMS || '200', 10); // inventory items per shop (p
 const PUSH_PROB = parseFloat(__ENV.PUSH_PROB || '0.2'); // ~1 in 5 iterations is an edit
 const RUN = `lt${Date.now()}`;
 
-// Refuse to point this at production, whatever the operator typed.
-const PROD_DENY = ['vendora-api-5pyt.onrender.com'];
+// Refuse to point this at production, whatever the operator typed. Two gates:
+//  (1) an explicit opt-in: -e STAGING=1 (so a bare BASE_URL can never accidentally run);
+//  (2) a production-host denylist — the Render API host, and the custom production domain(s) once they exist
+//      (add them to PROD_DENY below before go-live so this keeps refusing them).
+const PROD_DENY = [
+  'vendora-api-5pyt.onrender.com',
+  // 'api.vendora.co.uk',   // ← add the custom production domain here once it's live
+  // 'vendora.co.uk',
+];
+if (String(__ENV.STAGING || '') !== '1') {
+  throw new Error('Refusing to run without -e STAGING=1. This writes accounts/blobs — point BASE_URL at STAGING and pass STAGING=1 to confirm.');
+}
 if (!BASE_URL) throw new Error('Set BASE_URL to your STAGING backend, e.g. -e BASE_URL=https://vendora-staging.onrender.com');
-if (PROD_DENY.some((h) => BASE_URL.includes(h))) throw new Error(`Refusing to load-test the production host (${BASE_URL}). Point BASE_URL at STAGING.`);
+if (PROD_DENY.some((h) => h && BASE_URL.toLowerCase().includes(h))) {
+  throw new Error(`Refusing to load-test a production host (${BASE_URL}). Point BASE_URL at STAGING.`);
+}
 
 const rate429 = new Counter('sync_429s'); // must stay 0 for normal-use acceptance
 
