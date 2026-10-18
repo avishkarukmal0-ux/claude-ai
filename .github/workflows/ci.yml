@@ -64,6 +64,10 @@ jobs:
           cache: npm
           cache-dependency-path: vendora-pos/backend/package-lock.json
       - run: npm ci
+      - name: Production dependency audit (fail on high)
+        # Block a deploy that ships a known HIGH vuln in a RUNTIME dependency. Dev-only deps (jest's tree,
+        # etc.) are excluded via --omit=dev so test-tooling advisories don't gate a shipping build.
+        run: npm audit --omit=dev --audit-level=high
       - name: App boots
         run: node -e "require('./src/app.js'); console.log('app loads OK')"
       - name: Unit + pure tests (legacy till/POS suites excluded — out of scope)

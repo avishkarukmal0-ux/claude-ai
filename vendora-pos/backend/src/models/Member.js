@@ -6,7 +6,9 @@
 // can never reach another shop's data (sync is scoped by that id). Separate from the till's Staff model
 // (ADR-002): this is the PWA's own, self-contained staff layer.
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+// Native bcrypt (threadpool, not the event loop) — same $2a/$2b hash format, so existing member passwords
+// still verify. See Account.js for the rationale (login-burst event-loop stalls).
+const bcrypt = require('bcrypt');
 
 const ROLES = ['manager', 'staff'];
 

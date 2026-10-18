@@ -125,7 +125,7 @@ connectDB()
         logger.info('Insights: warming OA centroids into memory…');
         require('./src/services/insightsData/centroids')
           .load()
-          .then((r) => logger.info(`Insights: OA centroids warmed into memory (${(r && r.count) || 0}) in ${Date.now() - warmStart}ms`))
+          .then((r) => logger.info(`Insights: OA centroids warmed into memory (${(r && r.count) || 0}) in ${Date.now() - warmStart}ms · rss=${Math.round(process.memoryUsage().rss / (1024 * 1024))}MB`))
           .catch((e) => logger.warn(`Insights: centroid warm failed after ${Date.now() - warmStart}ms (${e.message}) — first /radius will load them`));
       }
     } catch { /* never block startup on the warm */ }

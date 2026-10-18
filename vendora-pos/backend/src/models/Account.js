@@ -4,7 +4,10 @@
 // till's Staff model (ADR-002: App/Till separation). One account == one shop workspace; the shop id
 // the PWA uses is this document's _id.
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+// Native bcrypt (not bcryptjs): hashing runs on libuv's threadpool, so a morning burst of staff logins does
+// NOT stall the event loop (and sync requests) the way the pure-JS bcryptjs ~142ms/hash did. Hash format is
+// identical ($2a/$2b), so every existing password still verifies. See Member.js (same switch).
+const bcrypt = require('bcrypt');
 
 // Daily digest notification preferences (opt-in, all off by default). Stored on the account because the
 // server decides due-ness and sends the email. Times are Europe/London hours (0–23).
