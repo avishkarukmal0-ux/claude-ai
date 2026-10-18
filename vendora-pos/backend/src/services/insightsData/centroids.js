@@ -130,10 +130,23 @@ async function loadFromMongo() {
   if (!dbReady()) return { loaded: false, count: 0, reason: 'centroids: database not connected' };
   try {
     const t0 = Date.now();
-    const rows = await model().find({}, { _id: 0, oa: 1, lat: 1, lng: 1, lsoa: 1 }).lean();
-    const list = rows
-      .filter((r) => r && r.oa && Number.isFinite(r.lat) && Number.isFinite(r.lng))
-      .map((r) => ({ oa: String(r.oa), lat: r.lat, lng: r.lng, lsoa: r.lsoa || null }));
+    // STREAM the ~190k rows with a cursor and build incrementally, instead of buffering every doc and then
+    // doing one big synchronous filter/map. Two wins during the ~25–30s warm: (1) peak memory is far lower
+    // (no giant intermediate array alongside the list — matters on the 512MB instance), and (2) the event
+    // loop stays responsive — we yield every YIELD_EVERY rows, so /healthz, login and sync are never stalled
+    // by the warm (cold-start follow-up #4). The warm is already fire-and-forget; this stops its sync spike.
+    const YIELD_EVERY = 10000;
+    const list = [];
+    const cursor = model().find({}, { _id: 0, oa: 1, lat: 1, lng: 1, lsoa: 1 }).lean().batchSize(2000).cursor();
+    let sinceYield = 0;
+    // eslint-disable-next-line no-restricted-syntax
+    for await (const r of cursor) {
+      if (r && r.oa && Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
+        list.push({ oa: String(r.oa), lat: r.lat, lng: r.lng, lsoa: r.lsoa || null });
+      }
+      sinceYield += 1;
+      if (sinceYield >= YIELD_EVERY) { sinceYield = 0; await new Promise((resolve) => setImmediate(resolve)); }
+    }
     _cache = { list, loadedAt: Date.now(), count: list.length, source: 'mongo', path: null, loadMs: Date.now() - t0 };
     return { loaded: list.length > 0, count: list.length, source: 'mongo', reason: list.length ? undefined : 'no centroids imported into MongoDB (run scripts/import-centroids.js)' };
   } catch (e) {
