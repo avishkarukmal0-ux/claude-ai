@@ -71,43 +71,48 @@ async function register({ email, password, shopName } = {}) {
 }
 
 // ── Temporary login lockout (defence in depth; the rate limiters are the primary control) ───────────────
-// After LOCKOUT_MAX consecutive failures for one email within the window, further attempts are refused for
-// LOCKOUT_MS regardless of password — slowing an online guess that squeaks under the per-email rate cap.
-// In-memory (per instance; resets on restart) and cleared on a correct password. TRADE-OFF: an attacker who
-// knows an email can lock that account for ~15 min (a nuisance, auto-clearing) — hence a HIGH threshold and a
-// SHORT lock rather than a hard/escalating ban. Tune via env if needed.
+// After LOCKOUT_MAX consecutive failures for one (email + source IP) within the window, further attempts from
+// THAT SOURCE are refused for LOCKOUT_MS regardless of password — slowing a sustained online guess from one
+// place. Keyed by email+IP (not email alone) so a remote attacker who knows an owner's email can NOT lock the
+// real owner out at their own shop; distributed guessing across many IPs is bounded by the per-email rate
+// limiter instead. In-memory (per instance; resets on restart) and cleared on a correct login.
+// ⚠️ Per-process: before scaling to >1 instance this must move to a shared store (Redis/Mongo) — see
+// obsidian-vault/Deployment.md "Scaling out requires shared rate-limit + lockout state".
 const LOCKOUT_MAX = parseInt(process.env.PWA_LOGIN_LOCKOUT_MAX, 10) || 10;
 const LOCKOUT_MS = (parseInt(process.env.PWA_LOGIN_LOCKOUT_MINUTES, 10) || 15) * 60 * 1000;
-const _loginFails = new Map(); // email -> { count, until }
+const _loginFails = new Map(); // `${email}|${ip}` -> { count, until }
+
+const lockoutKey = (email, ip) => `${email}|${ip || ''}`;
 
 /** Test hook: clear the login-lockout state. */
 function __clearLoginLockout() { _loginFails.clear(); }
 
-function assertNotLockedOut(email) {
-  const rec = _loginFails.get(email);
+function assertNotLockedOut(key) {
+  const rec = _loginFails.get(key);
   if (rec && rec.until && rec.until > Date.now()) {
     const mins = Math.ceil((rec.until - Date.now()) / 60000);
     throw new AppError(`Too many failed attempts — try again in about ${mins} minute${mins === 1 ? '' : 's'}.`, 429, 'ACCOUNT_LOCKED');
   }
 }
-function noteLoginFailure(email) {
-  const rec = _loginFails.get(email) || { count: 0, until: 0 };
+function noteLoginFailure(key) {
+  const rec = _loginFails.get(key) || { count: 0, until: 0 };
   rec.count += 1;
   if (rec.count >= LOCKOUT_MAX) { rec.until = Date.now() + LOCKOUT_MS; rec.count = 0; } // lock, reset the counter
-  _loginFails.set(email, rec);
+  _loginFails.set(key, rec);
 }
-function noteLoginSuccess(email) { _loginFails.delete(email); }
+function noteLoginSuccess(key) { _loginFails.delete(key); }
 
-async function login({ email, password } = {}) {
+async function login({ email, password } = {}, { ip } = {}) {
   if (!email || !password) throw AppError.validation('Email and password are required');
   const lower = String(email).toLowerCase();
-  assertNotLockedOut(lower); // refuse early while locked (before any password hashing work)
+  const key = lockoutKey(lower, ip);
+  assertNotLockedOut(key); // refuse early while locked (before any password hashing work)
 
   // Try the owner account first, then a member. A single generic failure for every path — no enumeration
   // of which emails exist or whether a password was close.
   const account = await Account.findOne({ email: lower });
   if (account && await account.verifyPassword(password)) {
-    noteLoginSuccess(lower);
+    noteLoginSuccess(key);
     const shopId = account._id.toString();
     const { accessToken, refreshToken } = tokensFor({ shopId, role: 'owner', memberId: shopId, name: 'Owner' });
     return { token: accessToken, refreshToken, shop: shapeShop(account), role: 'owner', member: ownerAsMember(account) };
@@ -117,14 +122,14 @@ async function login({ email, password } = {}) {
   if (member && member.active !== false && await member.verifyPassword(password)) {
     const owner = await Account.findById(member.account);
     if (owner) {
-      noteLoginSuccess(lower);
+      noteLoginSuccess(key);
       const shopId = owner._id.toString();
       const { accessToken, refreshToken } = tokensFor({ shopId, role: member.role, memberId: member._id.toString(), name: member.name, tv: member.tokenVersion || 0 });
       return { token: accessToken, refreshToken, shop: shapeShop(owner), role: member.role, member: shapeMember(member) };
     }
   }
 
-  noteLoginFailure(lower);
+  noteLoginFailure(key);
   throw AppError.authInvalidCredentials('Email or password not recognised');
 }
 

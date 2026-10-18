@@ -5,7 +5,7 @@
 const express = require('express');
 
 const router = express.Router();
-const { loginIpLimiter, loginEmailLimiter } = require('../middleware/rateLimit');
+const { loginIpLimiter, loginEmailLimiter, ipKey } = require('../middleware/rateLimit');
 const pwaAuth = require('../services/pwaAuthService');
 
 // Credential endpoints stack per-IP (across all emails) + per-email (across all IPs) limiters so neither
@@ -23,7 +23,7 @@ router.post('/register', ...credentialLimiters, async (req, res, next) => {
 // POST /api/pwa-auth/login  { email, password }  (owner OR staff member)
 router.post('/login', ...credentialLimiters, async (req, res, next) => {
   try {
-    const out = await pwaAuth.login(req.body || {});
+    const out = await pwaAuth.login(req.body || {}, { ip: ipKey(req) }); // lockout keyed by email+IP (#1)
     res.json({ success: true, ...out });
   } catch (err) { next(err); }
 });

@@ -54,10 +54,38 @@ function emailOnlyKey(req) {
 const RATE_MSG = (code, message) => ({ success: false, error: { code, message } });
 const COMMON = { windowMs: 60 * 1000, standardHeaders: true, legacyHeaders: false };
 
+// ── Shared store for scaling OUT (>1 instance) ──────────────────────────────────────────────────────────
+// express-rate-limit's default MemoryStore is PER PROCESS, so counters don't add up across Render instances
+// (two instances each allow the full cap). This is correct for the current single instance. Before running
+// MORE than one instance, install `rate-limit-redis` and set REDIS_URL — each limiter then shares a
+// Redis-backed store (own key prefix). Until BOTH are present, makeStore() returns undefined and the limiter
+// falls back to MemoryStore, so nothing changes today. See obsidian-vault/Deployment.md.
+// (The login lockout in pwaAuthService is likewise per-process and must move to a shared store before scaling.)
+let _rlClient = null; // null = not yet resolved; false = unavailable; else an ioredis client
+function rlClient() {
+  if (_rlClient !== null) return _rlClient || null;
+  try {
+    const Redis = require('ioredis'); // already a dependency
+    _rlClient = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
+    _rlClient.on('error', () => { /* non-fatal: a Redis blip must never crash the API */ });
+    return _rlClient;
+  } catch { _rlClient = false; return null; }
+}
+function makeStore(prefix) {
+  if (!process.env.REDIS_URL) return undefined; // single instance → MemoryStore
+  let RedisStore;
+  try { RedisStore = require('rate-limit-redis').default || require('rate-limit-redis'); }
+  catch { return undefined; } // package not installed yet → MemoryStore (install it to scale out)
+  const client = rlClient();
+  if (!client) return undefined;
+  return new RedisStore({ prefix: `rl:${prefix}:`, sendCommand: (...args) => client.call(...args) });
+}
+
 // General API limiter — per shop when authenticated, per IP otherwise. Skips /api/pwa-sync, which has its
 // own (higher) bucket below so normal multi-device polling never trips the general cap.
 const generalLimiter = rateLimit({
   ...COMMON,
+  store: makeStore('general'),
   max: isTest ? 100000 : 100,
   keyGenerator: shopOrIpKey,
   skip: (req) => (req.originalUrl || '').startsWith('/api/pwa-sync'),
@@ -69,6 +97,7 @@ const generalLimiter = rateLimit({
 // (falls back to IP for the rare tokenless hit, which the route then 401s anyway).
 const syncLimiter = rateLimit({
   ...COMMON,
+  store: makeStore('sync'),
   max: isTest ? 1000000 : 300,
   keyGenerator: shopOrIpKey,
   message: RATE_MSG('RATE_LIMIT', 'Sync is busy — it will catch up in a moment.'),
@@ -79,6 +108,7 @@ const syncLimiter = rateLimit({
 // unbounded.
 const authLimiter = rateLimit({
   ...COMMON,
+  store: makeStore('auth'),
   max: isTest ? 100000 : 10,
   keyGenerator: emailIpKey,
   message: RATE_MSG('RATE_LIMIT', 'Too many login attempts, please wait a minute.'),
@@ -90,6 +120,7 @@ const authLimiter = rateLimit({
 //  - loginEmailLimiter caps attempts against ONE email from ANY IP (stops distributed guessing of one account).
 const loginIpLimiter = rateLimit({
   ...COMMON,
+  store: makeStore('login-ip'),
   max: isTest ? 100000 : 60,
   keyGenerator: ipKey,
   message: RATE_MSG('RATE_LIMIT', 'Too many attempts from this network — please wait a minute.'),
@@ -97,6 +128,7 @@ const loginIpLimiter = rateLimit({
 
 const loginEmailLimiter = rateLimit({
   ...COMMON,
+  store: makeStore('login-email'),
   max: isTest ? 100000 : 10,
   keyGenerator: emailOnlyKey,
   message: RATE_MSG('RATE_LIMIT', 'Too many attempts for this account — please wait a minute.'),
@@ -104,6 +136,7 @@ const loginEmailLimiter = rateLimit({
 
 const strictLimiter = rateLimit({
   ...COMMON,
+  store: makeStore('strict'),
   max: isTest ? 100000 : 5,
   keyGenerator: shopOrIpKey,
   message: RATE_MSG('RATE_LIMIT', 'Rate limit exceeded.'),
