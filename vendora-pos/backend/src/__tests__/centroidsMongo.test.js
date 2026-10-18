@@ -54,6 +54,18 @@ describe('centroids.loadFromMongo — streaming warm', () => {
     expect(centroids.all().length).toBe(N);
   });
 
+  test('releases the event loop during the warm — concurrent work runs before it finishes (no single-worker stall)', async () => {
+    // 60k rows → 30 yield points at YIELD_EVERY=2000. A callback scheduled right after the warm starts (like a
+    // /healthz or /login handler arriving during the warm) MUST run before the warm completes — the acceptance
+    // proxy for "/healthz and /login stay responsive (<1s) during warm-up" on the single worker.
+    mockState.rows = Array.from({ length: 60000 }, (_, i) => ({ oa: `E${i}`, lat: 51, lng: -0.1, lsoa: null }));
+    const order = [];
+    const loadP = centroids.load({ force: true }).then(() => order.push('warm-done'));
+    const otherP = new Promise((resolve) => setImmediate(() => { order.push('other-request'); resolve(); }));
+    await Promise.all([loadP, otherP]);
+    expect(order[0]).toBe('other-request'); // interleaved — the warm did not monopolise the loop
+  });
+
   test('empty collection → loaded:false with a helpful reason', async () => {
     mockState.rows = [];
     const r = await centroids.load({ force: true });

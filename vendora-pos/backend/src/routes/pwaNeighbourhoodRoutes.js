@@ -101,10 +101,14 @@ async function radiusHandler(req, res, next) {
     const postcode = (src.postcode || '').toString();
     const radiusM = Number(src.radiusM);
     if (!postcode.trim()) throw new AppError('A store postcode is required.', 400, 'NO_POSTCODE');
-    // Boot window: the ~27s one-time OA-centroid load runs at startup. If a /radius lands while it's still in
-    // flight, don't hang the request for the remainder (a dense postcode could then brush the client's 30s
-    // timeout) — answer fast with a 503 "warming up" + Retry-After, and the app shows a Retry. The warm itself is
-    // shared (coalesced), so this request isn't triggering a second load; it just declines to wait.
+    // Centroids load LAZILY (we no longer warm at boot — that stalled login/sync for ~60s after every restart).
+    // The first /radius that needs them KICKS OFF the one-time ~27s load in the BACKGROUND (fire-and-forget,
+    // coalesced, streamed with event-loop yields) and this request returns 503 warming_up immediately rather
+    // than hanging ~27s (which would brush the client's 30s timeout). Retries get 503 until it's ready.
+    if (config.neighbourhoodInsights.dataProvider && !centroids.isLoaded() && !centroids.isLoading()) {
+      centroids.load().catch(() => { /* a failed load just means the next request retries */ });
+    }
+    // If the load is in flight (we just started it, or another request did), decline to wait — fast 503.
     if (config.neighbourhoodInsights.dataProvider && centroids.isLoading() && !centroids.isLoaded()) {
       const elapsedS = Math.round((centroids.loadingElapsedMs() || 0) / 1000);
       const retryAfterS = Math.max(3, 35 - elapsedS); // typical warm ~27s + headroom

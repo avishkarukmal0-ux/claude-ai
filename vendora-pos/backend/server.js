@@ -108,9 +108,6 @@ server.listen(PORT, '0.0.0.0', () => {
 // Connect to MongoDB and Redis in the background — never block or crash on failure
 connectDB()
   .then(() => {
-    // Warm the OA centroids into memory once the DB is up, so the FIRST /radius request doesn't pay the
-    // ~190k-row load (the biggest single chunk of the cold-path time). Fire-and-forget, insights-gated, never
-    // fatal. Only when centroids come from Mongo (no file path) and a census data provider is configured.
     try {
       // One-off self-verify of the durable refresh-token blacklist, behind an env flag, so its PASS/FAIL lands in
       // the deploy log (the connection has no shell to run the script). Creates+deletes its own throwaway account.
@@ -119,10 +116,17 @@ connectDB()
         require('./scripts/verify-refresh-revocation').run((line) => logger.info(`verify-revocation: ${line}`))
           .catch((e) => logger.warn(`verify-revocation failed: ${e.message}`));
       }
+      // We do NOT warm the ~190k OA centroids at boot by default. On a throttled (free-tier) CPU that ~28s
+      // load starved the single worker, so for ~60s after every restart logins/sync/healthz were slow (bug).
+      // Instead the centroids load LAZILY on the first /radius request (streamed + event-loop-yielding, with
+      // a fast 503 warming_up while it runs — see pwaNeighbourhoodRoutes). Boot stays instant. An operator on
+      // a paid ALWAYS-ON instance (where restarts are rare and they'd rather the first /radius be fast) can
+      // opt back into boot-warming with INSIGHTS_WARM_AT_BOOT=true.
       const ni = config.neighbourhoodInsights;
-      if (ni && ni.enabled && ni.dataProvider && !(ni.data && ni.data.centroidsPath)) {
+      if (process.env.INSIGHTS_WARM_AT_BOOT === 'true'
+          && ni && ni.enabled && ni.dataProvider && !(ni.data && ni.data.centroidsPath)) {
         const warmStart = Date.now();
-        logger.info('Insights: warming OA centroids into memory…');
+        logger.info('Insights: warming OA centroids into memory (INSIGHTS_WARM_AT_BOOT)…');
         require('./src/services/insightsData/centroids')
           .load()
           .then((r) => logger.info(`Insights: OA centroids warmed into memory (${(r && r.count) || 0}) in ${Date.now() - warmStart}ms · rss=${Math.round(process.memoryUsage().rss / (1024 * 1024))}MB`))

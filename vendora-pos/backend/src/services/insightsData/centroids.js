@@ -135,7 +135,7 @@ async function loadFromMongo() {
     // (no giant intermediate array alongside the list — matters on the 512MB instance), and (2) the event
     // loop stays responsive — we yield every YIELD_EVERY rows, so /healthz, login and sync are never stalled
     // by the warm (cold-start follow-up #4). The warm is already fire-and-forget; this stops its sync spike.
-    const YIELD_EVERY = 10000;
+    const YIELD_EVERY = 2000; // yield each ~batch so a throttled single worker keeps serving login/sync/healthz
     const list = [];
     const cursor = model().find({}, { _id: 0, oa: 1, lat: 1, lng: 1, lsoa: 1 }).lean().batchSize(2000).cursor();
     let sinceYield = 0;
