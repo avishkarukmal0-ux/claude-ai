@@ -74,5 +74,5 @@ already in place, the rest cut per-poll bandwidth and request volume and fix the
 
 ## Follow-ups
 - [ ] Owner: run `sync-load.js` against staging; confirm p95<500ms / 0 × 429 at 700 devices.
-- [ ] Decide + implement **#3 per-item merge** (recommend client-side, option a) as a dedicated change.
+- [x] Decide + implement **#3 per-item merge** — done 2026-10-18 (client-side), see [[2026-10-18-per-item-merge-sync]].
 - [ ] Owner infra: paid Render (Frankfurt) + paid Atlas (eu-west-1) co-located; `/healthz` health check.
