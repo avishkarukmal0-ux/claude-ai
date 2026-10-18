@@ -84,53 +84,80 @@ describe('ledgerSum', () => {
 });
 
 describe('mergeInventory — stock qty from the merged ledger, not last-write-wins', () => {
+  const now = Date.now();
+  const recent = (n) => now - n; // n ms ago, well within the ledger window
+
   it('keeps BOTH devices\' concurrent stock changes (the core bug)', () => {
     // Both started at qty 10 (opening 10, no movements). Device L sells 2; device S sells 3.
-    const local = [{ id: 'p1', name: 'Cola', qty: 8, updatedAt: 100 }];
-    const server = [{ id: 'p1', name: 'Cola', qty: 7, updatedAt: 200 }];
-    const localMovements = [{ id: 'm1', productId: 'p1', delta: -2, at: 100 }];
-    const serverMovements = [{ id: 'm2', productId: 'p1', delta: -3, at: 200 }];
-    const out = mergeInventory(local, server, { localMovements, serverMovements });
+    const local = [{ id: 'p1', name: 'Cola', qty: 8, updatedAt: recent(2000) }];
+    const server = [{ id: 'p1', name: 'Cola', qty: 7, updatedAt: recent(1000) }];
+    const localMovements = [{ id: 'm1', productId: 'p1', delta: -2, at: recent(2000) }];
+    const serverMovements = [{ id: 'm2', productId: 'p1', delta: -3, at: recent(1000) }];
+    const out = mergeInventory(local, server, { localMovements, serverMovements, now });
     const p = out.find((x) => x.id === 'p1');
     expect(p.qty).toBe(5);         // 10 − 2 − 3, not 8 or 7
     expect(p.name).toBe('Cola');
   });
 
   it('metadata follows the newer updatedAt even while qty comes from the ledger', () => {
-    const local = [{ id: 'p1', name: 'Old name', price: 1, qty: 8, updatedAt: 100 }];
-    const server = [{ id: 'p1', name: 'New name', price: 2, qty: 7, updatedAt: 200 }];
+    const local = [{ id: 'p1', name: 'Old name', price: 1, qty: 8, updatedAt: recent(2000) }];
+    const server = [{ id: 'p1', name: 'New name', price: 2, qty: 7, updatedAt: recent(1000) }];
     const out = mergeInventory(local, server, {
-      localMovements: [{ id: 'm1', productId: 'p1', delta: -2 }],
-      serverMovements: [{ id: 'm2', productId: 'p1', delta: -3 }],
+      localMovements: [{ id: 'm1', productId: 'p1', delta: -2, at: recent(2000) }],
+      serverMovements: [{ id: 'm2', productId: 'p1', delta: -3, at: recent(1000) }],
+      now,
     });
     const p = out.find((x) => x.id === 'p1');
-    expect(p.name).toBe('New name'); // server metadata won (updatedAt 200)
+    expect(p.name).toBe('New name'); // server metadata won (newer updatedAt)
     expect(p.price).toBe(2);
     expect(p.qty).toBe(5);           // but qty is the merged ledger result
   });
 
   it('falls back to the winner\'s absolute qty when no movement data is available', () => {
-    const local = [{ id: 'p1', qty: 8, updatedAt: 100 }];
-    const server = [{ id: 'p1', qty: 7, updatedAt: 200 }];
-    const out = mergeInventory(local, server, { localMovements: [], serverMovements: [] });
+    const local = [{ id: 'p1', qty: 8, updatedAt: recent(2000) }];
+    const server = [{ id: 'p1', qty: 7, updatedAt: recent(1000) }];
+    const out = mergeInventory(local, server, { localMovements: [], serverMovements: [], now });
     expect(out.find((x) => x.id === 'p1').qty).toBe(7); // server won; no ledger to reconstruct from
   });
 
   it('a product only on one side is kept with its own qty', () => {
-    const out = mergeInventory([{ id: 'p1', qty: 4, updatedAt: 1 }], [], {
-      localMovements: [{ id: 'm1', productId: 'p1', delta: -1 }], serverMovements: [{ id: 'x', productId: 'other', delta: 1 }],
+    const out = mergeInventory([{ id: 'p1', qty: 4, updatedAt: recent(1000) }], [], {
+      localMovements: [{ id: 'm1', productId: 'p1', delta: -1, at: recent(1000) }],
+      serverMovements: [{ id: 'x', productId: 'other', delta: 1, at: recent(1000) }],
+      now,
     });
-    const p = out.find((x) => x.id === 'p1');
     // opening = 4 − (−1) = 5; merged ledger for p1 = −1 → qty 4 (unchanged, no other device touched it)
-    expect(p.qty).toBe(4);
+    expect(out.find((x) => x.id === 'p1').qty).toBe(4);
   });
 
   it('preserves a product tombstone', () => {
-    const now = Date.now();
     const out = mergeInventory([tombstone('p1', now)], [{ id: 'p1', qty: 3, updatedAt: now - 1000 }], {
-      serverMovements: [{ id: 'm', productId: 'p1', delta: -1 }], now,
+      serverMovements: [{ id: 'm', productId: 'p1', delta: -1, at: now - 1000 }], now,
     });
     expect(liveItems(out)).toEqual([]);
+  });
+
+  // #2 regression: the two devices' ledgers differ only by PRUNING of an old row (movementStore prunes at
+  // 180 days / 5000 rows). The old row must NOT be counted (it's already baked into both stored qtys), so a
+  // consistent age cutoff is applied to both the opening baseline and the merged sum.
+  it('ignores a pruned-age movement present on one side only (server holds the old row)', () => {
+    const old = now - 200 * 86400000; // 200 days ago — past the 180-day window
+    const local = [{ id: 'p', qty: 10, updatedAt: now - 1 }]; // newer meta; this device pruned the old row
+    const server = [{ id: 'p', qty: 10, updatedAt: now - 4 }];
+    const out = mergeInventory(local, server, {
+      localMovements: [], serverMovements: [{ id: 'old', productId: 'p', delta: -4, at: old }], now,
+    });
+    expect(out.find((x) => x.id === 'p').qty).toBe(10); // not 6 — the ancient −4 is excluded on both sides
+  });
+
+  it('ignores a pruned-age movement present on one side only (local holds the old row — mirror)', () => {
+    const old = now - 200 * 86400000;
+    const local = [{ id: 'p', qty: 10, updatedAt: now - 1 }];
+    const server = [{ id: 'p', qty: 10, updatedAt: now - 4 }];
+    const out = mergeInventory(local, server, {
+      localMovements: [{ id: 'old', productId: 'p', delta: -4, at: old }], serverMovements: [{ id: 'nudge', productId: 'other', delta: 1, at: now - 5 }], now,
+    });
+    expect(out.find((x) => x.id === 'p').qty).toBe(10);
   });
 });
 
@@ -138,8 +165,9 @@ describe('mergeStoreArrays — dispatch', () => {
   it('routes inventory / movements / doc stores to the right strategy', () => {
     expect(mergeStoreArrays('movements_v1', [{ id: 'm1', delta: 1 }], [{ id: 'm2', delta: 1 }]).length).toBe(2);
     expect(mergeStoreArrays('orders_v1', [{ id: 'o1', updatedAt: 2 }], [{ id: 'o1', updatedAt: 1 }])[0].updatedAt).toBe(2);
-    const inv = mergeStoreArrays('inventory_v1', [{ id: 'p', qty: 8, updatedAt: 1 }], [{ id: 'p', qty: 7, updatedAt: 2 }], {
-      localMovements: [{ id: 'a', productId: 'p', delta: -2 }], serverMovements: [{ id: 'b', productId: 'p', delta: -3 }],
+    const now = Date.now();
+    const inv = mergeStoreArrays('inventory_v1', [{ id: 'p', qty: 8, updatedAt: now - 2 }], [{ id: 'p', qty: 7, updatedAt: now - 1 }], {
+      localMovements: [{ id: 'a', productId: 'p', delta: -2, at: now - 2 }], serverMovements: [{ id: 'b', productId: 'p', delta: -3, at: now - 1 }], now,
     });
     expect(inv.find((x) => x.id === 'p').qty).toBe(5);
   });

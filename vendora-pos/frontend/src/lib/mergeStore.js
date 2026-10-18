@@ -19,6 +19,11 @@
 // Pure + framework-free; the sync engine (sync.js) does the JSON parse/stringify and feeds these the arrays.
 
 export const TOMBSTONE_TTL_DAYS = 90;
+// Only movements within this window are used to reconstruct stock qty on merge. MUST match (or be ≤)
+// movementStore's prune window (MAX_AGE_DAYS = 180): a movement older than this may have been pruned on one
+// device but not the other, so counting it would skew the merged qty. Applying the SAME cutoff to both the
+// opening baseline and the merged ledger sum keeps the two devices' arithmetic consistent (scale audit #2).
+export const MERGE_LEDGER_WINDOW_DAYS = 180;
 const DAY = 86400000;
 
 // Stores that merge per-item instead of whole-store last-write-wins. Keep in lockstep with the strategy map.
@@ -86,6 +91,14 @@ export function ledgerSum(records, productId) {
   return asArray(records).reduce((n, r) => (r && r.productId === productId ? n + (Number(r.delta) || 0) : n), 0);
 }
 
+/** Signed sum of movement deltas for one product, counting only rows at or after `since` (the prune cutoff). */
+export function ledgerSumSince(records, productId, since) {
+  return asArray(records).reduce(
+    (n, r) => (r && r.productId === productId && (Number(r.at) || 0) >= since ? n + (Number(r.delta) || 0) : n),
+    0,
+  );
+}
+
 const indexById = (arr) => {
   const m = new Map();
   for (const it of asArray(arr)) if (it && it.id != null) m.set(it.id, it);
@@ -119,12 +132,16 @@ export function mergeInventory(local, server, ctx = {}) {
     localMovements = [], serverMovements = [],
     mergedMovements = mergeMovements(localMovements, serverMovements),
     movementsAvailable = asArray(serverMovements).length > 0,
-    now = Date.now(), ttlDays = TOMBSTONE_TTL_DAYS,
+    now = Date.now(), ttlDays = TOMBSTONE_TTL_DAYS, ledgerWindowDays = MERGE_LEDGER_WINDOW_DAYS,
   } = ctx;
 
   const merged = mergeById(local, server, { now, ttlDays });
   if (!movementsAvailable) return merged; // safe fallback: keep winner's absolute qty
 
+  // Count movements only within the prune window, applying the SAME cutoff to the winner's opening baseline
+  // and to the merged ledger. A movement older than the cutoff is assumed already baked into every device's
+  // stored qty (and may be pruned on one side), so counting it once more would skew the result (#2).
+  const since = now - ledgerWindowDays * DAY;
   const localById = indexById(local);
   const serverById = indexById(server);
   return merged.map((p) => {
@@ -135,8 +152,8 @@ export function mergeInventory(local, server, ctx = {}) {
     const winnerIsServer = p === s || (!l && !!s);
     const winnerQty = Number((winnerIsServer ? s : l) && (winnerIsServer ? s : l).qty) || 0;
     const sideMovements = winnerIsServer ? serverMovements : localMovements;
-    const opening = winnerQty - ledgerSum(sideMovements, p.id);
-    return { ...p, qty: opening + ledgerSum(mergedMovements, p.id) };
+    const opening = winnerQty - ledgerSumSince(sideMovements, p.id, since);
+    return { ...p, qty: opening + ledgerSumSince(mergedMovements, p.id, since) };
   });
 }
 

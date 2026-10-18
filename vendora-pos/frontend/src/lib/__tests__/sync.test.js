@@ -216,11 +216,13 @@ describe('sync — per-item merge (item #3)', () => {
 
   it('rebuilds stock qty from BOTH devices\' movement ledgers, not last-write-wins', async () => {
     await bootstrap();
-    // Both started at qty 10 (opening 10). This device sold 2; the other sold 3.
-    storage.writeJSON('inventory_v1', [{ id: 'p1', name: 'Cola', qty: 8, updatedAt: 100 }], ws);
-    storage.writeJSON('movements_v1', [{ id: 'm1', productId: 'p1', delta: -2, at: 100, type: 'sale' }], ws);
-    server.blobs.set('inventory_v1', { value: JSON.stringify([{ id: 'p1', name: 'Cola', qty: 7, updatedAt: 200 }]), rev: 2, mtime: 200 });
-    server.blobs.set('movements_v1', { value: JSON.stringify([{ id: 'm2', productId: 'p1', delta: -3, at: 200, type: 'sale' }]), rev: 2, mtime: 200 });
+    // Both started at qty 10 (opening 10). This device sold 2; the other sold 3. Use recent movement
+    // timestamps so they fall inside the ledger window (movements older than ~180d are excluded).
+    const t = Date.now();
+    storage.writeJSON('inventory_v1', [{ id: 'p1', name: 'Cola', qty: 8, updatedAt: t - 2000 }], ws);
+    storage.writeJSON('movements_v1', [{ id: 'm1', productId: 'p1', delta: -2, at: t - 2000, type: 'sale' }], ws);
+    server.blobs.set('inventory_v1', { value: JSON.stringify([{ id: 'p1', name: 'Cola', qty: 7, updatedAt: t - 1000 }]), rev: 2, mtime: t - 1000 });
+    server.blobs.set('movements_v1', { value: JSON.stringify([{ id: 'm2', productId: 'p1', delta: -3, at: t - 1000, type: 'sale' }]), rev: 2, mtime: t - 1000 });
     await sync.syncNow();
     const p = (storage.readJSON('inventory_v1', [], ws)).find((x) => x.id === 'p1');
     expect(p.qty).toBe(5); // 10 − 2 − 3, not 8 or 7
