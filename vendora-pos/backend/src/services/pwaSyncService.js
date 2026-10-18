@@ -196,7 +196,9 @@ async function push(accountId, changes, role) {
     const value = typeof c.value === 'string' ? c.value : '';
     if (Buffer.byteLength(value, 'utf8') > MAX_VALUE_BYTES) { rejected.push({ name, reason: 'too_large' }); continue; }
     const baseRev = Number(c.baseRev) || 0;
-    const mtime = Number(c.mtime) || 0;
+    // Clamp a future client mtime to the server's clock (#3): a device whose clock runs fast must not win
+    // last-write-wins forever. Only pulls DOWN an ahead-of-now value; normal (past) mtimes are untouched.
+    const mtime = Math.min(Number(c.mtime) || 0, Date.now());
 
     // Atomic compare-and-set on (account, name, rev) so two concurrent pushes can never both "win" the
     // same revision (audit: optimistic revisions were not atomic). findOneAndUpdate is a single atomic op.

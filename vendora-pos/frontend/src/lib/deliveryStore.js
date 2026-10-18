@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { actorName } from './actor';
 import { recordTombstone } from './tombstoneStore';
+import { now as clock } from './syncClock';
 
 const NAME = 'deliveries_v1';
 
@@ -116,7 +117,7 @@ export function useDeliveries() {
       supplierId, supplierName, reference,
       note: '', photos: [],
       lines: [],
-      createdAt: Date.now(), updatedAt: Date.now(), receivedAt: null,
+      createdAt: Date.now(), updatedAt: clock(), receivedAt: null,
     };
     const next = [draft, ...load()];
     persist(next); setDeliveries(next);
@@ -124,7 +125,7 @@ export function useDeliveries() {
   }, []);
 
   const updateDraft = useCallback((id, patch) => {
-    const next = load().map((d) => (d.id === id && d.status === 'draft' ? { ...d, ...patch, updatedAt: Date.now() } : d));
+    const next = load().map((d) => (d.id === id && d.status === 'draft' ? { ...d, ...patch, updatedAt: clock() } : d));
     persist(next); setDeliveries(next);
   }, []);
 
@@ -141,7 +142,7 @@ export function useDeliveries() {
   const markReceived = useCallback((id) => {
     const who = actorName();
     const next = load().map((d) => (d.id === id
-      ? { ...d, status: 'received', receivedAt: Date.now(), receivedBy: d.receivedBy || who, updatedAt: Date.now() }
+      ? { ...d, status: 'received', receivedAt: Date.now(), receivedBy: d.receivedBy || who, updatedAt: clock() }
       : d));
     const res = persist(next);
     if (res.ok) setDeliveries(next);
@@ -162,7 +163,7 @@ export function useDeliveries() {
         orderedQty: l.deliveredQty, deliveredQty: l.deliveredQty, acceptedQty: '',
         unitCost: l.unitCost, caseCost: l.caseCost,
       })),
-      createdAt: Date.now(), updatedAt: Date.now(), receivedAt: null,
+      createdAt: Date.now(), updatedAt: clock(), receivedAt: null,
       repeatedFrom: sourceId,
     };
     const next = [draft, ...load()];

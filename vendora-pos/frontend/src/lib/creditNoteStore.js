@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { recordTombstone } from './tombstoneStore';
+import { now as clock } from './syncClock';
 import { round2 as r2, sumMoney } from './money';
 // claimOutstanding is defined once in creditReport (the canonical credit-accounting module) and re-exported
 // here so existing importers (CreditNotesView, actionEngine, notifications, report) keep their import path.
@@ -113,7 +114,7 @@ export function useCreditNotes() {
       allocations: draft.allocations || [], // [{ claimId, amount, at }]
       note: (draft.note || '').trim(),
       createdAt: draft.createdAt || Date.now(),
-      updatedAt: Date.now(),
+      updatedAt: clock(),
     };
     const res = commit([note, ...load().filter((x) => x.id !== id)]);
     return res.ok ? { ok: true, note } : res;
@@ -131,7 +132,7 @@ export function useCreditNotes() {
       return { ok: false, error: `That exceeds the credit note. £${r2((Number(cur.amount) || 0) - otherTotal).toFixed(2)} left to allocate.` };
     }
     const allocations = amt > 0 ? [...others, { claimId, amount: amt, at: Date.now() }] : others;
-    const next = load().map((x) => (x.id === noteId ? { ...x, allocations, updatedAt: Date.now() } : x));
+    const next = load().map((x) => (x.id === noteId ? { ...x, allocations, updatedAt: clock() } : x));
     const res = commit(next);
     return res.ok ? { ok: true } : res;
   }, []);

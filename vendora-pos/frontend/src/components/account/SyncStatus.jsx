@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { RefreshCw, Check, CloudOff, AlertCircle } from 'lucide-react';
 import { useSyncStatus, syncNow } from '../../lib/sync';
 import { isLoggedIn } from '../../lib/account';
@@ -18,6 +18,13 @@ function relativeTime(ts) {
 
 export default function SyncStatus() {
   const s = useSyncStatus();
+  // Re-render every 30s so the "Updated N min ago" label keeps counting up between syncs (the sync state
+  // itself only changes on a sync, so without this the relative time would sit stale).
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
   if (!isLoggedIn()) return null;
 
   let icon = Check;
@@ -26,7 +33,7 @@ export default function SyncStatus() {
   if (s.status === 'syncing') { icon = RefreshCw; text = 'Syncing…'; tone = 'text-primary'; }
   else if (s.status === 'offline') { icon = CloudOff; text = 'Offline — saved on this device'; tone = 'text-gray-500'; }
   else if (s.status === 'error') { icon = AlertCircle; text = 'Sync paused — will retry'; tone = 'text-danger'; }
-  else if (s.status === 'synced') { text = `Synced · ${relativeTime(s.lastSyncedAt)}`; }
+  else if (s.status === 'synced') { text = s.lastSyncedAt ? `Updated ${relativeTime(s.lastSyncedAt)}` : 'Synced'; }
   else { text = s.pending > 0 ? `${s.pending} change${s.pending === 1 ? '' : 's'} to sync` : 'Up to date'; }
 
   const Icon = icon;

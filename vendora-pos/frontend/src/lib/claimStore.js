@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { recordTombstone, clearTombstone } from './tombstoneStore';
+import { now as clock } from './syncClock';
 import { DELIVERY_ISSUES, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, lineIssues } from './deliveryStore';
 import { actorName } from './actor';
 import { round2 as r2, sumMoney, mul } from './money';
@@ -115,7 +116,7 @@ export function useClaims() {
       items, requestedAmount: sumMoney(items.map((i) => i.amount)),
       approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
       raisedBy: actorName(),
-      createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
+      createdAt: Date.now(), updatedAt: clock(), history: [{ status: 'draft', at: Date.now() }],
     };
     persistAll([claim, ...load()]);
     return claim;
@@ -135,14 +136,14 @@ export function useClaims() {
       items: withIds, requestedAmount: sumMoney(withIds.map((i) => i.amount)),
       approvedAmount: null, receivedAmount: null, creditNoteRef: '', followUpDate: '', note: '',
       raisedBy: actorName(),
-      createdAt: Date.now(), updatedAt: Date.now(), history: [{ status: 'draft', at: Date.now() }],
+      createdAt: Date.now(), updatedAt: clock(), history: [{ status: 'draft', at: Date.now() }],
     };
     persistAll([claim, ...load()]);
     return claim;
   }, []);
 
   const updateClaim = useCallback((id, patch) => {
-    persistAll(load().map((c) => (c.id === id ? { ...c, ...patch, updatedAt: Date.now() } : c)));
+    persistAll(load().map((c) => (c.id === id ? { ...c, ...patch, updatedAt: clock() } : c)));
   }, []);
 
   /** Allocate a supplier credit note to a claim (Phase 2). Received money is the sum of applied credits —
@@ -159,7 +160,7 @@ export function useClaims() {
       const received = sumMoney(credits.map((x) => x.amount));
       updated = {
         ...c, credits, receivedAmount: received, creditNoteRef: creditNoteRef || c.creditNoteRef || '',
-        updatedAt: Date.now(),
+        updatedAt: clock(),
         history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit', creditNoteId, amount: amt }],
       };
       return updated;
@@ -177,7 +178,7 @@ export function useClaims() {
       if (c.id !== claimId) return c;
       const credits = (c.credits || []).filter((x) => x.creditNoteId !== creditNoteId);
       const received = credits.length ? sumMoney(credits.map((x) => x.amount)) : null;
-      return { ...c, credits, receivedAmount: received, updatedAt: Date.now(), history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit-removed', creditNoteId }] };
+      return { ...c, credits, receivedAmount: received, updatedAt: clock(), history: [...(c.history || []), { status: c.status, at: Date.now(), event: 'credit-removed', creditNoteId }] };
     }));
     return (res && res.ok) ? { ok: true } : { ok: false, error: (res && res.error) || 'Couldn’t update the claim' };
   }, []);
@@ -205,7 +206,7 @@ export function useClaims() {
       // this guarded on `c.status === 'requested'` — a status that does NOT exist (lifecycle is draft → submitted
       // → …) — so a new wrong-price claim ('draft') never had its edited line amount reach the requested/approved
       // total (it stayed £0) (audit D1). Once submitted/agreed the figure is authoritative and left untouched.
-      const next = { ...c, items, updatedAt: Date.now() };
+      const next = { ...c, items, updatedAt: clock() };
       if (!c.status || c.status === 'draft') next.requestedAmount = sumMoney(items.map((i) => i.amount));
       return next;
     }));
@@ -216,7 +217,7 @@ export function useClaims() {
     persistAll(load().map((c) => {
       if (c.id !== id) return c;
       if (!nextStates(c.status).includes(to)) return c; // ignore illegal jumps
-      const patch = { status: to, updatedAt: Date.now(), history: [...(c.history || []), { status: to, at: Date.now() }] };
+      const patch = { status: to, updatedAt: clock(), history: [...(c.history || []), { status: to, at: Date.now() }] };
       // 'approved' may default to the requested amount (the supplier agreeing a figure is a reasonable
       // default the owner can edit). 'settled' must NOT auto-set receivedAmount: money is only "received"
       // when the owner confirms the actual credit (Phase 0 / credit-note matching). Treating settled as
@@ -237,7 +238,7 @@ export function useClaims() {
     clearTombstone('claims_v1', claim.id);          // undo the delete signal
     const cur = load();
     if (cur.some((c) => c.id === claim.id)) return;
-    persistAll([{ ...claim, updatedAt: Date.now() }, ...cur]); // bump mtime so it out-votes any synced tombstone
+    persistAll([{ ...claim, updatedAt: clock() }, ...cur]); // bump mtime so it out-votes any synced tombstone
   }, []);
 
   return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, applyCredit, removeCredit, advance, removeClaim, restoreClaim };

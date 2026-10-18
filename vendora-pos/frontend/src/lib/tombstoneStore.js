@@ -5,6 +5,7 @@
 // of resurrecting it from their still-live copy. Workspace-scoped via storage, same as every store.
 import { readJSON, writeJSON } from './storage';
 import { mergeTombstones, TOMBSTONE_TTL_DAYS } from './mergeStore';
+import { now as clock } from './syncClock';
 
 export const TOMBSTONES_STORE = 'sync_tombstones_v1';
 const DAY = 86400000;
@@ -22,7 +23,7 @@ export function loadTombstones() { return load(); }
  * newer time, and prunes rows past the TTL so this can't grow without bound. Writing it fires the storage
  * write event, so the sync engine marks the tombstone store dirty and pushes it like any other store.
  */
-export function recordTombstone(store, id, at = Date.now()) {
+export function recordTombstone(store, id, at = clock()) {
   if (!store || id == null) return { ok: false };
   const k = `${store}:${id}`;
   const cutoff = at - TOMBSTONE_TTL_DAYS * DAY;

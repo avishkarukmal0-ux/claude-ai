@@ -16,6 +16,7 @@ import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } fr
 import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
 import { reassignProductRefs } from './productMerge';
 import { recordTombstone, clearTombstone } from './tombstoneStore';
+import { now as clock } from './syncClock';
 
 const NAME = 'inventory_v1';
 
@@ -285,7 +286,7 @@ function normaliseNew(p) {
     countedAt: null,
     createdAt: Date.now(),
     lastSoldAt: null,
-    updatedAt: Date.now(),
+    updatedAt: clock(),
   };
 }
 
@@ -407,7 +408,7 @@ export function useInventory() {
     const next = prev.map((p) => {
       if (p.id !== id) return p;
       if (patch.qty != null) delta = (Number(patch.qty) || 0) - (Number(p.qty) || 0);
-      const merged = { ...p, ...patch, updatedAt: Date.now() };
+      const merged = { ...p, ...patch, updatedAt: clock() };
       return delta < 0 ? reconcileAllocations(merged) : merged; // trim phantom allocations on a decrease (W2)
     });
     const res = persist(next);
@@ -433,7 +434,7 @@ export function useInventory() {
     clearTombstone('inventory_v1', product.id); // undo the delete signal so the merge won't re-delete it
     const cur = load();
     if (cur.some((p) => p.id === product.id)) return { ok: true, already: true };
-    const next = [{ ...product, updatedAt: Date.now() }, ...cur]; // bump mtime so it out-votes any synced tombstone
+    const next = [{ ...product, updatedAt: clock() }, ...cur]; // bump mtime so it out-votes any synced tombstone
     persist(next);
     setProducts(next);
     return { ok: true };
@@ -473,7 +474,7 @@ export function useInventory() {
       shelfQty: shelfTrackedEither ? num(keep.shelfQty) + num(drop.shelfQty) : null,
       countedAt: Math.max(keep.countedAt || 0, drop.countedAt || 0) || keep.countedAt || drop.countedAt || null,
       lastSoldAt: Math.max(keep.lastSoldAt || 0, drop.lastSoldAt || 0) || keep.lastSoldAt || drop.lastSoldAt || null,
-      updatedAt: Date.now(),
+      updatedAt: clock(),
     };
     const next = prev.filter((p) => p.id !== dropId).map((p) => (p.id === keepId ? merged : p));
     const res = persist(next);
@@ -499,7 +500,7 @@ export function useInventory() {
     if (!p) return { ok: false, error: 'Product not found' };
     const sold = Math.min(u, Number(p.qty) || 0);
     if (sold <= 0) return { ok: false, error: 'Nothing in stock to sell' };
-    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - sold, lastSoldAt: Date.now(), updatedAt: Date.now() }) : x));
+    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - sold, lastSoldAt: Date.now(), updatedAt: clock() }) : x));
     const res = persist(next);
     if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save the sale on this device' }; // don't log a movement we couldn't persist (audit W1)
     setProducts(next);
@@ -520,7 +521,7 @@ export function useInventory() {
     if (!p) return { ok: false, error: 'Product not found' };
     const applied = Math.min(want, Number(p.qty) || 0);
     if (applied <= 0) return { ok: false, error: 'No stock left to bin' };
-    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - applied, updatedAt: Date.now() }) : x));
+    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: (Number(x.qty) || 0) - applied, updatedAt: clock() }) : x));
     const saved = persist(next);
     if (!saved.ok) return { ok: false, error: saved.error || 'Couldn’t save on this device' };
     setProducts(next);
@@ -558,7 +559,7 @@ export function useInventory() {
     const alloc = Math.min(want, undatedQty(p));
     if (alloc <= 0) return { ok: false, error: 'No undated stock left to date-code' };
     const batch = { id: newId(), qty: alloc, expiry, dateType: DATE_TYPES[dateType] ? dateType : 'best-before', createdAt: Date.now() };
-    const next = prev.map((x) => (x.id === id ? { ...x, batches: [...batchesOf(x), batch], updatedAt: Date.now() } : x));
+    const next = prev.map((x) => (x.id === id ? { ...x, batches: [...batchesOf(x), batch], updatedAt: clock() } : x));
     persist(next);
     setProducts(next);
     return { ok: true, allocated: alloc, batchId: batch.id };
@@ -584,7 +585,7 @@ export function useInventory() {
       .filter((x) => (Number(x.qty) || 0) > 0);
     // Audit D9: reconcile shelf/dated allocations after the decrement (like sellUnits/recordWaste) so shelfQty
     // can't exceed the new total — otherwise shelf/back-room views assert impossible stock.
-    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: Math.max(0, (Number(x.qty) || 0) - applied), batches: newBatches, updatedAt: Date.now() }) : x));
+    const next = prev.map((x) => (x.id === id ? reconcileAllocations({ ...x, qty: Math.max(0, (Number(x.qty) || 0) - applied), batches: newBatches, updatedAt: clock() }) : x));
     // Audit D3: don't report success or log a waste movement unless the stock write actually committed. On a
     // failed persist, return the error so the caller keeps the markdown/waste session open to retry (no phantom
     // waste movement, no stock drop reported that didn't save).
@@ -622,7 +623,7 @@ export function useInventory() {
       return x;
     });
     if (!toppedUp && batch) newBatches.unshift({ id: newId(), qty: restore, expiry: batch.expiry, dateType: batch.dateType, createdAt: Date.now() });
-    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, batches: batch ? newBatches : batchesOf(x), updatedAt: Date.now() } : x));
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, batches: batch ? newBatches : batchesOf(x), updatedAt: clock() } : x));
     // Audit D3 (round 2): don't clear/compensate the history unless the restored stock actually saved — else
     // the ledger says "undone" while stock stays reduced. Check the persist; only then reverse the ledger.
     const saved = persist(next);
@@ -645,7 +646,7 @@ export function useInventory() {
   const reverseWaste = useCallback(({ id, qty, batchId }) => {
     const restore = Math.max(0, Number(qty) || 0);
     const prev = load();
-    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, updatedAt: Date.now() } : x));
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + restore, updatedAt: clock() } : x));
     // Audit D3 (round 2): only reverse the ledger if the restored stock saved (no "undone" history over reduced stock).
     const saved = persist(next);
     if (!saved.ok) return { ok: false, error: 'Couldn’t save the restored stock — please retry.' };
@@ -699,7 +700,7 @@ export function useInventory() {
     if (!target) return { ok: false, error: 'Product not found' };
     if (codesOf(target).includes(code)) return { ok: true }; // already linked here — no-op
     const next = prev.map((p) => (p.id === id
-      ? { ...p, extraBarcodes: [...(Array.isArray(p.extraBarcodes) ? p.extraBarcodes : []), code], updatedAt: Date.now() }
+      ? { ...p, extraBarcodes: [...(Array.isArray(p.extraBarcodes) ? p.extraBarcodes : []), code], updatedAt: clock() }
       : p));
     const res = persist(next);
     if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
@@ -711,7 +712,7 @@ export function useInventory() {
   const removeBarcode = useCallback((id, rawCode) => {
     const code = String(rawCode || '').trim();
     const next = load().map((p) => (p.id === id
-      ? { ...p, extraBarcodes: (Array.isArray(p.extraBarcodes) ? p.extraBarcodes : []).filter((c) => c !== code), updatedAt: Date.now() }
+      ? { ...p, extraBarcodes: (Array.isArray(p.extraBarcodes) ? p.extraBarcodes : []).filter((c) => c !== code), updatedAt: clock() }
       : p));
     persist(next); setProducts(next);
     return { ok: true };
@@ -729,7 +730,7 @@ export function useInventory() {
     const prev = load();
     const p = prev.find((x) => x.id === id);
     if (!p) return { ok: false, error: 'Product not found' };
-    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + add, updatedAt: Date.now() } : x));
+    const next = prev.map((x) => (x.id === id ? { ...x, qty: (Number(x.qty) || 0) + add, updatedAt: clock() } : x));
     const res = persist(next);
     if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
     setProducts(next);
@@ -751,7 +752,7 @@ export function useInventory() {
           ...next[idx],
           qty: (Number(next[idx].qty) || 0) + addQty,
           cost: line.cost === '' || line.cost == null ? next[idx].cost : Number(line.cost),
-          updatedAt: Date.now(),
+          updatedAt: clock(),
         };
         received.push({ id: next[idx].id, delta: addQty });
       } else {
@@ -802,7 +803,7 @@ export function useInventory() {
           cost: cost != null ? cost : next[idx].cost,
           // Preserve purchase-cost history for price alerts + audit.
           ...(material ? { costHistory: [...(next[idx].costHistory || []), { cost, at: Date.now() }] } : {}),
-          updatedAt: Date.now(),
+          updatedAt: clock(),
         };
         if (material) costChanges.push({ productId: next[idx].id, name: next[idx].name, prevCost, newCost: cost, price: next[idx].price });
         toLog.push({ id: next[idx].id, units, cost });
@@ -913,7 +914,7 @@ export function useInventory() {
     const next = prev.map((p) => {
       if (p.id !== id) return p;
       const q = Number(p.qty) || 0;
-      return { ...p, shelfQty: Math.max(0, Math.min(q, Number(units) || 0)), updatedAt: Date.now() };
+      return { ...p, shelfQty: Math.max(0, Math.min(q, Number(units) || 0)), updatedAt: clock() };
     });
     persist(next); setProducts(next);
   }, []);
@@ -936,7 +937,7 @@ export function useInventory() {
       : Math.min(q, shelf + move);
     const applied = Math.abs(newShelf - shelf);
     if (applied <= 0) return { ok: false, error: dir === 'to_back' ? 'Nothing on the shelf to move back' : 'No back-room stock to move' };
-    const next = prev.map((x) => (x.id === id ? { ...x, shelfQty: newShelf, updatedAt: Date.now() } : x));
+    const next = prev.map((x) => (x.id === id ? { ...x, shelfQty: newShelf, updatedAt: clock() } : x));
     persist(next); setProducts(next);
     recordMovement({
       productId: id, type: MOVEMENT_TYPES.TRANSFER, delta: applied,

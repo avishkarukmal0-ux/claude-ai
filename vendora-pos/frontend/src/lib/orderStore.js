@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { recordTombstone, clearTombstone } from './tombstoneStore';
+import { now as clock } from './syncClock';
 
 const NAME = 'orders_v1';
 export const OPEN_STATUSES = ['ordered', 'partially_received'];
@@ -91,7 +92,7 @@ export function useOrders() {
       id: newId(),
       status: sent ? 'ordered' : 'draft',
       supplierId, supplierName, note,
-      createdAt: Date.now(), updatedAt: Date.now(), orderedAt: sent ? Date.now() : null, receivedAt: null,
+      createdAt: Date.now(), updatedAt: clock(), orderedAt: sent ? Date.now() : null, receivedAt: null,
       lines: lines.filter((l) => num(l.qty) > 0).map((l) => ({
         id: newId('ol'), productId: l.productId || null, barcode: l.barcode || '', name: l.name || 'Item',
         qty: num(l.qty), receivedQty: 0, unitCost: l.unitCost === '' || l.unitCost == null ? null : num(l.unitCost),
@@ -107,12 +108,12 @@ export function useOrders() {
   /** Mark a recorded draft order as sent to the supplier (an explicit, manual action — never automatic). */
   const sendOrder = useCallback((id) => {
     persistAll(load().map((o) => (o.id === id && o.orderedAt == null
-      ? { ...o, status: 'ordered', orderedAt: Date.now(), updatedAt: Date.now() }
+      ? { ...o, status: 'ordered', orderedAt: Date.now(), updatedAt: clock() }
       : o)));
   }, []);
 
   const cancelOrder = useCallback((id) => {
-    persistAll(load().map((o) => (o.id === id ? { ...o, status: 'cancelled', updatedAt: Date.now() } : o)));
+    persistAll(load().map((o) => (o.id === id ? { ...o, status: 'cancelled', updatedAt: clock() } : o)));
   }, []);
 
   const removeOrder = useCallback((id) => {
@@ -125,7 +126,7 @@ export function useOrders() {
   const restoreOrder = useCallback((order) => {
     if (!order || !order.id) return { ok: false };
     clearTombstone('orders_v1', order.id);          // undo the delete signal
-    const stamped = { ...order, updatedAt: Date.now() }; // out-vote any synced tombstone
+    const stamped = { ...order, updatedAt: clock() }; // out-vote any synced tombstone
     const cur = load();
     const next = cur.some((o) => o.id === order.id)
       ? cur.map((o) => (o.id === order.id ? stamped : o))
@@ -171,7 +172,7 @@ export function useOrders() {
         }
         return { ...l, receivedQty: qty };
       });
-      const updated = { ...o, lines, updatedAt: Date.now() };
+      const updated = { ...o, lines, updatedAt: clock() };
       if (opId) updated.appliedDeliveries = [...(o.appliedDeliveries || []), opId];
       const st = statusFor(updated);
       return { ...updated, status: st, receivedAt: st === 'received' ? Date.now() : o.receivedAt };
@@ -189,7 +190,7 @@ export function useOrders() {
   /** Force-complete an order (mark everything received). */
   const markReceived = useCallback((id) => {
     persistAll(load().map((o) => (o.id === id
-      ? { ...o, lines: o.lines.map((l) => ({ ...l, receivedQty: num(l.qty) })), status: 'received', receivedAt: Date.now(), updatedAt: Date.now() }
+      ? { ...o, lines: o.lines.map((l) => ({ ...l, receivedQty: num(l.qty) })), status: 'received', receivedAt: Date.now(), updatedAt: clock() }
       : o)));
   }, []);
 

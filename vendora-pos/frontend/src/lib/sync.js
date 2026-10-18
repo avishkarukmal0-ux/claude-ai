@@ -26,6 +26,7 @@ import { currentSession, refresh as refreshSession, ACCOUNTS_ENABLED } from './a
 import { stashConflict, conflictCount } from './conflictBackup';
 import { MERGE_STORES, mergeStoreArrays, mergeMovements, mergeTombstones, tombstoneMap, applyTombstones } from './mergeStore';
 import { TOMBSTONES_STORE } from './tombstoneStore';
+import { noteServerDate } from './syncClock';
 
 export const CONFLICT_EVENT = 'vendora:conflict';
 
@@ -43,8 +44,9 @@ const PUSH_DEBOUNCE_MS = 5000;
 // while the tab is hidden (a backgrounded phone in someone's pocket shouldn't poll every minute). The
 // delta-pull + ETag means an idle poll that finds nothing is a tiny 304, but fewer of them still helps 500×.
 const IDLE_POLL_MS = 5 * 60 * 1000;      // background drift-catch when nobody's editing
-const ACTIVE_POLL_MS = 60 * 1000;        // while the user is actively editing
+const ACTIVE_POLL_MS = 60 * 1000;        // while the user is actively editing (or just after opening)
 const ACTIVE_WINDOW_MS = 2 * 60 * 1000;  // "actively editing" = an edit within this window
+const STARTUP_FAST_MS = 10 * 60 * 1000;  // poll at the fast cadence for the first 10 min after opening (#5)
 
 // --- pluggable transport ---------------------------------------------------
 async function fetchTransport(path, { method = 'GET', body, token, query, ifNoneMatch } = {}) {
@@ -65,6 +67,8 @@ async function fetchTransport(path, { method = 'GET', body, token, query, ifNone
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  // Learn the server's wall-clock to correct a skewed device clock for merge/tombstone timestamps (#3).
+  try { noteServerDate(res.headers.get('Date')); } catch { /* headers unavailable (tests) */ }
   // 304 Not Modified (delta pull, nothing changed) — no body; tell the caller to skip the adopt phase.
   if (res.status === 304) {
     let etag = ifNoneMatch;
@@ -377,9 +381,16 @@ export function markStoreDirty(name, mtime = Date.now()) {
 // and fully paused while the tab is hidden (resumes on return). This is the main request-volume lever at
 // ~500 devices — a backgrounded phone makes zero sync calls, and idle shops poll 5× less than before.
 let lastEditAt = 0;
+let startedAt = 0;
 let pollTimer = null;
 function isHidden() { try { return typeof document !== 'undefined' && document.visibilityState === 'hidden'; } catch { return false; } }
-function nextPollDelay() { return (Date.now() - lastEditAt < ACTIVE_WINDOW_MS) ? ACTIVE_POLL_MS : IDLE_POLL_MS; }
+function nextPollDelay() {
+  const t = Date.now();
+  // Fast cadence while actively editing OR during the first 10 minutes after opening (the window when a
+  // shopkeeper is most likely to want another device's changes quickly); 5-min idle cadence after that.
+  const fast = (t - lastEditAt < ACTIVE_WINDOW_MS) || (startedAt && t - startedAt < STARTUP_FAST_MS);
+  return fast ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+}
 function scheduleNextPoll() {
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   if (!started || isHidden()) return; // no polling while hidden; onVisibility() resumes it
@@ -419,6 +430,7 @@ let started = false;
 export function startSync() {
   if (started || !ACCOUNTS_ENABLED) return;
   started = true;
+  startedAt = Date.now(); // begin the 10-min fast-poll window (#5)
   try {
     window.addEventListener(STORAGE_WRITE_EVENT, onLocalWrite);
     window.addEventListener(WORKSPACE_EVENT, onWorkspaceOrSession);
@@ -445,7 +457,7 @@ export function stopSync() {
 
 /** Test hook: reset internal flags/timers between tests. */
 export function __resetSyncForTest() {
-  started = false; syncing = false; applyingRemote = false; lastEditAt = 0;
+  started = false; syncing = false; applyingRemote = false; lastEditAt = 0; startedAt = 0;
   if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   Object.assign(state, { status: 'idle', lastSyncedAt: 0, pending: 0, error: null, conflicts: 0 });
