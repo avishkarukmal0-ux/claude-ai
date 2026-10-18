@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mergeById, mergeMovements, mergeInventory, mergeStoreArrays, ledgerSum,
   liveItems, tombstone, isTombstone, TOMBSTONE_TTL_DAYS,
+  mergeTombstones, tombstoneMap, applyTombstones,
 } from '../mergeStore';
 
 const DAY = 86400000;
@@ -145,5 +146,45 @@ describe('mergeStoreArrays — dispatch', () => {
 
   it('an unknown store returns the server copy unchanged', () => {
     expect(mergeStoreArrays('whatever_v1', [{ id: 'a' }], [{ id: 'b' }])).toEqual([{ id: 'b' }]);
+  });
+});
+
+describe('external delete tombstones', () => {
+  it('mergeTombstones unions by k, keeps the newest at, and GCs old rows', () => {
+    const now = Date.now();
+    const local = [{ k: 'orders_v1:o1', store: 'orders_v1', id: 'o1', at: now - 1000 }];
+    const server = [
+      { k: 'orders_v1:o1', store: 'orders_v1', id: 'o1', at: now }, // newer wins
+      { k: 'orders_v1:old', store: 'orders_v1', id: 'old', at: now - (TOMBSTONE_TTL_DAYS + 1) * DAY }, // GC
+    ];
+    const out = mergeTombstones(local, server, { now });
+    expect(out.find((t) => t.id === 'o1').at).toBe(now);
+    expect(out.some((t) => t.id === 'old')).toBe(false);
+  });
+
+  it('applyTombstones drops a deleted item but keeps an edit made AFTER the delete', () => {
+    const now = Date.now();
+    const items = [
+      { id: 'a', updatedAt: now - 2000 }, // deleted after this edit → dropped
+      { id: 'b', updatedAt: now },         // edited after the delete → kept (revival)
+      { id: 'c', updatedAt: now },         // no tombstone → kept
+    ];
+    const tombs = [
+      { k: 'orders_v1:a', store: 'orders_v1', id: 'a', at: now - 1000 },
+      { k: 'orders_v1:b', store: 'orders_v1', id: 'b', at: now - 1000 },
+    ];
+    const map = tombstoneMap(tombs, 'orders_v1');
+    const out = applyTombstones(items, map);
+    expect(out.map((x) => x.id).sort()).toEqual(['b', 'c']);
+  });
+
+  it('tombstoneMap scopes by store and keeps the newest at per id', () => {
+    const map = tombstoneMap([
+      { store: 'orders_v1', id: 'a', at: 1 },
+      { store: 'orders_v1', id: 'a', at: 5 },
+      { store: 'claims_v1', id: 'a', at: 9 },
+    ], 'orders_v1');
+    expect(map.get('a')).toBe(5);     // newest for orders_v1
+    expect(map.size).toBe(1);         // claims_v1 excluded
   });
 });

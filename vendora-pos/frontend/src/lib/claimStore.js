@@ -7,6 +7,7 @@
 // supplier agreed), RECEIVED (credit actually banked).
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
+import { recordTombstone, clearTombstone } from './tombstoneStore';
 import { DELIVERY_ISSUES, deliveredUnits, acceptedUnits, orderedUnits, perUnitCost, lineIssues } from './deliveryStore';
 import { actorName } from './actor';
 import { round2 as r2, sumMoney, mul } from './money';
@@ -225,14 +226,18 @@ export function useClaims() {
     }));
   }, []);
 
-  const removeClaim = useCallback((id) => { persistAll(load().filter((c) => c.id !== id)); }, []);
+  const removeClaim = useCallback((id) => {
+    persistAll(load().filter((c) => c.id !== id));
+    recordTombstone('claims_v1', id); // so the delete isn't resurrected by another device's copy on merge
+  }, []);
 
   // Undo for a removal — re-insert the exact claim (id preserved), no-op if it's already back.
   const restoreClaim = useCallback((claim) => {
     if (!claim || !claim.id) return;
+    clearTombstone('claims_v1', claim.id);          // undo the delete signal
     const cur = load();
     if (cur.some((c) => c.id === claim.id)) return;
-    persistAll([claim, ...cur]);
+    persistAll([{ ...claim, updatedAt: Date.now() }, ...cur]); // bump mtime so it out-votes any synced tombstone
   }, []);
 
   return { claims, createFromDelivery, createClaim, updateClaim, updateClaimItem, applyCredit, removeCredit, advance, removeClaim, restoreClaim };

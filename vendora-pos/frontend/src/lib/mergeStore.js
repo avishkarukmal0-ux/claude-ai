@@ -152,3 +152,49 @@ export function mergeStoreArrays(name, localArr, serverArr, ctx = {}) {
   }
   return asArray(serverArr);
 }
+
+// ── External delete tombstones ──────────────────────────────────────────────
+// Deletes are hard removals in the item stores (their arrays and existing behaviour are untouched). The
+// deleting device ALSO records a `{ k:"<store>:<id>", store, id, at }` row in a small shared, synced
+// tombstone store. The merge consults that set so another device's stale live copy isn't resurrected by the
+// union — without any store needing in-array tombstones, loadRaw splits or read-filtering.
+
+/** Merge two tombstone lists by `k` (keeping the newest `at`), GC'ing rows older than `ttlDays`. */
+export function mergeTombstones(localArr, serverArr, { now = Date.now(), ttlDays = TOMBSTONE_TTL_DAYS } = {}) {
+  const byK = new Map();
+  const consider = (t) => {
+    if (!t || !t.k) return;
+    const cur = byK.get(t.k);
+    if (!cur || (Number(t.at) || 0) > (Number(cur.at) || 0)) byK.set(t.k, t);
+  };
+  for (const t of asArray(serverArr)) consider(t);
+  for (const t of asArray(localArr)) consider(t);
+  const cutoff = Number.isFinite(ttlDays) ? now - ttlDays * DAY : -Infinity;
+  return [...byK.values()].filter((t) => (Number(t.at) || 0) >= cutoff);
+}
+
+/** Build an `id -> deletedAt` map for one store from a (merged) tombstone list. */
+export function tombstoneMap(list, store) {
+  const m = new Map();
+  for (const t of asArray(list)) {
+    if (t && t.store === store && t.id != null) {
+      const at = Number(t.at) || 0;
+      if (at > (m.get(t.id) || 0)) m.set(t.id, at);
+    }
+  }
+  return m;
+}
+
+/**
+ * Drop items deleted on another device: an item is removed when its id has a tombstone whose `at` is at or
+ * after the item's modification time (the delete happened no earlier than the latest edit we hold). An edit
+ * strictly newer than the delete survives (the item was re-created / edited after the delete elsewhere).
+ */
+export function applyTombstones(arr, tombMap) {
+  if (!tombMap || tombMap.size === 0) return asArray(arr);
+  return asArray(arr).filter((item) => {
+    if (!item || item.id == null) return false;
+    const delAt = tombMap.get(item.id);
+    return delAt == null ? true : mtimeOf(item) > delAt;
+  });
+}

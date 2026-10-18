@@ -4,6 +4,7 @@
 // Workspace-scoped, synced (metadata) like other stores.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
+import { recordTombstone } from './tombstoneStore';
 import { round2 as r2, sumMoney } from './money';
 // claimOutstanding is defined once in creditReport (the canonical credit-accounting module) and re-exported
 // here so existing importers (CreditNotesView, actionEngine, notifications, report) keep their import path.
@@ -140,6 +141,7 @@ export function useCreditNotes() {
   const removeNote = useCallback((id) => {
     const note = load().find((x) => x.id === id) || null;
     const res = commit(load().filter((x) => x.id !== id));
+    if (res.ok) recordTombstone('credit_notes_v1', id); // so the delete isn't resurrected on another device
     return res.ok ? { ok: true, note, claimIds: (note && note.allocations || []).map((a) => a.claimId) } : res;
   }, []);
 

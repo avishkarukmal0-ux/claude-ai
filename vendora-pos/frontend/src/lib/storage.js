@@ -66,6 +66,9 @@ export const STORE_NAMES = [
   'trading_permits_v1',
   'animal_licence_v1',
   'recall_log_v1',
+  // Shared delete-tombstone store for per-item merge sync (lib/tombstoneStore.js). Small {store,id,at} rows
+  // so a delete on one device isn't resurrected by another device's still-live copy during a per-item merge.
+  'sync_tombstones_v1',
 ];
 // Large binary-ish stores kept on-device only (NOT synced or backed up through STORE_NAMES): raw invoice
 // files (photos/PDFs) can be multi-MB, so only their metadata (in invoices_v1) syncs. See invoiceStore.js.

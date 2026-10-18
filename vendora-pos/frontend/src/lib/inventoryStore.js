@@ -15,6 +15,7 @@ import { recordMovement, recordMany, reverseByBatch, hasOperation, MOVEMENT_TYPE
 import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
 import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
 import { reassignProductRefs } from './productMerge';
+import { recordTombstone, clearTombstone } from './tombstoneStore';
 
 const NAME = 'inventory_v1';
 
@@ -422,15 +423,17 @@ export function useInventory() {
     const next = load().filter((p) => p.id !== id);
     persist(next);
     setProducts(next);
+    recordTombstone('inventory_v1', id); // so the delete isn't resurrected by another device's copy on merge
   }, []);
 
   /** Re-insert a previously-removed product exactly as it was (for Undo) — keeps its id so stock history
    *  (movements, claims, …) stays linked. No-op if a product with that id already exists. */
   const restoreProduct = useCallback((product) => {
     if (!product || !product.id) return { ok: false };
+    clearTombstone('inventory_v1', product.id); // undo the delete signal so the merge won't re-delete it
     const cur = load();
     if (cur.some((p) => p.id === product.id)) return { ok: true, already: true };
-    const next = [product, ...cur];
+    const next = [{ ...product, updatedAt: Date.now() }, ...cur]; // bump mtime so it out-votes any synced tombstone
     persist(next);
     setProducts(next);
     return { ok: true };
@@ -476,6 +479,7 @@ export function useInventory() {
     const res = persist(next);
     if (!res.ok) return { ok: false, error: res.error || 'Couldn’t save on this device' };
     setProducts(next);
+    recordTombstone('inventory_v1', dropId); // the dropped product is gone for good — don't let a merge revive it
     // Re-point history AFTER the product records are safely saved (stock union is bookkeeping, not a new
     // movement — the kept product now carries both products' ledgers via the remap).
     const remap = reassignProductRefs(dropId, keepId);

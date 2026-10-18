@@ -4,6 +4,7 @@
 // reorder suggestions don't duplicate what's already on order.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
+import { recordTombstone, clearTombstone } from './tombstoneStore';
 
 const NAME = 'orders_v1';
 export const OPEN_STATUSES = ['ordered', 'partially_received'];
@@ -90,7 +91,7 @@ export function useOrders() {
       id: newId(),
       status: sent ? 'ordered' : 'draft',
       supplierId, supplierName, note,
-      createdAt: Date.now(), orderedAt: sent ? Date.now() : null, receivedAt: null,
+      createdAt: Date.now(), updatedAt: Date.now(), orderedAt: sent ? Date.now() : null, receivedAt: null,
       lines: lines.filter((l) => num(l.qty) > 0).map((l) => ({
         id: newId('ol'), productId: l.productId || null, barcode: l.barcode || '', name: l.name || 'Item',
         qty: num(l.qty), receivedQty: 0, unitCost: l.unitCost === '' || l.unitCost == null ? null : num(l.unitCost),
@@ -114,16 +115,21 @@ export function useOrders() {
     persistAll(load().map((o) => (o.id === id ? { ...o, status: 'cancelled', updatedAt: Date.now() } : o)));
   }, []);
 
-  const removeOrder = useCallback((id) => { persistAll(load().filter((o) => o.id !== id)); }, []);
+  const removeOrder = useCallback((id) => {
+    persistAll(load().filter((o) => o.id !== id));
+    recordTombstone('orders_v1', id); // so the delete isn't resurrected by another device's copy on merge
+  }, []);
 
   /** Restore an order to exactly how it was (Undo for cancel/delete): re-inserts a deleted one, or reverts a
    *  cancelled one to its snapshot status, matched by id. */
   const restoreOrder = useCallback((order) => {
     if (!order || !order.id) return { ok: false };
+    clearTombstone('orders_v1', order.id);          // undo the delete signal
+    const stamped = { ...order, updatedAt: Date.now() }; // out-vote any synced tombstone
     const cur = load();
     const next = cur.some((o) => o.id === order.id)
-      ? cur.map((o) => (o.id === order.id ? order : o))
-      : [order, ...cur];
+      ? cur.map((o) => (o.id === order.id ? stamped : o))
+      : [stamped, ...cur];
     persistAll(next);
     return { ok: true };
   }, []);

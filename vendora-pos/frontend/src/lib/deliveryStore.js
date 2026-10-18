@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { actorName } from './actor';
+import { recordTombstone } from './tombstoneStore';
 
 const NAME = 'deliveries_v1';
 
@@ -130,6 +131,7 @@ export function useDeliveries() {
   const removeDelivery = useCallback((id) => {
     const next = load().filter((d) => d.id !== id);
     persist(next); setDeliveries(next);
+    recordTombstone('deliveries_v1', id); // so the delete isn't resurrected by another device's copy on merge
   }, []);
 
   // Audit R10 (round 3): report whether the status write committed. The caller (receiving view) applies stock

@@ -24,6 +24,9 @@ const ALLOWED = new Set([
   // in sync lockstep with the client's STORE_NAMES — a client store missing here used to 422 the WHOLE push.
   'business_profile_v1', 'temperature_log_v1', 'refusals_log_v1', 'refusals_signoff_v1', 'scale_checks_v1',
   'food_registration_v1', 'licence_log_v1', 'trading_permits_v1', 'animal_licence_v1', 'recall_log_v1',
+  // Shared delete-tombstone store for per-item merge sync (client lib/tombstoneStore.js): small {store,id,at}
+  // rows so a delete on one device isn't resurrected by another's still-live copy. Opaque like every store.
+  'sync_tombstones_v1',
 ]);
 
 const MAX_VALUE_BYTES = 2 * 1024 * 1024; // 2 MB per store — generous for a single shop, bounds abuse
