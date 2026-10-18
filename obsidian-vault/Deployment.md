@@ -103,10 +103,15 @@ sync ETag are fine multi-instance (eventually consistent / derived from Mongo), 
 
 Render's **free** web service **sleeps after ~15 min idle**. The next request wakes it, and the shopper waits
 for: container resume + Node boot (~20s observed) — the request that triggered the wake is the one that eats
-it. Separately, the OA-centroid warm-up (~28s for 188k rows) runs **in the background** and does **not** block
-login/sync (it's fire-and-forget and streams with event-loop yields); `/radius` returns `503 warming_up` +
-`Retry-After` until it's ready, and `/healthz` answers 200 immediately (no DB, registered before all
-middleware). So the cold-start pain is the **dyno wake**, not our code.
+it. That's the **dyno wake**, inherent to the free plan.
+
+The OA-centroid load (~28s for 188k rows) is **NOT** run at boot — doing so starved the single (throttled)
+worker and made logins/sync/`/healthz` slow for ~60s after every restart (bug, fixed 2026-10-18). Instead it
+loads **lazily on the first `/radius` request**: that request kicks the load off in the background (streamed
+from Mongo in ~2k batches with event-loop yields) and returns `503 warming_up` + `Retry-After` immediately;
+retries get 503 until it's ready. So login/sync/`/healthz` are **never** blocked by it. `/healthz` answers 200
+immediately (no DB, before all middleware). An operator on a paid **always-on** instance (rare restarts, wants
+the first `/radius` fast) can opt back into boot-warming with **`INSIGHTS_WARM_AT_BOOT=true`**.
 
 Fix (pick one):
 - **Keep it warm (free):** point **UptimeRobot** (or any pinger) at **`GET /healthz` every 5 min** — under the
