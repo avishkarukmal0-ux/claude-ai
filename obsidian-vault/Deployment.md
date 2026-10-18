@@ -98,3 +98,21 @@ failures — i.e. the limits silently weaken. **Before** increasing instance cou
 
 Until all three are done, **pin the service to a single instance.** The member-status cache (30s) and the
 sync ETag are fine multi-instance (eventually consistent / derived from Mongo), so they need no change.
+
+### ⚠️ Free-plan cold start (idle spin-down)
+
+Render's **free** web service **sleeps after ~15 min idle**. The next request wakes it, and the shopper waits
+for: container resume + Node boot (~20s observed) — the request that triggered the wake is the one that eats
+it. Separately, the OA-centroid warm-up (~28s for 188k rows) runs **in the background** and does **not** block
+login/sync (it's fire-and-forget and streams with event-loop yields); `/radius` returns `503 warming_up` +
+`Retry-After` until it's ready, and `/healthz` answers 200 immediately (no DB, registered before all
+middleware). So the cold-start pain is the **dyno wake**, not our code.
+
+Fix (pick one):
+- **Keep it warm (free):** point **UptimeRobot** (or any pinger) at **`GET /healthz` every 5 min** — under the
+  ~15-min idle window, so the dyno never sleeps. `/healthz` is the right target (ultra-light, no DB). The
+  per-5-min `traffic:` log line makes these pings visible.
+- **Paid plan:** a paid Render instance doesn't sleep (and, per the scale-out section, should be the EU
+  Frankfurt + Atlas M10 setup for latency anyway).
+
+Don't ping `/health` (it touches Mongo state) or `/radius` (heavy) for keep-warm — use `/healthz`.
