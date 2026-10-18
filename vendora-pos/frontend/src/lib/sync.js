@@ -24,6 +24,8 @@ import {
 } from './storage';
 import { currentSession, refresh as refreshSession, ACCOUNTS_ENABLED } from './account';
 import { stashConflict, conflictCount } from './conflictBackup';
+import { MERGE_STORES, mergeStoreArrays, mergeMovements, mergeTombstones, tombstoneMap, applyTombstones } from './mergeStore';
+import { TOMBSTONES_STORE } from './tombstoneStore';
 
 export const CONFLICT_EVENT = 'vendora:conflict';
 
@@ -195,11 +197,53 @@ export async function syncNow() {
     );
     guard();
     const pulledEtag = pull && pull.__etag;       // remember for the next poll's If-None-Match (saved into fresh meta)
+
+    // ── Per-item merge context (item #3) ──────────────────────────────────────────────────────────────
+    // For the id-keyed MERGE_STORES we union local + server by item id instead of whole-store last-write-wins,
+    // so two staff editing the same shop don't clobber each other. Stock quantity is rebuilt from the UNION of
+    // both devices' movement ledgers (conflict-free), and deletes are honoured via the shared tombstone store.
+    const serverBlob = {};
+    for (const b of (pull.blobs || [])) serverBlob[b.name] = b;
+    const parseArr = (v) => { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } };
+    const localMovements = parseArr(read('movements_v1', null, ws));
+    const serverMovements = serverBlob.movements_v1 ? parseArr(serverBlob.movements_v1.value) : [];
+    const movementsAvailable = !!serverBlob.movements_v1; // only reconstruct qty when we have the server ledger
+    const mergedMovements = mergeMovements(localMovements, serverMovements);
+    const localTombs = parseArr(read(TOMBSTONES_STORE, null, ws));
+    const serverTombs = serverBlob[TOMBSTONES_STORE] ? parseArr(serverBlob[TOMBSTONES_STORE].value) : [];
+    const mergedTombs = mergeTombstones(localTombs, serverTombs);
+    const isMergeStore = (name) => MERGE_STORES.has(name) || name === TOMBSTONES_STORE;
+    const mergedValueFor = (name, serverValue) => {
+      if (name === TOMBSTONES_STORE) return JSON.stringify(mergedTombs);
+      const arr = mergeStoreArrays(name, parseArr(read(name, null, ws)), parseArr(serverValue), {
+        localMovements, serverMovements, mergedMovements, movementsAvailable,
+      });
+      return JSON.stringify(applyTombstones(arr, tombstoneMap(mergedTombs, name)));
+    };
+    const mergeMeta = {}; // overrides written to fresh meta in step 3 (we fully manage merge stores' meta)
+    let mergeDirty = false;
+
     const serverNames = new Set();
     for (const b of pull.blobs || []) {           // undefined on a 304 → adopt loop is simply skipped
       if (!STORE_NAMES.includes(b.name)) continue;
       serverNames.add(b.name);
       const lm = meta[b.name] || { rev: 0, mtime: 0, dirty: false };
+
+      // MERGE path (ongoing syncs only): union local + server rather than pick a winner. On first sync we fall
+      // through to the bootstrap rule below (server wins wholesale) so a fresh device never injects stale data.
+      if (bootstrapped && isMergeStore(b.name)) {
+        const mergedVal = mergedValueFor(b.name, b.value);
+        const res = applyRemote(ws, b.name, mergedVal);
+        if (res && res.ok) {
+          adopted.add(b.name); // we manage this store's push/meta explicitly, not via the generic loop
+          const serverVal = b.value == null ? '' : b.value;
+          const changed = mergedVal !== serverVal; // merge produced info the server lacks → push it next cycle
+          mergeMeta[b.name] = { rev: b.rev, mtime: changed ? Date.now() : (b.mtime || 0), dirty: changed };
+          if (changed) mergeDirty = true;
+        } else writeFailed = true;
+        continue;
+      }
+
       let take;
       if (!bootstrapped) take = true;                       // first sync: server wins (never clobber cloud)
       else if (b.rev > (lm.rev || 0)) take = !(lm.dirty && (lm.mtime || 0) > (b.mtime || 0));
@@ -276,15 +320,21 @@ export async function syncNow() {
     for (const c of conflicts) fresh[c.name] = { rev: c.rev, mtime: c.mtime, dirty: false };
     // Clear dirty on role-rejected stores so we don't keep re-sending a write the server will always refuse.
     for (const name of rejected) { const cur = fresh[name] || {}; fresh[name] = { ...cur, dirty: false }; }
+    // Merge stores manage their own meta: adopt the server rev, and stay dirty when the union added info the
+    // server lacks so the next push carries it back (a fast-forward from the rev we just adopted).
+    for (const [name, m] of Object.entries(mergeMeta)) fresh[name] = m;
     fresh.__boot = true;
     // Remember the server's ETag so the next poll can send If-None-Match and get a cheap 304 when idle.
     if (pulledEtag) fresh.__etag = pulledEtag;
     saveMeta(ws, fresh);
 
-    const changedLocal = adoptions.length > 0 || conflicts.length > 0;
+    const changedLocal = adoptions.length > 0 || conflicts.length > 0 || Object.keys(mergeMeta).length > 0;
     if (changedLocal) {
       try { window.dispatchEvent(new CustomEvent(WORKSPACE_EVENT, { detail: { synced: true } })); } catch { /* ignore */ }
     }
+    // A merge produced a union the server doesn't have yet — push it promptly (debounced) so the other device
+    // sees it without waiting for the next poll.
+    if (mergeDirty) schedulePush();
     const conflictsN = conflictCount(ws);
     if (stashed > 0) {
       // Tell the UI a newer change from another device replaced one of theirs — and that we kept a copy.

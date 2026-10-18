@@ -200,6 +200,45 @@ describe('sync — conflict recovery (Phase 1.1g: no silent loss)', () => {
   });
 });
 
+describe('sync — per-item merge (item #3)', () => {
+  async function bootstrap() { await sync.syncNow(); }
+
+  it('unions items by id instead of clobbering — the other device\'s order survives', async () => {
+    await bootstrap();
+    // This device holds order A; another device created order B (server has only B, at a higher rev).
+    storage.writeJSON('orders_v1', [{ id: 'A', updatedAt: 100 }], ws);
+    server.blobs.set('orders_v1', { value: JSON.stringify([{ id: 'B', updatedAt: 200 }]), rev: 2, mtime: 200 });
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(true);
+    const ids = (storage.readJSON('orders_v1', [], ws)).map((o) => o.id).sort();
+    expect(ids).toEqual(['A', 'B']); // both kept — plain last-write-wins would have dropped A
+  });
+
+  it('rebuilds stock qty from BOTH devices\' movement ledgers, not last-write-wins', async () => {
+    await bootstrap();
+    // Both started at qty 10 (opening 10). This device sold 2; the other sold 3.
+    storage.writeJSON('inventory_v1', [{ id: 'p1', name: 'Cola', qty: 8, updatedAt: 100 }], ws);
+    storage.writeJSON('movements_v1', [{ id: 'm1', productId: 'p1', delta: -2, at: 100, type: 'sale' }], ws);
+    server.blobs.set('inventory_v1', { value: JSON.stringify([{ id: 'p1', name: 'Cola', qty: 7, updatedAt: 200 }]), rev: 2, mtime: 200 });
+    server.blobs.set('movements_v1', { value: JSON.stringify([{ id: 'm2', productId: 'p1', delta: -3, at: 200, type: 'sale' }]), rev: 2, mtime: 200 });
+    await sync.syncNow();
+    const p = (storage.readJSON('inventory_v1', [], ws)).find((x) => x.id === 'p1');
+    expect(p.qty).toBe(5); // 10 − 2 − 3, not 8 or 7
+    const movementIds = (storage.readJSON('movements_v1', [], ws)).map((m) => m.id).sort();
+    expect(movementIds).toEqual(['m1', 'm2']); // both ledgers unioned
+  });
+
+  it('does not resurrect an item deleted on this device (tombstone wins over the server\'s live copy)', async () => {
+    await bootstrap();
+    // Order X was deleted here (gone locally + a tombstone recorded); the server still has X live.
+    storage.writeJSON('orders_v1', [], ws);
+    storage.writeJSON('sync_tombstones_v1', [{ k: 'orders_v1:X', store: 'orders_v1', id: 'X', at: Date.now() }], ws);
+    server.blobs.set('orders_v1', { value: JSON.stringify([{ id: 'X', updatedAt: Date.now() - 100000 }]), rev: 2, mtime: 100 });
+    await sync.syncNow();
+    expect(storage.readJSON('orders_v1', [], ws)).toEqual([]); // stayed deleted
+  });
+});
+
 describe('sync — guards', () => {
   it('does nothing without a session', async () => {
     localStorage.removeItem('vendora:auth');
