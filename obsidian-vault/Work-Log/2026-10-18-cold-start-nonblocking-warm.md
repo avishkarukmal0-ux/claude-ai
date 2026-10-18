@@ -35,10 +35,11 @@ Don't keep-warm via `/health` (touches Mongo) or `/radius` (heavy).
   dyno wake, addressed by the keep-warm note.
 
 ## Verification
-- Backend boots clean; `centroids.test.js` 6 green (the Mongo path is `dbReady()`-guarded, so the cursor
-  change isn't exercised in unit tests — it needs a live Mongo). No behaviour change to `/healthz` or
-  `/radius` contracts.
-- ⚠️ The streaming warm's real effect (memory + responsiveness) is observable only against a live ~188k-row
+- Backend boots clean; `centroids.test.js` 6 green. **Gap filled:** new `centroidsMongo.test.js` (3) drives the
+  cursor-streaming warm with a faked connected mongoose + a mocked `OaCentroid` whose `.cursor()` is an async
+  generator — covering row filtering, the >10k event-loop yield branch, and the empty-collection reason,
+  without a live DB. No behaviour change to `/healthz` or `/radius` contracts.
+- The streaming warm's real-world memory/latency effect is still best confirmed against the live ~188k-row
   Mongo — watch the next deploy's warm line (`rss=…`) and that `/healthz` stays fast during the warm.
 
 ## Commit(s)
