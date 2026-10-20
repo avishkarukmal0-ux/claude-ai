@@ -32,7 +32,7 @@ export default function SyncStatus() {
   let tone = 'text-success-dark';
   if (s.status === 'syncing') { icon = RefreshCw; text = 'Syncing…'; tone = 'text-primary'; }
   else if (s.status === 'offline') { icon = CloudOff; text = 'Offline — saved on this device'; tone = 'text-gray-500'; }
-  else if (s.status === 'error') { icon = AlertCircle; text = 'Sync paused — will retry'; tone = 'text-danger'; }
+  else if (s.status === 'error') { icon = AlertCircle; text = s.error || 'Sync paused — will retry'; tone = 'text-danger'; }
   else if (s.status === 'synced') { text = s.lastSyncedAt ? `Updated ${relativeTime(s.lastSyncedAt)}` : 'Synced'; }
   else { text = s.pending > 0 ? `${s.pending} change${s.pending === 1 ? '' : 's'} to sync` : 'Up to date'; }
 

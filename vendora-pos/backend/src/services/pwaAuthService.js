@@ -80,12 +80,32 @@ async function register({ email, password, shopName } = {}) {
 // obsidian-vault/Deployment.md "Scaling out requires shared rate-limit + lockout state".
 const LOCKOUT_MAX = parseInt(process.env.PWA_LOGIN_LOCKOUT_MAX, 10) || 10;
 const LOCKOUT_MS = (parseInt(process.env.PWA_LOGIN_LOCKOUT_MINUTES, 10) || 15) * 60 * 1000;
-const _loginFails = new Map(); // `${email}|${ip}` -> { count, until }
+const LOCKOUT_MAX_ENTRIES = parseInt(process.env.PWA_LOGIN_LOCKOUT_MAX_ENTRIES, 10) || 50000; // hard cap (M2)
+const MAX_EMAIL_LEN = 254; // RFC 5321 — reject longer BEFORE any key insertion / hashing (M2)
+const _loginFails = new Map(); // `${email}|${ip}` -> { count, until, at }
 
 const lockoutKey = (email, ip) => `${email}|${ip || ''}`;
 
 /** Test hook: clear the login-lockout state. */
 function __clearLoginLockout() { _loginFails.clear(); }
+
+/**
+ * Drop stale lockout entries so attacker-created keys for nonexistent accounts can't accumulate forever
+ * (audit M2): keep only entries that are still actively locked OR were touched within the window. Runs on a
+ * timer and opportunistically on each failure. Exposed for deterministic tests (pass `now`).
+ */
+function sweepLockouts(now = Date.now()) {
+  for (const [k, rec] of _loginFails) {
+    const lockActive = rec.until && rec.until > now;
+    const recentlyTouched = (rec.at || 0) > now - LOCKOUT_MS;
+    if (!lockActive && !recentlyTouched) _loginFails.delete(k);
+  }
+}
+// Periodic sweep; unref'd so it never holds the process open, and disabled under the test runner.
+if (process.env.NODE_ENV !== 'test') {
+  const t = setInterval(() => sweepLockouts(), Math.max(60000, LOCKOUT_MS));
+  if (typeof t.unref === 'function') t.unref();
+}
 
 function assertNotLockedOut(key) {
   const rec = _loginFails.get(key);
@@ -95,15 +115,27 @@ function assertNotLockedOut(key) {
   }
 }
 function noteLoginFailure(key) {
-  const rec = _loginFails.get(key) || { count: 0, until: 0 };
+  const now = Date.now();
+  const rec = _loginFails.get(key) || { count: 0, until: 0, at: now };
   rec.count += 1;
-  if (rec.count >= LOCKOUT_MAX) { rec.until = Date.now() + LOCKOUT_MS; rec.count = 0; } // lock, reset the counter
+  rec.at = now;
+  if (rec.count >= LOCKOUT_MAX) { rec.until = now + LOCKOUT_MS; rec.count = 0; } // lock, reset the counter
   _loginFails.set(key, rec);
+  // Hard bound: if the map is over the cap (a flood of unique keys), sweep expired ones then evict the oldest
+  // insertion-order entries down to the cap. Never relies on a successful login/restart to clean up (M2).
+  if (_loginFails.size > LOCKOUT_MAX_ENTRIES) {
+    sweepLockouts(now);
+    let over = _loginFails.size - LOCKOUT_MAX_ENTRIES;
+    if (over > 0) { for (const k of _loginFails.keys()) { if (over-- <= 0) break; _loginFails.delete(k); } }
+  }
 }
 function noteLoginSuccess(key) { _loginFails.delete(key); }
 
 async function login({ email, password } = {}, { ip } = {}) {
   if (!email || !password) throw AppError.validation('Email and password are required');
+  // Reject an over-length email BEFORE building a lockout key or hashing — a 128 KiB email must not become a
+  // 128 KiB map key or cost a bcrypt compare (audit M2).
+  if (String(email).length > MAX_EMAIL_LEN) throw AppError.validation('Email is too long');
   const lower = String(email).toLowerCase();
   const key = lockoutKey(lower, ip);
   assertNotLockedOut(key); // refuse early while locked (before any password hashing work)
@@ -293,5 +325,5 @@ async function removeMember(accountId, memberId) {
 module.exports = {
   register, login, refresh, me, verifyAccess, requireOwner, assertMemberActive,
   listMembers, addMember, updateMember, removeMember,
-  __clearMemberCache, __clearLoginLockout,
+  __clearMemberCache, __clearLoginLockout, sweepLockouts, __lockoutSize: () => _loginFails.size,
 };

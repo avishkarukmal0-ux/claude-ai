@@ -11,7 +11,7 @@
 //  - Shared device: by default sign-out PURGES the shop's cached data from this device so the next person
 //    can't recover it. "Keep data on this device" opts out for a personal phone.
 import { flushDurable } from './storage';
-import { logout } from './account';
+import { logout, currentShop } from './account';
 import { getSyncState, syncNow } from './sync';
 
 /** How many local changes are still waiting to reach the server. 0 when accounts/sync are off. */
@@ -39,8 +39,12 @@ export async function flushAndSync() {
  * so the caller can warn honestly that those will be dropped from this device if it purges.
  */
 export async function signOut({ purge = true, trySync = true } = {}) {
+  // Pin the account we're signing out BEFORE the (awaited) final sync. If another account signs in on this
+  // device during that wait, logout() refuses rather than purge the new account's workspace (audit C1).
+  const originShopId = (currentShop() && currentShop().id) || null;
   let remaining = pendingCount();
   if (trySync && remaining > 0) remaining = await flushAndSync();
-  logout({ purge });
-  return { remaining, purged: purge };
+  const res = logout({ purge, expectShopId: originShopId });
+  const purged = !!(res && res.ok) && purge;
+  return { remaining, purged, skipped: !!(res && res.skipped) };
 }

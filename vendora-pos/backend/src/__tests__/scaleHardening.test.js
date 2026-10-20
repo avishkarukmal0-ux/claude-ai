@@ -5,7 +5,10 @@
 //  - the sync ETag (stable, order-independent, changes when any visible rev bumps)
 const jwt = require('jsonwebtoken');
 const config = require('../config');
-const { shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey } = require('../middleware/rateLimit');
+const {
+  shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey, emailForKey,
+  loginEmailLimiter, registerEmailLimiter,
+} = require('../middleware/rateLimit');
 const sync = require('../services/pwaSyncService');
 
 function pwaToken(shopId, extra = {}) {
@@ -58,6 +61,19 @@ describe('rate-limit keying (scale)', () => {
     expect(fromHome).toBe('email:owner@shop.com');
     expect(fromHome).toBe(fromCafe);                 // same account, different IPs → same bucket
     expect(emailOnlyKey({ body: {}, ip: '9.9.9.9' })).toBe('9.9.9.9'); // no email → falls back to IP
+  });
+
+  test('email key is length-bounded so a huge email can\'t bloat the limiter store (M2)', () => {
+    const huge = `${'a'.repeat(5000)}@x.com`;
+    expect(emailForKey({ body: { email: huge } }).length).toBeLessThanOrEqual(254);
+    expect(emailOnlyKey({ body: { email: huge }, ip: '1.2.3.4' }).length).toBeLessThanOrEqual(260);
+  });
+
+  test('register has its OWN per-email limiter instance (separate bucket from login) (M1)', () => {
+    // Distinct rateLimit instances → distinct stores, so invalid registrations can't drain login's budget.
+    expect(registerEmailLimiter).toBeDefined();
+    expect(loginEmailLimiter).toBeDefined();
+    expect(registerEmailLimiter).not.toBe(loginEmailLimiter);
   });
 });
 

@@ -181,11 +181,11 @@ describe('sync — conflict recovery (Phase 1.1g: no silent loss)', () => {
     expect(fired).toBe(1); // user was told
   });
 
-  it('stashes the losing local value on a push conflict (another device pushed first)', async () => {
+  it('merges (does not clobber) local on a push conflict for a merge store — nothing is lost', async () => {
     await sync.syncNow(); // bootstrap (empty)
     storage.writeJSON('orders_v1', [{ id: 'mine' }], ws);
     sync.markStoreDirty('orders_v1', 100);
-    // A different device creates orders_v1 with a newer mtime AFTER our pull but BEFORE our push.
+    // A different device creates orders_v1 AFTER our pull but BEFORE our push.
     sync.__setSyncTransport(async (path, opts) => {
       if (path === '/push' && !server.blobs.has('orders_v1')) {
         server.blobs.set('orders_v1', { value: JSON.stringify([{ id: 'theirs' }]), rev: 5, mtime: 9999 });
@@ -195,8 +195,59 @@ describe('sync — conflict recovery (Phase 1.1g: no silent loss)', () => {
 
     const res = await sync.syncNow();
     expect(res.ok).toBe(true);
-    expect(storage.readJSON('orders_v1', null, ws)).toEqual([{ id: 'theirs' }]); // server won
-    expect(listConflicts(ws).some((k) => k.name === 'orders_v1' && k.value === JSON.stringify([{ id: 'mine' }]))).toBe(true);
+    // Per-item merge on conflict: BOTH orders survive (plain adopt would have dropped 'mine').
+    const ids = storage.readJSON('orders_v1', [], ws).map((o) => o.id).sort();
+    expect(ids).toEqual(['mine', 'theirs']);
+    // A recovery copy of the pre-merge local is still kept as a safety net.
+    expect(listConflicts(ws).some((k) => k.name === 'orders_v1')).toBe(true);
+  });
+
+  it('T1: keeps a NEWER local edit made while a push is in flight (not the stale sent value)', async () => {
+    await sync.syncNow(); // bootstrap
+    storage.writeJSON('inventory_v1', [{ id: 'milk', qty: 10, updatedAt: 1000 }], ws);
+    sync.markStoreDirty('inventory_v1', 1000);
+    sync.__setSyncTransport(async (path, opts) => {
+      if (path === '/push') {
+        // The owner edits milk to 9 (NEWER) WHILE the push carrying 10 is in flight…
+        storage.writeJSON('inventory_v1', [{ id: 'milk', qty: 9, updatedAt: 3000 }], ws);
+        sync.markStoreDirty('inventory_v1', 3000);
+        // …and the server has meanwhile moved to 12 (older than the 9 edit) → conflict.
+        server.blobs.set('inventory_v1', { value: JSON.stringify([{ id: 'milk', qty: 12, updatedAt: 2000 }]), rev: 5, mtime: 2000 });
+      }
+      return server.transport(path, opts);
+    });
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(true);
+    const milk = storage.readJSON('inventory_v1', [], ws).find((p) => p.id === 'milk');
+    expect(milk.qty).toBe(9); // the newer edit survives — NOT lost to the stale sent 10 or the server's 12
+  });
+
+  it('T2: an oversized store rejected by the server stays unsynced (never a false green)', async () => {
+    await sync.syncNow(); // bootstrap
+    storage.writeJSON('waste_v1', [{ id: 'x' }], ws);
+    sync.markStoreDirty('waste_v1', 100);
+    sync.__setSyncTransport(async (path, opts) => {
+      if (path === '/push') return { success: true, applied: [], conflicts: [], rejected: [{ name: 'waste_v1', reason: 'too_large' }] };
+      return server.transport(path, opts);
+    });
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(false);
+    expect(res.tooLarge).toBeGreaterThanOrEqual(1);
+    expect(sync.getSyncState().pending).toBeGreaterThanOrEqual(1);          // still pending, not synced
+    expect(storage.readJSON('waste_v1', null, ws)).toEqual([{ id: 'x' }]);  // local data preserved
+  });
+
+  it('T2: a forbidden store is cleared so sync stops retrying a write the role can never make', async () => {
+    await sync.syncNow(); // bootstrap
+    storage.writeJSON('takings_v1', [{ id: 't' }], ws);
+    sync.markStoreDirty('takings_v1', 100);
+    sync.__setSyncTransport(async (path, opts) => {
+      if (path === '/push') return { success: true, applied: [], conflicts: [], rejected: [{ name: 'takings_v1', reason: 'forbidden' }] };
+      return server.transport(path, opts);
+    });
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(true);                       // not an error — the role simply can't write it
+    expect(sync.getSyncState().pending).toBe(0);     // dirty cleared → not retried forever
   });
 });
 

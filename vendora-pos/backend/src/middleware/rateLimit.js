@@ -37,18 +37,26 @@ function ipKey(req) {
 // Authenticated → per-shop bucket; otherwise per-IP. Used by the general + sync limiters.
 function shopOrIpKey(req) { return shopKeyFromToken(req) || ipKey(req); }
 
+// Bounded email for a limiter key: an attacker can POST a 128 KiB email within the 10 MiB body cap; keying on
+// it verbatim would store 128 KiB per attempt in the limiter (audit M2). Truncate to the RFC-5321 max so the
+// key is always small. (The auth service separately REJECTS an over-length email before doing any work.)
+const MAX_EMAIL_KEY_LEN = 254;
+function emailForKey(req) {
+  const e = (req.body && typeof req.body.email === 'string' ? req.body.email : '').toLowerCase().trim();
+  return e.length > MAX_EMAIL_KEY_LEN ? e.slice(0, MAX_EMAIL_KEY_LEN) : e;
+}
+
 // Login/register: key by (email + IP) so one shop's staff all logging in from the same IP don't exhaust a
 // shared login budget, while a single email/IP still can't brute-force. Body is parsed before these run.
 function emailIpKey(req) {
-  const email = (req.body && typeof req.body.email === 'string' ? req.body.email : '').toLowerCase().trim();
-  return `${email || 'anon'}|${ipKey(req)}`;
+  return `${emailForKey(req) || 'anon'}|${ipKey(req)}`;
 }
 
 // Email ONLY (ignoring IP): bounds attempts against a SINGLE account from anywhere (distributed guessing of
 // one password). Falls back to IP when no email is present so it never collapses to one global bucket.
 function emailOnlyKey(req) {
-  const email = (req.body && typeof req.body.email === 'string' ? req.body.email : '').toLowerCase().trim();
-  return email ? `email:${email}` : ipKey(req);
+  const e = emailForKey(req);
+  return e ? `email:${e}` : ipKey(req);
 }
 
 const RATE_MSG = (code, message) => ({ success: false, error: { code, message } });
@@ -134,6 +142,25 @@ const loginEmailLimiter = rateLimit({
   message: RATE_MSG('RATE_LIMIT', 'Too many attempts for this account — please wait a minute.'),
 });
 
+// Register has its OWN budgets (separate limiter instances / store prefixes) so a burst of invalid
+// registrations carrying a victim's email can't drain that victim's LOGIN bucket and lock a legitimate
+// owner out from another network (audit M1). Same shapes as login, different buckets.
+const registerIpLimiter = rateLimit({
+  ...COMMON,
+  store: makeStore('reg-ip'),
+  max: isTest ? 100000 : 60,
+  keyGenerator: ipKey,
+  message: RATE_MSG('RATE_LIMIT', 'Too many attempts from this network — please wait a minute.'),
+});
+
+const registerEmailLimiter = rateLimit({
+  ...COMMON,
+  store: makeStore('reg-email'),
+  max: isTest ? 100000 : 10,
+  keyGenerator: emailOnlyKey,
+  message: RATE_MSG('RATE_LIMIT', 'Too many registration attempts for this email — please wait a minute.'),
+});
+
 const strictLimiter = rateLimit({
   ...COMMON,
   store: makeStore('strict'),
@@ -143,7 +170,8 @@ const strictLimiter = rateLimit({
 });
 
 module.exports = {
-  generalLimiter, authLimiter, strictLimiter, syncLimiter, loginIpLimiter, loginEmailLimiter,
+  generalLimiter, authLimiter, strictLimiter, syncLimiter,
+  loginIpLimiter, loginEmailLimiter, registerIpLimiter, registerEmailLimiter,
   // exported for unit tests
-  shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey,
+  shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey, emailForKey,
 };

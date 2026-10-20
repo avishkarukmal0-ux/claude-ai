@@ -135,7 +135,11 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  // If-None-Match lets the cross-origin frontend send back the sync ETag; exposing ETag lets it READ the
+  // response ETag in the first place. Without both, the delta-pull 304 fast-path silently never engages
+  // across the Vercel→Render origin split (audit: live CORS observation).
+  allowedHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
+  exposedHeaders: ['ETag'],
 }));
 
 // Stripe webhooks must verify the signature against the UNPARSED body, so this one path gets the raw bytes

@@ -146,13 +146,20 @@ export async function refresh() {
  * Callers that may have unsynced work should flush + attempt a final sync and warn the user BEFORE calling
  * this (see AccountView.signOut) — purge is local and does not push to the server.
  */
-export function logout({ purge = true } = {}) {
+export function logout({ purge = true, expectShopId = null } = {}) {
   const s = loadSession();
   const shopId = s && s.shop && s.shop.id;
+  // C1: a caller that awaited a final sync may be resuming AFTER another account signed in on this device.
+  // If it pinned the identity it meant to sign out (`expectShopId`) and the CURRENT session is no longer that
+  // one, refuse — clearing credentials or purging here would wipe the NEW account's session and local work.
+  if (expectShopId != null && shopId !== expectShopId) {
+    return { ok: false, skipped: true, reason: 'identity_changed' };
+  }
   clearSession();
   if (purge && shopId) purgeWorkspace(shopWorkspace(shopId));
   setActiveWorkspace(LOCAL_WORKSPACE);
   announce();
+  return { ok: true, shopId };
 }
 
 // --- guest → shop migration (explicit, never silent) --------------------------------------

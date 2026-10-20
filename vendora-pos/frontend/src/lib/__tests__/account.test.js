@@ -119,3 +119,29 @@ describe('account — guest → shop migration (explicit, non-destructive)', () 
     expect(readJSON('inventory_v1', [], shopWorkspace('shopA'))).toEqual([{ id: 'shop-own' }]); // untouched
   });
 });
+
+describe('account — logout identity guard (C1)', () => {
+  it('refuses to purge when the active account changed during an awaited sign-out', async () => {
+    await account.login({ email: 'a@x.com', password: 'pw' });          // shopA
+    writeJSON('inventory_v1', [{ id: 'A-data' }], shopWorkspace('shopA'));
+    const origin = account.currentShop().id;                            // pinned before the (awaited) sync
+    // Another account signs in on this device WHILE A's sign-out awaited its final sync.
+    account.__setTransport(makeTransport({ '/login': () => ({ token: 't', refreshToken: 'r', shop: { id: 'shopB', name: 'B' } }) }));
+    await account.login({ email: 'b@x.com', password: 'pw' });          // session is now shopB
+    writeJSON('inventory_v1', [{ id: 'B-data' }], shopWorkspace('shopB'));
+    // A's stale sign-out resumes, pinned to shopA.
+    const res = account.logout({ purge: true, expectShopId: origin });
+    expect(res.skipped).toBe(true);
+    expect(account.currentShop()).toEqual({ id: 'shopB', name: 'B' });  // B stays signed in
+    expect(readJSON('inventory_v1', null, shopWorkspace('shopB'))).toEqual([{ id: 'B-data' }]); // B NOT purged
+  });
+
+  it('a normal sign-out (identity unchanged) still purges the intended workspace', async () => {
+    await account.login({ email: 'a@x.com', password: 'pw' });          // shopA
+    writeJSON('inventory_v1', [{ id: 'A-data' }], shopWorkspace('shopA'));
+    const res = account.logout({ purge: true, expectShopId: account.currentShop().id });
+    expect(res.ok).toBe(true);
+    expect(account.isLoggedIn()).toBe(false);
+    expect(readJSON('inventory_v1', null, shopWorkspace('shopA'))).toBeNull(); // intended workspace purged
+  });
+});

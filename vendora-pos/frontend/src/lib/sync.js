@@ -294,16 +294,43 @@ export async function syncNow() {
       guard();
       for (const a of res.applied || []) applied.push({ name: a.name, rev: a.rev, sentMtime: sentMtime[a.name] });
       for (const c of res.conflicts || []) {
-        // Our pushed value lost LWW — stash it before adopting the server's winner (Phase 1.1g).
         const sent = changes.find((ch) => ch.name === c.name);
-        if (sent && sent.value != null && sent.value !== c.value) { stashConflict(ws, { name: c.name, value: sent.value }); stashed += 1; }
-        const r = applyRemote(ws, c.name, c.value); // server's copy won — adopt it
-        if (r && r.ok) conflicts.push({ name: c.name, rev: c.rev, mtime: c.mtime });
-        else writeFailed = true;
+        // Use the value RIGHT NOW — it may be NEWER than what we sent, because the owner edited WHILE this
+        // push was in flight. Stashing/adopting against the stale `sent` snapshot silently loses that newer
+        // edit (audit T1, P1). Everything below reconciles against `currentLocal`, never `sent`.
+        const currentLocal = read(c.name, null, ws);
+        if (isMergeStore(c.name)) {
+          // Per-item merge of current-local + server, so neither the in-flight edit nor the server copy wins
+          // wholesale. Keep a recovery copy of the current local if the merge changed it, and stay dirty when
+          // the merged result still carries info the server lacks so it re-pushes.
+          const merged = mergedValueFor(c.name, c.value);
+          if (currentLocal != null && currentLocal !== merged) { stashConflict(ws, { name: c.name, value: currentLocal }); stashed += 1; }
+          const r = applyRemote(ws, c.name, merged);
+          if (r && r.ok) {
+            const stillDirty = merged !== (c.value == null ? '' : c.value);
+            mergeMeta[c.name] = { rev: c.rev, mtime: Date.now(), dirty: stillDirty };
+            if (stillDirty) mergeDirty = true;
+          } else writeFailed = true;
+          continue;
+        }
+        // Non-merge store: last-write-wins by mtime, decided on the CURRENT local value + its mtime.
+        const localMtime = (meta[c.name] && meta[c.name].mtime) || 0;
+        const localChangedSinceSend = !!(sent && currentLocal != null && currentLocal !== sent.value);
+        if (localChangedSinceSend && localMtime > (c.mtime || 0)) {
+          // Our newer unsent edit wins — keep it live, adopt the server rev as the base, re-push next cycle.
+          adoptions.push({ name: c.name, rev: c.rev, mtime: localMtime, keepDirty: true });
+        } else {
+          // Server wins LWW — stash the CURRENT local (never the stale `sent`) before overwriting it.
+          if (currentLocal != null && currentLocal !== c.value) { stashConflict(ws, { name: c.name, value: currentLocal }); stashed += 1; }
+          const r = applyRemote(ws, c.name, c.value);
+          if (r && r.ok) conflicts.push({ name: c.name, rev: c.rev, mtime: c.mtime });
+          else writeFailed = true;
+        }
       }
-      // Stores this role isn't allowed to write (backend-enforced). Stop pushing them so sync doesn't
-      // retry forever; the UI never lets this role edit them in the first place.
-      for (const rj of res.rejected || []) rejected.push(rj.name);
+      // Per-store rejects carry a reason (audit T2): a `forbidden`/`unknown` store is cleared so sync stops
+      // retrying a write that will always be refused, but a `too_large` (capacity) failure stays DIRTY so it
+      // reads as unsynced — never a false "synced" for data that wasn't backed up.
+      for (const rj of res.rejected || []) rejected.push({ name: rj.name, reason: rj.reason });
     }
 
     // 3) MERGE into a FRESH copy of meta so anything the user changed during the requests survives.
@@ -322,8 +349,15 @@ export async function syncNow() {
       else fresh[a.name] = { rev: a.rev, mtime: cur.mtime || a.sentMtime || Date.now(), dirty: false };
     }
     for (const c of conflicts) fresh[c.name] = { rev: c.rev, mtime: c.mtime, dirty: false };
-    // Clear dirty on role-rejected stores so we don't keep re-sending a write the server will always refuse.
-    for (const name of rejected) { const cur = fresh[name] || {}; fresh[name] = { ...cur, dirty: false }; }
+    // Rejected stores (audit T2): clear dirty ONLY for permission/unknown (a write that will always be
+    // refused — don't retry forever). A `too_large` capacity failure stays DIRTY so it keeps reading as
+    // unsynced; the local data is intact but it isn't backed up until it's reduced.
+    let blocked = 0;
+    for (const { name, reason } of rejected) {
+      const cur = fresh[name] || {};
+      if (reason === 'forbidden' || reason === 'unknown') fresh[name] = { ...cur, dirty: false };
+      else blocked += 1; // too_large (or any capacity failure) — leave it dirty
+    }
     // Merge stores manage their own meta: adopt the server rev, and stay dirty when the union added info the
     // server lacks so the next push carries it back (a fast-forward from the rev we just adopted).
     for (const [name, m] of Object.entries(mergeMeta)) fresh[name] = m;
@@ -347,6 +381,11 @@ export async function syncNow() {
     if (writeFailed) {
       setState({ status: 'error', error: 'Some changes couldn’t be saved on this device', pending: countDirty(fresh), conflicts: conflictsN });
       return { ok: false, writeFailed: true };
+    }
+    if (blocked > 0) {
+      // Something was too large to back up — surface it honestly instead of a green "synced" (audit T2).
+      setState({ status: 'error', error: 'Some data is too large to back up across devices — reduce it to sync.', pending: countDirty(fresh), conflicts: conflictsN });
+      return { ok: false, tooLarge: blocked, changedLocal, stashed };
     }
     setState({ status: 'synced', lastSyncedAt: Date.now(), pending: countDirty(fresh), error: null, conflicts: conflictsN });
     return { ok: true, changedLocal, stashed };

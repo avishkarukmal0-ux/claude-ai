@@ -5,15 +5,19 @@
 const express = require('express');
 
 const router = express.Router();
-const { loginIpLimiter, loginEmailLimiter, ipKey } = require('../middleware/rateLimit');
+const {
+  loginIpLimiter, loginEmailLimiter, registerIpLimiter, registerEmailLimiter, ipKey,
+} = require('../middleware/rateLimit');
 const pwaAuth = require('../services/pwaAuthService');
 
-// Credential endpoints stack per-IP (across all emails) + per-email (across all IPs) limiters so neither
+// Each endpoint stacks per-IP (across all emails) + per-email (across all IPs) limiters so neither
 // credential stuffing from one IP nor distributed guessing of one account is unbounded (scale audit #1).
-const credentialLimiters = [loginIpLimiter, loginEmailLimiter];
+// Register has its OWN buckets so invalid registrations can't drain a victim's LOGIN allowance (audit M1).
+const loginLimiters = [loginIpLimiter, loginEmailLimiter];
+const registerLimiters = [registerIpLimiter, registerEmailLimiter];
 
 // POST /api/pwa-auth/register  { email, password, shopName }
-router.post('/register', ...credentialLimiters, async (req, res, next) => {
+router.post('/register', ...registerLimiters, async (req, res, next) => {
   try {
     const out = await pwaAuth.register(req.body || {});
     res.status(201).json({ success: true, ...out });
@@ -21,7 +25,7 @@ router.post('/register', ...credentialLimiters, async (req, res, next) => {
 });
 
 // POST /api/pwa-auth/login  { email, password }  (owner OR staff member)
-router.post('/login', ...credentialLimiters, async (req, res, next) => {
+router.post('/login', ...loginLimiters, async (req, res, next) => {
   try {
     const out = await pwaAuth.login(req.body || {}, { ip: ipKey(req) }); // lockout keyed by email+IP (#1)
     res.json({ success: true, ...out });
