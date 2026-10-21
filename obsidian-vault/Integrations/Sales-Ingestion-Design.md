@@ -82,7 +82,11 @@ auto-deduct silently.
    (`routes/pwaPosRoutes.js`, PWA-token gated, secret-free) + `components/till/TillConnectView.jsx` via
    `lib/posClient.js`. Honest statuses; cloud rows non-tappable; CSV is the only live CTA, routed to the
    unchanged `SalesImportView`. See [[2026-10-21-pos-connect-till-ui]].
-3. **Comparison mode + deducting CSV path** (opening baseline, cut-off, dedupe via `operationId`, returns).
+3. ✅ **Comparison mode + deducting CSV path** (done) — `compareImport` (pure), `posSettingsStore` (per-shop
+   opt-in, default OFF, owner/manager only), `deductImportedSales`/`restoreImportedSales` (idempotent via
+   operationId, cap at stock-on-hand, movements-first), `applyImport({deduct,cutoff})` with opening-baseline
+   filtering + totals-only refusal, and the `SalesImportView` comparison table + opt-in UI. Returns never
+   restock. See [[2026-10-21-pos-comparison-deduct]].
 4. **Backend cloud scaffolding** for the ready providers (OAuth placeholders, webhook-verify stubs, durable
    queue) — kept disabled until approvals/credentials exist.
 5. **Status/recovery screens, pilot feedback capture, expanded tests** (sandbox where available).
