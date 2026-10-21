@@ -140,6 +140,7 @@ The recurring round-3 lesson: *a passing helper test does not prove the whole us
 - **CI gates the prod dependency audit**: `npm audit --omit=dev --audit-level=high` runs in the backend job — a HIGH runtime-dep advisory fails the build (dev-only tooling advisories are excluded). Keep runtime deps clean; don't silence it.
 - **Don't log every 2xx in prod.** requestLogger keeps 2xx/3xx at `debug`; load is surfaced by one aggregated `traffic: …` info line per window (count + p95 + 4xx/5xx + rss). Add new high-volume visibility the same way, not per-request info logs.
 - **History (`SyncBlobHistory`) is gated on `SYNC_HISTORY`** and dedupes no-op snapshots; it's capped per store + TTL'd. Don't let any new "backup" write grow unbounded.
+- **Test runners differ by side: backend = Jest, frontend = vitest.** Backend test files use Jest globals (`describe/test/expect` with no import) — run them with `npx jest …`. Frontend files `import { describe, it, expect } from 'vitest'` — run with `npx vitest run …`. Running a Jest file under vitest fails with `describe is not defined` (and vice-versa); don't let that fool you into thinking a passing suite is broken.
 
 ## UK domain rules (important!)
 - **Tax year 2025/26** constants live in `backend/src/services/payrollService.js` and are mirrored client-side in payroll components. Keep them in sync. See [[Accounting]].
