@@ -92,6 +92,10 @@ auto-deduct silently.
    (gating + honest `POS_NOT_AVAILABLE`, delegates every live call to the adapters which throw until verified),
    connect/callback routes + a signature-authenticated webhook receiver. Nothing accredited/credentialed, so
    all live paths say "not available yet"; not deploy-enabled. See [[2026-10-21-pos-cloud-scaffolding]].
-5. **Status/recovery screens, pilot feedback capture, expanded tests** (sandbox where available).
+5. ✅ **Status/recovery screens + expanded tests** (done) — `TillConnectView` reads the real `/connections`
+   endpoint and shows each till's actual connection status + a Reconnect affordance (honest while inert); new
+   adapter contract suite proves all 9 adapters refuse every live op and match the registry. Pilot feedback
+   capture deferred until a real collection channel exists (no fabricated telemetry). See
+   [[2026-10-21-pos-connection-status]].
 
 > Nothing in slices 3–5 ships enabled without the owner's explicit, per-shop opt-in after a comparison period.
