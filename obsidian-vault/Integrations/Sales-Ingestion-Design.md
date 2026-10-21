@@ -87,8 +87,11 @@ auto-deduct silently.
    operationId, cap at stock-on-hand, movements-first), `applyImport({deduct,cutoff})` with opening-baseline
    filtering + totals-only refusal, and the `SalesImportView` comparison table + opt-in UI. Returns never
    restock. See [[2026-10-21-pos-comparison-deduct]].
-4. **Backend cloud scaffolding** for the ready providers (OAuth placeholders, webhook-verify stubs, durable
-   queue) — kept disabled until approvals/credentials exist.
+4. ✅ **Backend cloud scaffolding** (done, inert) — `config.posCloud` (default OFF), `utils/secretBox`
+   (encrypted tokens at rest), `PosConnection` + `PosSaleEvent` (idempotent durable queue), `posCloudService`
+   (gating + honest `POS_NOT_AVAILABLE`, delegates every live call to the adapters which throw until verified),
+   connect/callback routes + a signature-authenticated webhook receiver. Nothing accredited/credentialed, so
+   all live paths say "not available yet"; not deploy-enabled. See [[2026-10-21-pos-cloud-scaffolding]].
 5. **Status/recovery screens, pilot feedback capture, expanded tests** (sandbox where available).
 
 > Nothing in slices 3–5 ships enabled without the owner's explicit, per-shop opt-in after a comparison period.
