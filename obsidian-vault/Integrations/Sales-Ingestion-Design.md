@@ -68,6 +68,16 @@ auto-deduct silently.
   mapping, validation, unmatched review, **preserve barcode leading zeros**, duplicate-file + overlapping-
   record detection, show-before-apply, and **reject totals-only reports** for item-level deductions.
 
+## Known limitations (honest, by design)
+- **CSV overlap dedup is file-level, not record-level.** The manual CSV importer dedups an identical aggregate
+  set via a content hash (`hashRows` → `operationId`). A file that OVERLAPS a previous one (the same sales plus
+  extra rows) gets a different hash and is NOT recognised as overlapping, so shared rows can be counted twice.
+  Aggregate CSV exports carry no transaction/line IDs, so record-level dedup is not possible from that input —
+  we do not claim it. Mitigations: re-importing the IDENTICAL file is still blocked; the owner picks
+  non-overlapping date ranges; and when a provider's item-level export (or a cloud feed) gives stable
+  transaction/line IDs, those become the `operationId` and dedup becomes record-level (`salesModel.saleKey`).
+  Audit 2026-10-21 (P2). Surface this in the importer copy so owners choose clean periods.
+
 ## Security
 - Provider secrets + refresh tokens: **server-side only, encrypted** via the project's secret approach; never
   in frontend bundles, browser storage, logs or exports. Verify provider webhooks by their documented
