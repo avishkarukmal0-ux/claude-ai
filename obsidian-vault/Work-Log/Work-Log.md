@@ -186,3 +186,11 @@ Running journal of **everything we do from here onwards** — newest first. Each
 - [x] ~~Tidy `routes/index.js` payroll mount~~ — done in [[2026-07-13-Fix-Payroll-Route-Mount]] (was a boot-crash bug; removed dead stub)
 - [ ] End-to-end manual test of Accounting flow (VAT → Payroll → Expenses → P&L)
 - [ ] Confirm Railway + Vercel deploy configs current
+
+### ⏳ Sequenced AFTER the EU server move (owner decision, 2026-10-21)
+**Do the EU infra move FIRST**, then these. The move = backend to paid Render **Frankfurt** + Atlas **M10
+eu-west-1** co-located, UptimeRobot on `/healthz`, verify the 5 review fixes live (see [[2026-10-20-security-capacity-review-fixes]] and [[Deployment]] scaling/cold-start notes). Only once that's live:
+- [ ] **History-listing size projection** — `pwaSyncService.listHistory` loads full snapshot `value`s just to compute size; store a size field on write + project `-value` on list. (Cheap; only matters with `SYNC_HISTORY` on.)
+- [ ] **p95 / 5xx alert** — wire the existing per-5-min `traffic:` log line (count · p95 · 4xx/5xx · rss) to an alert threshold so a latency/error regression pages someone.
+- [ ] Then the broader capacity program: staging load test on the EU box with agreed latency/error targets; pagination/record-based transfer for large shops; confirm Mongo indexes via explain; shared Redis for rate-limit + lockout before any 2nd instance.
+> Rationale: profiling/optimising before the cross-Atlantic DB latency is removed would measure the wrong bottleneck. — these two code items are deferred by owner, not forgotten.
