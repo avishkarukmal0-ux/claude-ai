@@ -6,7 +6,7 @@ import {
   Settings, LogIn, ChevronRight, X, Download, Upload,
   PackageCheck, ClipboardCheck, CalendarClock, PackageOpen, Hourglass,
   Truck, Building2, Receipt, BadgePercent, Coins, LayoutDashboard, Users, Inbox, ClipboardList, MessageSquarePlus,
-  FileSpreadsheet, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy, ShieldAlert,
+  FileSpreadsheet, Plug, TrendingUp, UserCog, Bell, GitMerge, CloudCog, Sparkles, LifeBuoy, ShieldAlert,
   Cloud, CloudOff, Check, RefreshCw,
 } from 'lucide-react';
 import { withGlossary } from '../components/common/glossary';
@@ -40,6 +40,7 @@ import ImportView from '../components/import/ImportView';
 import RequestsView from '../components/requests/RequestsView';
 import MonthlyOutcomesView from '../components/outcomes/MonthlyOutcomesView';
 import SalesImportView from '../components/salesimport/SalesImportView';
+import TillConnectView from '../components/till/TillConnectView';
 import ScanIdentifyView from '../components/scan/ScanIdentifyView';
 import CategoryInsightsView from '../components/insights/CategoryInsightsView';
 import InvoiceCaptureView from '../components/invoices/InvoiceCaptureView';
@@ -246,6 +247,7 @@ export default function HomePage() {
     payments: 'Payments due', insights: 'Neighbourhood Insights', area: 'Your area', requests: 'Customer requests',
     takings: 'Takings & cash-up', overview: 'Owner glance', outcomes: 'This month', 'weekly-report': 'Weekly report',
     tasks: 'Team tasks', worker: 'Staff view', suggestions: 'From the team', 'sales-import': 'Import till sales',
+    'till-connect': 'Connect your till',
     'cloud-backups': 'Cloud version history', recovered: 'Recovered changes', 'credit-recovery': 'Credit note repair',
     notifications: 'Notifications', support: 'Help & diagnostics', 'staff-admin': 'Staff access',
   };
@@ -339,6 +341,7 @@ export default function HomePage() {
         {screen === 'requests' && <RequestsView onBack={() => setScreen(null)} />}
         {screen === 'outcomes' && canSeeScreen(role, 'outcomes') && <MonthlyOutcomesView onBack={() => setScreen(null)} />}
         {screen === 'sales-import' && <SalesImportView onBack={() => setScreen(null)} />}
+        {screen === 'till-connect' && <TillConnectView onBack={() => setScreen(null)} onOpenCsv={() => setScreen('sales-import')} />}
         {screen === 'scan-identify' && <ScanIdentifyView onBack={() => setScreen(null)} />}
         {screen === 'category-insights' && <CategoryInsightsView onBack={() => setScreen(null)} />}
         {screen === 'invoices' && INVOICES_ENABLED && canSeeScreen(role, 'invoices') && <InvoiceCaptureView onBack={() => setScreen(null)} />}
@@ -527,7 +530,7 @@ export default function HomePage() {
               <Row icon={Inbox} label="From the team" onClick={() => setScreen('suggestions')} badge={suggestionCount} />
             </MoreGroup>
             <MoreGroup title="Data">
-              <Row icon={FileSpreadsheet} label="Import till sales" sub="Turn estimates into confirmed sales (optional)" onClick={() => setScreen('sales-import')} />
+              <Row icon={Plug} label="Connect your till" sub="Import till sales — turn estimates into confirmed figures" onClick={() => setScreen('till-connect')} />
               <Row icon={Download} label="Export backup" disabled={exporting} sub={exporting ? 'Saving…' : (lastBackupAt ? `Last saved ${new Date(lastBackupAt).toLocaleDateString('en-GB')} · a file you can restore` : 'Save your data to a file you can restore — no backup yet')} onClick={onExport} />
               <Row icon={Upload} label="Restore from backup" sub="Load a backup file — replaces current data" onClick={() => restoreInputRef.current?.click()} />
               <input ref={restoreInputRef} type="file" accept="application/json,.json" onChange={onRestoreFile} hidden />

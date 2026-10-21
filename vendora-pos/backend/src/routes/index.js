@@ -44,6 +44,12 @@ router.use('/pwa-lookup', pwaLookupRoutes);
 const pwaInvoiceOcrRoutes = require('./pwaInvoiceOcrRoutes');
 router.use('/pwa-invoice-ocr', pwaInvoiceOcrRoutes);
 
+// ── PWA till-connection catalogue (POS sales import, slice 2). READ-ONLY + secret-free: serves the honest
+//    provider availability catalogue to the "Connect your till" screen. Connects nothing; CSV is the only
+//    live method. PWA token required. ──
+const pwaPosRoutes = require('./pwaPosRoutes');
+router.use('/pwa-pos', pwaPosRoutes);
+
 // ── PWA daily digest notifications (optional; email off unless configured). Prefs/preview need a PWA
 //    token; POST /run is gated by a shared secret for an external scheduler. ──
 const pwaNotifyRoutes = require('./pwaNotifyRoutes');
