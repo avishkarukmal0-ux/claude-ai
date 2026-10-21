@@ -17,6 +17,9 @@
     <meta name="apple-mobile-web-app-title" content="Vendora" />
     <meta name="mobile-web-app-capable" content="yes" />
     <!-- Fonts are self-hosted (Fontsource, imported in main.jsx) — no fonts.googleapis.com dependency. -->
+    <!-- Boot watchdog: a 'self' classic script (CSP-safe, no inline) armed BEFORE the app module so a failed
+         boot shows a visible error + self-heal button instead of a blank screen. Does nothing once mounted. -->
+    <script src="/boot-check.js"></script>
   </head>
   <body>
     <div id="root"></div>
