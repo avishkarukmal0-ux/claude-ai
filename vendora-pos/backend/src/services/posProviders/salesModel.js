@@ -42,21 +42,33 @@ function toMinorUnits(value) {
  *  (a missing quantity is unknown, never 0 — the engine routes it to review rather than deducting nothing). */
 function normalizeQty(value) {
   if (typeof value !== 'number') {
-    const cleaned = String(value == null ? '' : value).replace(/[^0-9.\-]/g, '');
-    if (cleaned === '' || cleaned === '-' || cleaned === '.') return null;
-    value = Number(cleaned);
+    // Strip only whitespace, thousands commas and a leading currency symbol — NOT letters. Then require a
+    // plain decimal, so a string like "1e3" or "12x" is REJECTED (→ null → review) rather than silently
+    // becoming a different number (audit P2). A genuine number passed as a JS number is handled below.
+    const s = String(value == null ? '' : value).trim().replace(/[\s,£$€]/g, '');
+    if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
+    value = Number(s);
   }
   if (!Number.isFinite(value)) return null;
   return Math.round(value * 1000) / 1000;
 }
 
+const UNIT_ALIASES = Object.freeze({
+  ea: UNIT.EACH, unit: UNIT.EACH, units: UNIT.EACH, pcs: UNIT.EACH, '': UNIT.EACH,
+  kilogram: UNIT.KG, kilo: UNIT.KG, kgs: UNIT.KG,
+  litres: UNIT.L, l: UNIT.L,
+});
 function normalizeUnit(u) {
   const s = String(u || '').trim().toLowerCase();
   if (VALID_UNITS.has(s)) return s;
-  if (s === 'ea' || s === 'unit' || s === 'units' || s === 'pcs' || s === '') return UNIT.EACH;
-  if (s === 'kilogram' || s === 'kilo' || s === 'kgs') return UNIT.KG;
-  if (s === 'litres' || s === 'l') return UNIT.L;
-  return UNIT.EACH; // unknown unit defaults to each but the caller should route weighted ambiguity to review
+  if (s in UNIT_ALIASES) return UNIT_ALIASES[s];
+  return UNIT.EACH; // unknown → assume each, but makeLine flags it so the engine routes it to review
+}
+/** True when the raw unit is a recognised token (a valid unit, a known alias, or blank). An UNRECOGNISED
+ *  non-empty unit (e.g. "dozen", "tray") must not silently become EACH — makeLine flags it for review. */
+function isRecognizedUnit(u) {
+  const s = String(u == null ? '' : u).trim().toLowerCase();
+  return s === '' || VALID_UNITS.has(s) || (s in UNIT_ALIASES);
 }
 
 // ── Identity / dedupe ─────────────────────────────────────────────────────────
@@ -88,6 +100,9 @@ function makeLine({ lineId = null, kind = LINE_KIND.SALE, qty, unit = UNIT.EACH,
     productRef: productRef(ref),
     qty: normalizeQty(qty),
     unit: normalizeUnit(unit),
+    // Flag an unrecognised unit (e.g. "dozen") so makeSale routes it to review instead of treating the
+    // assumed EACH as a confirmed quantity (audit P2).
+    ...(isRecognizedUnit(unit) ? {} : { unitUnknown: true }),
     amountMinor: toMinorUnits(amount),
     packSize: packSize == null ? null : (Number(packSize) || null),
   };
@@ -109,7 +124,10 @@ function makeSale({
     locationId: locationId == null ? null : String(locationId),
     tillId: tillId == null ? null : String(tillId),
     saleId: saleId == null ? null : String(saleId),
-    status: VALID_STATUSES.has(status) ? status : SALE_STATUS.COMPLETED,
+    // Do NOT fail open to completed (audit P2): an explicit, unrecognised status (e.g. "pending") becomes
+    // 'unknown' and is flagged below, so it can never pass isStockEligible. An OMITTED status still defaults
+    // to completed (the documented convenience for simple imports) via the parameter default above.
+    status: VALID_STATUSES.has(status) ? status : 'unknown',
     saleAt: Number.isFinite(Number(saleAt)) ? Number(saleAt) : null,
     importedAt: Number.isFinite(Number(importedAt)) ? Number(importedAt) : Date.now(),
     currency: String(currency || 'GBP').toUpperCase(),
@@ -119,9 +137,11 @@ function makeSale({
   sale.key = saleKey(sale);
   sale.issues = [];
   if (!sale.provider || !sale.saleId) sale.issues.push({ code: 'no_sale_id', message: 'Missing provider/transaction id' });
+  if (sale.status !== SALE_STATUS.COMPLETED) sale.issues.push({ code: 'bad_status', message: `Sale status "${sale.status}" is not a verified completed sale` });
   for (const l of sale.lines) {
     const r = l.productRef || {};
     if (!r.productId && !r.barcode && !r.sku) sale.issues.push({ code: 'unmatched', lineId: l.lineId, message: 'No barcode/SKU/product id to match on (name alone is never matched)' });
+    if (l.unitUnknown) sale.issues.push({ code: 'unknown_unit', lineId: l.lineId, message: 'Unrecognised unit — confirm how this product is sold' });
     if (l.qty == null || l.qty <= 0) sale.issues.push({ code: 'bad_qty', lineId: l.lineId, message: 'Missing or non-positive quantity' });
     if ((l.unit === UNIT.KG || l.unit === UNIT.G || l.unit === UNIT.L || l.unit === UNIT.ML) && l.qty != null && !Number.isInteger(l.qty)) {
       // weighted sale — fine, but flag so the matcher confirms the product is sold by that unit
@@ -136,7 +156,8 @@ function makeSale({
 function isStockEligible(sale) {
   if (!sale || sale.status !== SALE_STATUS.COMPLETED) return false;
   if (!Array.isArray(sale.lines) || !sale.lines.length) return false;
-  return !(sale.issues || []).some((i) => i.code === 'bad_qty' || i.code === 'unmatched' || i.code === 'no_sale_id');
+  const BLOCKING = new Set(['bad_qty', 'unmatched', 'no_sale_id', 'bad_status', 'unknown_unit']);
+  return !(sale.issues || []).some((i) => BLOCKING.has(i.code));
 }
 
 module.exports = {

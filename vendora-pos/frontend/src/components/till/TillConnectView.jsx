@@ -13,8 +13,11 @@ import { getProviders, getConnections, startConnect, describeConnection } from '
 // cloud connections are shown truthfully as in-testing / needs-approval / not-built, and are not tappable.
 
 // How each provider's DIRECT (cloud) connection reads today. CSV is handled separately — it's the live method.
+// Honest wording (audit P2): every adapter's live operations still throw, so "in testing" would overstate
+// real progress. We say "planned — not built yet" for a provider we could build against, and keep the
+// approval / unsupported states explicit.
 const CLOUD_STATUS = {
-  ready_for_testing: { label: 'Direct link: in testing — not live yet', tone: 'amber', Icon: Clock },
+  ready_for_testing: { label: 'Direct link: planned — not built yet', tone: 'gray', Icon: Clock },
   approval_required: { label: 'Direct link: needs partner approval', tone: 'gray', Icon: ShieldCheck },
   not_configured: { label: 'Direct link: not built yet', tone: 'gray', Icon: Clock },
   unsupported_setup: { label: "Direct link: can't read item-level sales", tone: 'gray', Icon: Ban },
@@ -50,7 +53,7 @@ function ProviderCard({ p, onOpenCsv, connection, onReconnect, reconnecting }) {
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {p.csvCapable
-          ? <Badge tone="green" Icon={FileSpreadsheet}>CSV import works now</Badge>
+          ? <Badge tone="green" Icon={FileSpreadsheet}>Item-level CSV — check your export</Badge>
           : <Badge tone="gray" Icon={Ban}>CSV not usable (payment-level only)</Badge>}
         {conn
           ? <Badge tone={conn.tone} Icon={CONN_ICON[connection.status]}>{conn.label}</Badge>

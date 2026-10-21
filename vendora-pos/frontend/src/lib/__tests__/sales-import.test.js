@@ -103,6 +103,27 @@ describe('buildImport', () => {
     expect(a.lines.length).toBe(2); // one bucket per product/day
   });
 
+  it('never attaches a supplied-but-unknown barcode to a product by name (audit P2)', () => {
+    const rows = [
+      ['999', 'Milk 2L', '3', '03/03/2026'], // barcode supplied but unknown → must NOT fall back to name
+    ];
+    const mapping = { barcode: 0, name: 1, qty: 2, date: 3, amount: -1 };
+    const a = buildImport({ rows, mapping, products, now });
+    expect(a.unmatched.length).toBe(1);   // goes to review, not silently matched to p1
+    expect(a.lines.length).toBe(0);
+  });
+
+  it('does not auto-match an ambiguous name shared by two products (audit P2)', () => {
+    const dupProducts = [
+      { id: 'a', name: 'Milk', barcode: '601' },
+      { id: 'b', name: 'Milk', barcode: '602' }, // same name, different product
+    ];
+    const rows = [['', 'Milk', '2', '03/03/2026']]; // no barcode → name is ambiguous
+    const mapping = { barcode: 0, name: 1, qty: 2, date: 3, amount: -1 };
+    const a = buildImport({ rows, mapping, products: dupProducts, now });
+    expect(a.unmatched.length).toBe(1); // ambiguous → review, never a silent last-wins pick
+  });
+
   it('skips rows older than the retention window', () => {
     const rows = [
       ['501', '', '2', '01/03/2026'],   // within window

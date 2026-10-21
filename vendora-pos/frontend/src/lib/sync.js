@@ -293,6 +293,10 @@ export async function syncNow() {
       const res = await authedRequest('/push', { method: 'POST', body: { changes } }, ctx);
       guard();
       for (const a of res.applied || []) applied.push({ name: a.name, rev: a.rev, sentMtime: sentMtime[a.name] });
+      // Decide conflicts against FRESH metadata, not the pre-send `meta` snapshot (audit P1): the owner may
+      // have edited a store WHILE this push was in flight, bumping its stored mtime. Using the stale snapshot's
+      // mtime demoted that newer edit to recovery instead of letting it win and stay dirty.
+      const freshMeta = loadMeta(ws);
       for (const c of res.conflicts || []) {
         const sent = changes.find((ch) => ch.name === c.name);
         // Use the value RIGHT NOW — it may be NEWER than what we sent, because the owner edited WHILE this
@@ -314,7 +318,7 @@ export async function syncNow() {
           continue;
         }
         // Non-merge store: last-write-wins by mtime, decided on the CURRENT local value + its mtime.
-        const localMtime = (meta[c.name] && meta[c.name].mtime) || 0;
+        const localMtime = (freshMeta[c.name] && freshMeta[c.name].mtime) || 0;
         const localChangedSinceSend = !!(sent && currentLocal != null && currentLocal !== sent.value);
         if (localChangedSinceSend && localMtime > (c.mtime || 0)) {
           // Our newer unsent edit wins — keep it live, adopt the server rev as the base, re-push next cycle.

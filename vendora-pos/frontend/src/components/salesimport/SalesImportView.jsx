@@ -173,7 +173,7 @@ export default function SalesImportView({ onBack }) {
 
           <div className="mt-4 flex items-start gap-2 rounded-2xl bg-blue-50 p-3 text-xs text-blue-800">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Sales are matched to products by barcode, then by name. We only count sales from the last {MAX_AGE_DAYS} days.{!deductOn && ' Your current stock quantities stay exactly as they are.'}</span>
+            <span>Sales are matched to products by barcode (a name is only used when it’s unique and no barcode is given). We only count sales from the last {MAX_AGE_DAYS} days. Re-importing the same file is blocked — pick non-overlapping date ranges so sales aren’t counted twice.{!deductOn && ' Your current stock quantities stay exactly as they are.'}</span>
           </div>
 
           {imports.length > 0 && <History imports={imports} onUndo={onUndo} />}

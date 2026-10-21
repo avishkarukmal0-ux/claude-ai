@@ -136,4 +136,47 @@ describe('shared sales model — exact numeric handling + dedupe + returns', () 
     const returnLine = sm.makeLine({ kind: 'return', lineId: 'r1', qty: 1, ref: { barcode: '5000004' } });
     expect(returnLine.kind).toBe(sm.LINE_KIND.RETURN); // kept distinct from a sale line
   });
+
+  // ── Audit P2 hardening ──────────────────────────────────────────────────────
+  test('an explicit unknown status does NOT fail open to completed', () => {
+    const sale = sm.makeSale({
+      provider: 'square', merchantId: 'm', saleId: 't5', status: 'pending',
+      lines: [sm.makeLine({ lineId: '1', qty: 1, ref: { barcode: '5000005' } })],
+    });
+    expect(sale.status).toBe('unknown');
+    expect(sale.issues.some((i) => i.code === 'bad_status')).toBe(true);
+    expect(sm.isStockEligible(sale)).toBe(false);
+  });
+
+  test('an omitted status still defaults to completed (simple-import convenience)', () => {
+    const sale = sm.makeSale({
+      provider: 'square', merchantId: 'm', saleId: 't6',
+      lines: [sm.makeLine({ lineId: '1', qty: 1, ref: { barcode: '5000006' } })],
+    });
+    expect(sale.status).toBe(sm.SALE_STATUS.COMPLETED);
+    expect(sm.isStockEligible(sale)).toBe(true);
+  });
+
+  test('malformed quantities are rejected, not silently coerced', () => {
+    expect(sm.normalizeQty('1e3')).toBeNull();   // was coerced to 13 before the fix
+    expect(sm.normalizeQty('12x')).toBeNull();
+    expect(sm.normalizeQty('£1.50')).toBe(1.5);  // currency symbol tolerated
+    expect(sm.normalizeQty('1,000')).toBe(1000); // thousands comma tolerated
+    expect(sm.normalizeQty(1000)).toBe(1000);    // a real number is fine
+  });
+
+  test('an unrecognised unit is flagged for review (not silently treated as each)', () => {
+    const sale = sm.makeSale({
+      provider: 'square', merchantId: 'm', saleId: 't7',
+      lines: [sm.makeLine({ lineId: '1', qty: 1, unit: 'dozen', ref: { barcode: '5000007' } })],
+    });
+    expect(sale.issues.some((i) => i.code === 'unknown_unit')).toBe(true);
+    expect(sm.isStockEligible(sale)).toBe(false);
+    // a recognised unit/alias stays clean
+    const ok = sm.makeSale({
+      provider: 'square', merchantId: 'm', saleId: 't8',
+      lines: [sm.makeLine({ lineId: '1', qty: 1, unit: 'pcs', ref: { barcode: '5000008' } })],
+    });
+    expect(ok.issues.some((i) => i.code === 'unknown_unit')).toBe(false);
+  });
 });

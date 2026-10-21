@@ -100,6 +100,11 @@ function buildRecord(e) {
     ...(e.location ? { location: String(e.location) } : {}),
     ...(e.operationId ? { operationId: String(e.operationId) } : {}),
     ...(e.reversalOf ? { reversalOf: String(e.reversalOf) } : {}),
+    // EVIDENCE-ONLY (audit P1): a sale recorded purely as velocity evidence (a history-only CSV import) that
+    // must NOT change the stock quantity — the sale already happened and is already in the manual counts.
+    // Such a row still counts for velocity/insights but is excluded from every QUANTITY derivation (merge
+    // reconstruction, running balance, reconcile). A real stock-affecting sale omits this flag.
+    ...(e.evidence ? { evidence: true } : {}),
     actor: e.actor != null ? String(e.actor) : who.name,
     ...(who.id ? { actorId: who.id } : {}),
     ...(who.role ? { actorRole: who.role } : {}),
@@ -274,7 +279,9 @@ export function salesCoverage(records, windowDays = 28, now = Date.now()) {
 export function movementHistory(records, productId, { newestFirst = true, opening = 0 } = {}) {
   const rows = (records || []).filter((r) => r && r.productId === productId).slice().sort((a, b) => a.at - b.at);
   let balance = Number(opening) || 0;
-  const withBalance = rows.map((r) => { balance += r.delta; return { ...r, balance }; });
+  // Evidence-only sales (history-only CSV imports) don't move stock, so they must not move the running
+  // balance either (audit P1) — they're still shown as rows, just with the balance carried through unchanged.
+  const withBalance = rows.map((r) => { if (r.evidence !== true) balance += r.delta; return { ...r, balance }; });
   return newestFirst ? withBalance.reverse() : withBalance;
 }
 
@@ -284,7 +291,9 @@ export function movementHistory(records, productId, { newestFirst = true, openin
  * left without a movement). Surfaced honestly in the history view rather than hidden.
  */
 export function reconcileQty(records, productId, currentQty) {
-  const ledgerSum = (records || []).filter((r) => r && r.productId === productId).reduce((n, r) => n + r.delta, 0);
+  // Exclude evidence-only sales (audit P1): they don't affect stock, so they aren't part of the quantity the
+  // ledger explains.
+  const ledgerSum = (records || []).filter((r) => r && r.productId === productId && r.evidence !== true).reduce((n, r) => n + r.delta, 0);
   const q = Number(currentQty) || 0;
   return { ledgerSum, currentQty: q, difference: q - ledgerSum, matches: q === ledgerSum };
 }

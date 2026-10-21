@@ -144,9 +144,14 @@ export function hashRows(lines = []) {
 export function buildImport({ rows = [], mapping = {}, products = [], defaultDate = null, now = Date.now() }) {
   const byBarcode = new Map();
   const byName = new Map();
+  const nameCounts = new Map(); // lowercased name -> how many products carry it (ambiguity guard)
   for (const p of products) {
     if (p.barcode) byBarcode.set(String(p.barcode).trim(), p);
-    if (p.name) byName.set(String(p.name).trim().toLowerCase(), p);
+    if (p.name) {
+      const key = String(p.name).trim().toLowerCase();
+      nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+      byName.set(key, p);
+    }
   }
   const cell = (idx, r) => (idx != null && idx >= 0 ? String(r[idx] ?? '') : '');
   const matched = [];
@@ -168,8 +173,18 @@ export function buildImport({ rows = [], mapping = {}, products = [], defaultDat
     if (ts > now) { invalid.push({ barcode, name, reason: 'future' }); continue; } // a sale can't be in the future
     if (ts < cutoff) { tooOld += 1; continue; }
 
-    let product = (barcode && byBarcode.get(barcode)) || null;
-    if (!product && name) product = byName.get(name.toLowerCase()) || null;
+    // Match safely (audit P2):
+    //  - a SUPPLIED barcode MUST match a barcode. We never fall back to a name match for a row that carried a
+    //    barcode — an unknown barcode goes to review, so a sale can't silently attach to a different product
+    //    that merely shares a name.
+    //  - a name is used only when NO barcode was supplied AND the name is unambiguous (exactly one product).
+    let product = null;
+    if (barcode) {
+      product = byBarcode.get(barcode) || null;
+    } else if (name) {
+      const key = name.toLowerCase();
+      if ((nameCounts.get(key) || 0) === 1) product = byName.get(key) || null;
+    }
     if (!product) { unmatched.push({ barcode, name, qty }); continue; }
 
     matched.push({ productId: product.id, name: product.name, qty, amount, day: dayStart(ts) });
@@ -270,6 +285,38 @@ export function compareImport(analysis, { products = [], openingStockAt = null }
 
 // --- persistence -------------------------------------------------------------------------
 function load() { const a = readJSON(NAME, []); return Array.isArray(a) ? a : []; }
+
+const EVIDENCE_MIGRATION_FLAG = 'pos_evidence_migrated_v1';
+
+/**
+ * One-time migration (audit P1): velocity CSV imports written before the `evidence` flag existed are plain
+ * negative SALE movements, so a merge could reduce stock from them. Flag every SALE movement that belongs to a
+ * NON-deducted import batch as evidence-only, in place, so it stops affecting quantity while still counting for
+ * velocity. Deducted imports (stock-affecting by design) are left alone. Idempotent via a per-workspace flag.
+ * @returns { migrated } count of movements flagged (0 if already done / nothing to do)
+ */
+export function migrateImportedMovementsEvidence() {
+  try {
+    if (readJSON(EVIDENCE_MIGRATION_FLAG, false) === true) return { migrated: 0 };
+    const imports = load();
+    // batchIds of imports that are NOT deductions (velocity/evidence). Pre-slice-3 entries have no `deducted`
+    // field → treated as evidence (they were all velocity then).
+    const evidenceBatches = new Set(imports.filter((im) => im && im.deducted !== true).map((im) => im.importId));
+    const movements = readJSON('movements_v1', []);
+    if (!Array.isArray(movements) || !movements.length) { writeJSON(EVIDENCE_MIGRATION_FLAG, true); return { migrated: 0 }; }
+    let migrated = 0;
+    const next = movements.map((r) => {
+      if (r && r.type === MOVEMENT_TYPES.SALE && r.evidence !== true && r.batchId && evidenceBatches.has(r.batchId)) {
+        migrated += 1;
+        return { ...r, evidence: true };
+      }
+      return r;
+    });
+    if (migrated > 0) writeJSON('movements_v1', next);
+    writeJSON(EVIDENCE_MIGRATION_FLAG, true);
+    return { migrated };
+  } catch { return { migrated: 0 }; }
+}
 function persist(arr) { return writeJSON(NAME, arr); }
 function bump() { try { window.dispatchEvent(new CustomEvent(IMPORT_EVENT)); } catch { /* ignore */ } }
 
@@ -283,13 +330,15 @@ export function isDuplicateImport(importId) {
 export function useSalesImport() {
   const [imports, setImports] = useState(load);
   useEffect(() => {
+    migrateImportedMovementsEvidence(); // audit P1: flag pre-existing velocity imports as evidence-only
     const refresh = () => setImports(load());
+    const onWorkspace = () => { migrateImportedMovementsEvidence(); refresh(); };
     window.addEventListener(IMPORT_EVENT, refresh);
-    window.addEventListener('vendora:workspace', refresh);
+    window.addEventListener('vendora:workspace', onWorkspace);
     window.addEventListener('storage', refresh);
     return () => {
       window.removeEventListener(IMPORT_EVENT, refresh);
-      window.removeEventListener('vendora:workspace', refresh);
+      window.removeEventListener('vendora:workspace', onWorkspace);
       window.removeEventListener('storage', refresh);
     };
   }, []);
@@ -352,6 +401,7 @@ export function useSalesImport() {
       reason,
       batchId: analysis.importId,     // lets undoImport reverse via removeByBatch
       operationId: analysis.importId, // idempotency guard (hasOperation)
+      evidence: true,                 // audit P1: velocity evidence — counts for velocity, NEVER changes qty
       at: b.day + 12 * 3600 * 1000,   // midday of that day
     })));
     if (!res.ok) return { ok: false, reason: 'save-failed', written: 0 };

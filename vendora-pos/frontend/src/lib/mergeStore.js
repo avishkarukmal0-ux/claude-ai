@@ -144,6 +144,14 @@ export function mergeInventory(local, server, ctx = {}) {
   const since = now - ledgerWindowDays * DAY;
   const localById = indexById(local);
   const serverById = indexById(server);
+  // Only STOCK-AFFECTING movements reconstruct quantity (audit P1). Evidence-only sales (history-only CSV
+  // imports) are excluded from BOTH the winner's opening baseline and the merged sum, so importing sales as
+  // velocity evidence can never silently reduce a device's stock on sync. Real sales/waste/deliveries and the
+  // opt-in deduction path omit the `evidence` flag and still reconcile as before.
+  const stockOnly = (arr) => asArray(arr).filter((r) => r && r.evidence !== true);
+  const sideLocal = stockOnly(localMovements);
+  const sideServer = stockOnly(serverMovements);
+  const mergedStock = stockOnly(mergedMovements);
   return merged.map((p) => {
     if (isTombstone(p)) return p;
     const l = localById.get(p.id);
@@ -151,9 +159,9 @@ export function mergeInventory(local, server, ctx = {}) {
     // Which side's object won `p`? (p is a reference to the winning item from mergeById.)
     const winnerIsServer = p === s || (!l && !!s);
     const winnerQty = Number((winnerIsServer ? s : l) && (winnerIsServer ? s : l).qty) || 0;
-    const sideMovements = winnerIsServer ? serverMovements : localMovements;
+    const sideMovements = winnerIsServer ? sideServer : sideLocal;
     const opening = winnerQty - ledgerSumSince(sideMovements, p.id, since);
-    return { ...p, qty: opening + ledgerSumSince(mergedMovements, p.id, since) };
+    return { ...p, qty: opening + ledgerSumSince(mergedStock, p.id, since) };
   });
 }
 

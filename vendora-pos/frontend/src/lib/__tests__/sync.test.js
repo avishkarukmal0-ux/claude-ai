@@ -124,6 +124,32 @@ describe('sync — concurrency hardening (audit 2026-10-01)', () => {
     expect(sync.getSyncState().pending).toBeGreaterThanOrEqual(1);          // still dirty → will re-push
   });
 
+  it('non-merge store: a newer in-flight edit WINS the conflict and stays dirty (audit P1 residual)', async () => {
+    await sync.syncNow(); // bootstrap (waste_v1 not on server yet → local base rev 0)
+    storage.writeJSON('waste_v1', [{ v: 1 }], ws);
+    sync.markStoreDirty('waste_v1', 100); // we send at mtime 100
+
+    let injected = false;
+    sync.__setSyncTransport(async (path, opts) => {
+      if (path === '/push' && !injected) {
+        injected = true;
+        // Server has independently advanced waste_v1 to mtime 200 (forces a conflict)...
+        server.blobs.set('waste_v1', { value: JSON.stringify([{ v: 'server' }]), rev: 1, mtime: 200 });
+        // ...and the owner edits locally to v2 at mtime 300 WHILE the push (carrying v1) is in flight.
+        storage.writeJSON('waste_v1', [{ v: 2 }], ws);
+        sync.markStoreDirty('waste_v1', 300);
+      }
+      return server.transport(path, opts);
+    });
+
+    const res = await sync.syncNow();
+    expect(res.ok).toBe(true);
+    // The newer local edit (mtime 300 > server 200) must win and stay live + dirty — NOT be demoted to the
+    // server's older value with v2 shunted to recovery.
+    expect(storage.readJSON('waste_v1', null, ws)).toEqual([{ v: 2 }]);
+    expect(sync.getSyncState().pending).toBeGreaterThanOrEqual(1);
+  });
+
   it('aborts without uploading when the account is switched mid-sync (no cross-account leak)', async () => {
     localStorage.setItem('vendora:auth', JSON.stringify({ token: 'tA', refreshToken: 'rA', shop: { id: 'A', name: 'A' } }));
     storage.setActiveWorkspace('shop:A');
