@@ -37,7 +37,7 @@ deploys, the owner should see either a normal app or the new error panel; the pa
 (the stack points at it).
 
 ## Commit(s)
-- `2b29977` — feat(pwa) boot watchdog.
+- `3a0a530` — feat(pwa) boot watchdog.
 
 ## Follow-ups
 - [ ] Owner: report what the panel says, or whether "Clear app data & reload" fixes it.
