@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   Plug, FileSpreadsheet, Upload, Clock, ShieldCheck, Ban, ChevronRight, Info, RefreshCw, ExternalLink,
+  CheckCircle2, AlertTriangle, PauseCircle,
 } from 'lucide-react';
 import ScreenBack from '../common/ScreenBack';
-import { getProviders } from '../../lib/posClient';
+import { getProviders, getConnections, startConnect, describeConnection } from '../../lib/posClient';
 
 // "Connect your till" (sales-import slice 2). Shows the HONEST provider catalogue from the server and routes the
 // shopkeeper to the ONE path that actually works today: the manual item-level CSV pilot (SalesImportView). It
@@ -32,8 +34,12 @@ function Badge({ tone = 'gray', Icon, children }) {
   );
 }
 
-function ProviderCard({ p, onOpenCsv }) {
+const CONN_ICON = { connected: CheckCircle2, needs_attention: AlertTriangle, paused: PauseCircle };
+
+function ProviderCard({ p, onOpenCsv, connection, onReconnect, reconnecting }) {
   const cloud = CLOUD_STATUS[p.availability] || CLOUD_STATUS.not_configured;
+  // A real connection (if one ever exists) overrides the availability badge with the shop's actual status.
+  const conn = connection ? describeConnection(connection.status) : null;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -46,8 +52,20 @@ function ProviderCard({ p, onOpenCsv }) {
         {p.csvCapable
           ? <Badge tone="green" Icon={FileSpreadsheet}>CSV import works now</Badge>
           : <Badge tone="gray" Icon={Ban}>CSV not usable (payment-level only)</Badge>}
-        <Badge tone={cloud.tone} Icon={cloud.Icon}>{cloud.label}</Badge>
+        {conn
+          ? <Badge tone={conn.tone} Icon={CONN_ICON[connection.status]}>{conn.label}</Badge>
+          : <Badge tone={cloud.tone} Icon={cloud.Icon}>{cloud.label}</Badge>}
       </div>
+      {connection && connection.status === 'needs_attention' && (
+        <button
+          type="button"
+          onClick={() => onReconnect(p.id)}
+          disabled={reconnecting}
+          className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 text-sm font-semibold text-amber-900 active:scale-[0.99] disabled:opacity-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${reconnecting ? 'animate-spin' : ''}`} /> Reconnect {p.name}
+        </button>
+      )}
       {p.csvCapable ? (
         <button
           type="button"
@@ -75,15 +93,30 @@ function ProviderCard({ p, onOpenCsv }) {
 
 export default function TillConnectView({ onBack, onOpenCsv }) {
   const [state, setState] = useState({ loading: true });
+  const [conns, setConns] = useState({ cloudEnabled: false, connections: [] });
+  const [reconnecting, setReconnecting] = useState(null); // providerId currently reconnecting
 
   async function load() {
     setState({ loading: true });
-    const res = await getProviders();
-    setState({ loading: false, ...res });
+    // Catalogue + this shop's real connections in parallel. Connections are empty until the cloud feature is
+    // switched on and a provider is actually connected — we show the truth, never a placeholder "Connected".
+    const [providersRes, connRes] = await Promise.all([getProviders(), getConnections()]);
+    setState({ loading: false, ...providersRes });
+    setConns({ cloudEnabled: !!connRes.cloudEnabled, connections: connRes.connections || [] });
   }
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
+  async function onReconnect(providerId) {
+    setReconnecting(providerId);
+    const res = await startConnect(providerId);
+    setReconnecting(null);
+    // Today this is always the honest "not available yet"; surface the server's own message.
+    if (res.ok) { toast.success('Reconnecting…'); load(); }
+    else toast.error(res.error || 'That till can’t be connected yet.');
+  }
+
   const providers = state.providers || [];
+  const connByProvider = Object.fromEntries((conns.connections || []).map((c) => [c.provider, c]));
 
   return (
     <div>
@@ -138,7 +171,16 @@ export default function TillConnectView({ onBack, onOpenCsv }) {
 
       {!state.loading && state.ok && (
         <div className="space-y-2">
-          {providers.map((p) => <ProviderCard key={p.id} p={p} onOpenCsv={onOpenCsv} />)}
+          {providers.map((p) => (
+            <ProviderCard
+              key={p.id}
+              p={p}
+              onOpenCsv={onOpenCsv}
+              connection={connByProvider[p.id]}
+              onReconnect={onReconnect}
+              reconnecting={reconnecting === p.id}
+            />
+          ))}
           {state.docsCheckedAt && (
             <p className="px-1 pt-1 text-[11px] text-gray-400">
               Provider details checked {new Date(state.docsCheckedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}.
