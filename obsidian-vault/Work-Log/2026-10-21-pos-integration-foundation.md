@@ -49,7 +49,7 @@ are planned in [[Sales-Ingestion-Design]].
   other suites unaffected.
 
 ## Commit(s)
-- `<hash>` — feat(pos) foundation + docs.
+- `19aac2e` — feat(pos) foundation + docs.
 
 ## Follow-ups (next slices — none ship enabled without owner opt-in)
 - [ ] Slice 2: read-only `GET /api/pwa-pos/providers` catalogue endpoint + phone-first "Connect your till"
