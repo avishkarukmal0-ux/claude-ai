@@ -44,9 +44,15 @@ router.use('/pwa-lookup', pwaLookupRoutes);
 const pwaInvoiceOcrRoutes = require('./pwaInvoiceOcrRoutes');
 router.use('/pwa-invoice-ocr', pwaInvoiceOcrRoutes);
 
-// ── PWA till-connection catalogue (POS sales import, slice 2). READ-ONLY + secret-free: serves the honest
-//    provider availability catalogue to the "Connect your till" screen. Connects nothing; CSV is the only
-//    live method. PWA token required. ──
+// ── PWA POS provider webhooks (slice 4 scaffolding). Mounted BEFORE the token-gated /pwa-pos router because
+//    webhooks come from the provider (no PWA token) and are authenticated by signature in the adapter. Inert
+//    (404) until a provider is accredited + configured. ──
+const pwaPosWebhookRoutes = require('./pwaPosWebhookRoutes');
+router.use('/pwa-pos/webhooks', pwaPosWebhookRoutes);
+
+// ── PWA till-connection catalogue + cloud connect (POS sales import, slices 2 & 4). Catalogue is READ-ONLY +
+//    secret-free; connect/callback are owner/manager and report "not available yet" until a provider is
+//    configured (never fakes a connection). CSV remains the only live ingestion method. PWA token required. ──
 const pwaPosRoutes = require('./pwaPosRoutes');
 router.use('/pwa-pos', pwaPosRoutes);
 

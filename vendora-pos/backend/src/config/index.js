@@ -68,6 +68,23 @@ module.exports = {
     allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
   },
 
+  // POS cloud connections (sales-import slice 4) — DEFERRED SCAFFOLDING, default OFF and inert. The server
+  // never fakes a connection, invents an endpoint, or holds a token until a provider is accredited and we add
+  // its real credentials. With this off (or any provider's creds absent) every connect/webhook path reports
+  // "not available yet" honestly; the only live ingestion method remains the manual CSV pilot (slices 2–3).
+  //   POS_CLOUD_ENABLED=true   → mount the connect/webhook endpoints (still per-provider gated on credentials)
+  //   POS_TOKEN_KEY            → 32-byte hex/base64 key for encrypting any stored provider token (required
+  //                              before a real connection can be stored; absent → connecting is refused)
+  //   POS_<PROVIDER>_CLIENT_ID / _CLIENT_SECRET / _WEBHOOK_SECRET → per-provider OAuth + webhook creds (none
+  //                              shipped; a provider is "configured" only when its id+secret are present)
+  posCloud: {
+    enabled: process.env.POS_CLOUD_ENABLED === 'true',
+    tokenKey: process.env.POS_TOKEN_KEY || '',
+    // Where the provider sends the OAuth redirect back to; only used to build an authorize URL once a
+    // provider is actually configured (never fabricated).
+    callbackBaseUrl: process.env.POS_CALLBACK_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:5173',
+  },
+
   // Neighbourhood Insights — optional PAID add-on (aggregate ONS Census 2021 area profiles). Two independent
   // switches, both default OFF; the add-on is unusable (and purchasing unavailable) until configured:
   //   INSIGHTS_ENABLED=true        → mount the /api/pwa-insights routes at all

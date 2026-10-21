@@ -11,11 +11,21 @@ const express = require('express');
 const router = express.Router();
 const pwaAuth = require('../services/pwaAuthService');
 const registry = require('../services/posProviders/registry');
+const posCloud = require('../services/posCloudService');
+const AppError = require('../utils/AppError');
 
 router.use(async (req, res, next) => {
   try { req.pwa = pwaAuth.verifyAccess(req.headers.authorization); await pwaAuth.assertMemberActive(req.pwa); next(); }
   catch (err) { next(err); }
 });
+
+// Enabling or starting a cloud connection is owner/manager only (mirrors the financial/admin role rule). A
+// guest/legacy owner token has no role → treated as owner. Staff can read the catalogue but not connect.
+function ownerOrManager(req, res, next) {
+  const role = req.pwa && req.pwa.role;
+  if (role === 'owner' || role === 'manager' || role == null) return next();
+  return next(new AppError('Only an owner or manager can connect a till', 403, 'FORBIDDEN'));
+}
 
 // Client-facing projection of a catalogue entry. Everything here is public/non-secret; we deliberately keep
 // the honest fields (availability, blockers, itemLevelNote) so the screen can be straight with the shopkeeper
@@ -51,6 +61,36 @@ router.get('/providers', (req, res, next) => {
       testable: registry.testableProviders(),
       csvCapable: registry.csvCapableProviders(),
     });
+  } catch (err) { next(err); }
+});
+
+// ── Cloud connections (slice 4 scaffolding — inert until a provider is accredited + configured) ──
+
+// GET /api/pwa-pos/connections → this shop's connections (non-secret view). Empty until one exists.
+// Also reports whether the cloud feature is switched on, so the client can message honestly.
+router.get('/connections', async (req, res, next) => {
+  try {
+    const out = await posCloud.listConnections(req.pwa.sub);
+    res.json({ success: true, cloudEnabled: posCloud.cloudEnabled(), ...out });
+  } catch (err) { next(err); }
+});
+
+// POST /api/pwa-pos/connect/:provider/start → begin OAuth. Owner/manager only. Returns 503 POS_NOT_AVAILABLE
+// with an honest reason until the provider is genuinely configured — never a fabricated authorize URL.
+router.post('/connect/:provider/start', ownerOrManager, async (req, res, next) => {
+  try {
+    const out = await posCloud.startConnect(req.pwa.sub, req.params.provider);
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// GET /api/pwa-pos/connect/:provider/callback → OAuth redirect target. Owner/manager only. Honest
+// "not available" today; when live it verifies state, exchanges the code via the adapter and stores an
+// ENCRYPTED token (never plaintext). Never fakes a successful connection.
+router.get('/connect/:provider/callback', ownerOrManager, async (req, res, next) => {
+  try {
+    const out = await posCloud.handleCallback(req.pwa.sub, req.params.provider, { code: req.query.code, state: req.query.state });
+    res.json({ success: true, ...out });
   } catch (err) { next(err); }
 });
 
