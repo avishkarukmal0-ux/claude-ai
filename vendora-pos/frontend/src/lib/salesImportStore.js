@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON } from './storage';
 import { recordMovement, recordMany, hasOperation, removeByBatch, MOVEMENT_TYPES } from './movementStore';
-import { markSold } from './inventoryStore';
+import { markSold, deductImportedSales, restoreImportedSales } from './inventoryStore';
 
 const NAME = 'sales_imports_v1';
 const DAY = 86400000;
@@ -203,6 +203,71 @@ export function buildImport({ rows = [], mapping = {}, products = [], defaultDat
   };
 }
 
+/**
+ * COMPARISON MODE (slice 3) — pure, writes NOTHING. Given a built import analysis and the current product
+ * catalogue, produce a per-product comparison of imported sales vs current stock, plus the file-level signals
+ * an owner needs before deciding whether to deduct. This is the safe on-ramp: look first, deduct later.
+ *
+ * @param analysis  a buildImport() result
+ * @param products  current catalogue (for current qty)
+ * @param openingStockAt  the deduction baseline (epoch ms) or null; sales dated before it are historical and
+ *                        would NOT be deducted even once deductions are on (shown as `historicalUnits`).
+ * @returns {{ rows, looksItemLevel, totalsOnly, productsMatched, importedUnits, deductibleUnits,
+ *             historicalUnits, unmatched, invalid, tooOld, from, to }}
+ *   rows: [{ productId, name, importedUnits, deductibleUnits, currentQty, impliedRemaining }] newest-span first
+ */
+export function compareImport(analysis, { products = [], openingStockAt = null } = {}) {
+  const a = analysis || {};
+  const lines = Array.isArray(a.lines) ? a.lines : [];
+  const qtyById = new Map(products.map((p) => [p.id, Number(p.qty) || 0]));
+  const nameById = new Map(products.map((p) => [p.id, p.name]));
+  const cut = Number.isFinite(Number(openingStockAt)) ? Number(openingStockAt) : null;
+
+  const per = new Map(); // productId -> { importedUnits, deductibleUnits }
+  let deductibleUnits = 0;
+  let historicalUnits = 0;
+  for (const b of lines) {
+    const deductible = cut == null ? true : (b.day >= dayStart(cut)); // a day at/after the baseline deducts
+    const rec = per.get(b.productId) || { importedUnits: 0, deductibleUnits: 0 };
+    rec.importedUnits += b.units;
+    if (deductible) { rec.deductibleUnits += b.units; deductibleUnits += b.units; }
+    else historicalUnits += b.units;
+    per.set(b.productId, rec);
+  }
+
+  const rows = [...per.entries()].map(([productId, v]) => {
+    const currentQty = qtyById.get(productId) || 0;
+    return {
+      productId,
+      name: nameById.get(productId) || productId,
+      importedUnits: v.importedUnits,
+      deductibleUnits: v.deductibleUnits,
+      currentQty,
+      // What stock WOULD read after deducting the deductible units, never below zero (we never invent negatives).
+      impliedRemaining: Math.max(0, currentQty - v.deductibleUnits),
+    };
+  }).sort((x, y) => y.importedUnits - x.importedUnits);
+
+  // Item-level iff the file produced at least one matchable item row (matched buckets OR unmatched item rows).
+  // A totals/summary report (no per-item columns) yields none → we must never deduct from it.
+  const looksItemLevel = lines.length > 0 || (a.unmatched && a.unmatched.length > 0);
+
+  return {
+    rows,
+    looksItemLevel,
+    totalsOnly: !looksItemLevel,
+    productsMatched: a.productsMatched || 0,
+    importedUnits: a.unitsTotal || 0,
+    deductibleUnits,
+    historicalUnits,
+    unmatched: a.unmatched || [],
+    invalid: a.invalid || [],
+    tooOld: a.tooOld || 0,
+    from: a.from || null,
+    to: a.to || null,
+  };
+}
+
 // --- persistence -------------------------------------------------------------------------
 function load() { const a = readJSON(NAME, []); return Array.isArray(a) ? a : []; }
 function persist(arr) { return writeJSON(NAME, arr); }
@@ -231,23 +296,60 @@ export function useSalesImport() {
 
   const isDuplicate = useCallback((importId) => isDuplicateImport(importId), []);
 
-  /** Write aggregated buckets as typed `sale` movements. Idempotent via operationId.
-   *  Does NOT touch inventory quantities. */
-  const applyImport = useCallback((analysis, meta = {}) => {
+  /**
+   * Apply an import. Two modes, both idempotent via `operationId = importId` (a given file applies once):
+   *   - VELOCITY (default): write typed `sale` movements as evidence. Does NOT touch inventory quantities
+   *     ("the sale already happened and is reflected in the counts").
+   *   - DEDUCT (opts.deduct, opt-in): completed sales dated at/after the opening baseline (opts.cutoff)
+   *     actually reduce `qty` AND log the SALE movement, via inventoryStore.deductImportedSales. Sales BEFORE
+   *     the baseline are historical and never deducted. Requires a cutoff; refuses a totals-only file.
+   */
+  const applyImport = useCallback((analysis, meta = {}, opts = {}) => {
+    const { deduct = false, cutoff = null } = opts;
     if (!analysis || !Array.isArray(analysis.lines) || !analysis.lines.length) {
-      return { ok: false, reason: 'empty' };
+      return { ok: false, reason: 'empty' }; // no item-level lines (e.g. a totals-only report) → nothing to apply
     }
     if (hasOperation(analysis.importId)) return { ok: false, reason: 'duplicate' };
     // chronological order keeps the retention prune sensible
     const ordered = [...analysis.lines].sort((a, b) => a.day - b.day);
-    // Write ALL the movements in one atomic persist — a partial write would block retry via the
+    const reason = meta.fileName ? `Till import — ${meta.fileName}` : 'Till import';
+    const baseEntry = {
+      id: analysis.importId,
+      importId: analysis.importId,
+      fileName: meta.fileName || 'till-sales.csv',
+      appliedAt: Date.now(),
+      productsMatched: analysis.productsMatched,
+      unitsTotal: analysis.unitsTotal,
+      valueTotal: analysis.valueTotal,
+      hasValue: analysis.hasValue,
+      unmatchedCount: analysis.unmatched.length,
+      from: analysis.from,
+      to: analysis.to,
+    };
+
+    if (deduct) {
+      if (cutoff == null) return { ok: false, reason: 'no-baseline' }; // deductions must have an opening baseline
+      const deductible = ordered.filter((b) => b.day >= dayStart(cutoff));
+      if (!deductible.length) return { ok: false, reason: 'all-historical' }; // everything predates the baseline
+      const res = deductImportedSales(
+        deductible.map((b) => ({ productId: b.productId, units: b.units, value: b.value, hasValue: b.hasValue, at: b.day + 12 * 3600 * 1000 })),
+        { operationId: analysis.importId, batchId: analysis.importId, reason },
+      );
+      if (!res.ok) return { ok: false, reason: res.reason || 'save-failed', deducted: 0 };
+      const entry = { ...baseEntry, mode: 'deduct', deducted: true, openingStockAt: cutoff, unitsDeducted: res.deducted, productsDeducted: res.products };
+      const next = [entry, ...load().filter((im) => im.importId !== analysis.importId)];
+      persist(next); setImports(next); bump();
+      return { ok: true, deducted: res.deducted, products: res.products };
+    }
+
+    // VELOCITY: write ALL the movements in one atomic persist — a partial write would block retry via the
     // operationId guard yet leave an incomplete sales history (audit W10).
     const res = recordMany(ordered.map((b) => ({
       productId: b.productId,
       type: MOVEMENT_TYPES.SALE,
       delta: -Math.abs(b.units),
       valuation: b.hasValue ? b.value : undefined,
-      reason: meta.fileName ? `Till import — ${meta.fileName}` : 'Till import',
+      reason,
       batchId: analysis.importId,     // lets undoImport reverse via removeByBatch
       operationId: analysis.importId, // idempotency guard (hasOperation)
       at: b.day + 12 * 3600 * 1000,   // midday of that day
@@ -264,20 +366,7 @@ export function useSalesImport() {
     }
     try { markSold(latestSold); } catch { /* lastSoldAt is best-effort; movements already committed */ }
 
-    const entry = {
-      id: analysis.importId,
-      importId: analysis.importId,
-      fileName: meta.fileName || 'till-sales.csv',
-      appliedAt: Date.now(),
-      productsMatched: analysis.productsMatched,
-      unitsTotal: analysis.unitsTotal,
-      valueTotal: analysis.valueTotal,
-      hasValue: analysis.hasValue,
-      unmatchedCount: analysis.unmatched.length,
-      from: analysis.from,
-      to: analysis.to,
-      movements: written,
-    };
+    const entry = { ...baseEntry, mode: 'velocity', deducted: false, movements: written };
     const next = [entry, ...load().filter((im) => im.importId !== analysis.importId)];
     persist(next);
     setImports(next);
@@ -285,9 +374,13 @@ export function useSalesImport() {
     return { ok: true, written };
   }, []);
 
-  /** Reverse an import: remove its movements and its history entry. Returns movements removed. */
+  /** Reverse an import: a DEDUCTED import adds its units back to stock and removes its movements; a velocity
+   *  import just removes its movements (qty was never changed). Then drop the history entry. */
   const undoImport = useCallback((importId) => {
-    const removed = removeByBatch(importId);
+    const entry = load().find((im) => im.importId === importId);
+    let removed = 0;
+    if (entry && entry.deducted) { const r = restoreImportedSales(importId); removed = r.movementsRemoved || 0; }
+    else removed = removeByBatch(importId);
     const next = load().filter((im) => im.importId !== importId);
     persist(next);
     setImports(next);

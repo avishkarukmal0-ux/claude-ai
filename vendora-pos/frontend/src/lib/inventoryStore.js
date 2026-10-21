@@ -11,7 +11,7 @@
 //    log the movement. Nothing depends on a deferred React updater running.
 import { useCallback, useEffect, useState } from 'react';
 import { readJSON, writeJSON, getActiveWorkspace } from './storage';
-import { recordMovement, recordMany, reverseByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
+import { recordMovement, recordMany, reverseByBatch, removeByBatch, hasOperation, MOVEMENT_TYPES } from './movementStore';
 import { acceptedUnits as lineAcceptedUnits, perUnitCost as linePerUnitCost } from './deliveryStore';
 import { recordCostChange, isMaterialCostChange } from './priceAlertStore';
 import { reassignProductRefs } from './productMerge';
@@ -131,6 +131,113 @@ export function markSold(map) {
   if (!updated) return { ok: true, updated: 0 };
   const res = persist(next);
   return { ok: !!res.ok, updated };
+}
+
+/**
+ * Deduct imported till sales from stock — the OPT-IN deducting path (POS slice 3). Unlike markSold (which
+ * only touches lastSoldAt) this actually reduces `qty` AND logs a SALE movement per product, so the deduction
+ * both shows immediately on this device and propagates correctly across devices (the merge reconstructs
+ * qty = opening + ledgerSum, so the SALE movement is what carries the decrement to a device that didn't import).
+ *
+ * Safety properties:
+ *  - IDEMPOTENT: guarded by `operationId` (hasOperation) — re-applying the same import is a no-op, so a retry,
+ *    a repeated file or an overlapping window can't deduct twice.
+ *  - NEVER goes negative / never invents stock: each product deducts min(units, qty) and the SALE movement
+ *    records exactly what was applied, so qty and the ledger always agree (mirrors sellUnits). A shop whose
+ *    manual count is behind simply under-deducts — the safe direction; Comparison Mode surfaces the gap first.
+ *  - MOVEMENTS-FIRST ordering: we write the movements (which carry the operationId) BEFORE persisting the qty
+ *    change. If the qty write then fails, the operationId guard is already armed so a retry is blocked (no
+ *    double deduction) and the ledger — the source of truth under merge — is intact; qty reconciles on next
+ *    merge. (Doing qty first would risk a double-deduct on retry, since the guard wouldn't yet exist.)
+ *  - SALES ONLY: callers pass positive `units`. Returns/refunds are a separate concern and MUST NOT arrive
+ *    here as negative units (they would restock) — the import pipeline rejects qty <= 0 upstream.
+ *
+ * @param lines [{ productId, units, value?, hasValue?, at }]  at = movement epoch ms (midday of the sale day)
+ * @param opts  { operationId (required, idempotency key), batchId, reason }
+ * @returns { ok, reason?, deducted (units actually removed), products (count touched) }
+ */
+export function deductImportedSales(lines = [], { operationId, batchId, reason } = {}) {
+  if (!operationId) return { ok: false, reason: 'no-operation-id', deducted: 0, products: 0 };
+  if (!Array.isArray(lines) || !lines.length) return { ok: false, reason: 'empty', deducted: 0, products: 0 };
+  if (hasOperation(operationId)) return { ok: false, reason: 'duplicate', deducted: 0, products: 0 };
+
+  const prev = load();
+  const byId = new Map(prev.map((p) => [p.id, p]));
+  const movements = [];
+  const nextQty = new Map();   // productId -> new qty
+  const nextSold = new Map();  // productId -> latest lastSoldAt
+  let deducted = 0;
+
+  for (const ln of lines) {
+    const p = byId.get(ln.productId);
+    if (!p) continue; // never invent a product from a sales file
+    const have = Math.max(0, Number(nextQty.has(p.id) ? nextQty.get(p.id) : p.qty) || 0);
+    const want = Math.max(0, Number(ln.units) || 0);
+    const sold = Math.min(want, have);
+    if (sold <= 0) continue; // nothing in stock to deduct (behind count) — skip, don't go negative
+    nextQty.set(p.id, have - sold);
+    const at = Number(ln.at) || Date.now();
+    if (at > (nextSold.get(p.id) || 0)) nextSold.set(p.id, at);
+    deducted += sold;
+    movements.push({
+      productId: p.id,
+      type: MOVEMENT_TYPES.SALE,
+      delta: -sold,
+      ...(ln.hasValue && ln.value != null ? { valuation: Number(ln.value) } : {}),
+      reason: reason || 'Till import (deducted)',
+      batchId: batchId || operationId,
+      operationId,
+      at,
+    });
+  }
+
+  if (!movements.length) return { ok: true, reason: 'nothing-to-deduct', deducted: 0, products: 0 };
+
+  // Movements FIRST (they carry operationId → arm the idempotency guard), then the qty write.
+  const mres = recordMany(movements);
+  if (!mres.ok) return { ok: false, reason: 'save-failed', deducted: 0, products: 0 };
+
+  const next = prev.map((p) => {
+    if (!nextQty.has(p.id)) return p;
+    const patched = { ...p, qty: nextQty.get(p.id), updatedAt: clock() };
+    const ts = nextSold.get(p.id);
+    if (ts && ts > (Number(p.lastSoldAt) || 0)) patched.lastSoldAt = ts;
+    return reconcileAllocations(patched);
+  });
+  const pres = persist(next);
+  // If the qty write failed the movements are already committed (the deduction will reconcile on next merge);
+  // report ok so the caller records the import — re-applying is blocked by the operationId guard either way.
+  return { ok: true, deducted, products: nextQty.size, qtyPersisted: !!pres.ok };
+}
+
+/**
+ * Undo a DEDUCTED till import: add back exactly what was removed (read from the batch's SALE movements, so
+ * the capped-at-stock amounts are restored, not the raw file units) and then remove those movements, making
+ * the import fully reversible AND re-importable (mirrors the velocity undo via removeByBatch). Only touches
+ * products that the batch actually deducted. Qty is restored first, then the ledger rows removed.
+ * @returns { ok, restored (units added back), products }
+ */
+export function restoreImportedSales(batchId) {
+  if (!batchId) return { ok: false, restored: 0, products: 0 };
+  const movements = readJSON('movements_v1', []);
+  const rows = (Array.isArray(movements) ? movements : [])
+    .filter((r) => r && r.batchId === batchId && r.type === MOVEMENT_TYPES.SALE && Number(r.delta) < 0);
+  if (!rows.length) { removeByBatch(batchId); return { ok: true, restored: 0, products: 0 }; }
+  const addBack = new Map(); // productId -> units to restore
+  for (const r of rows) addBack.set(r.productId, (addBack.get(r.productId) || 0) + Math.max(0, -Number(r.delta)));
+
+  const prev = load();
+  let restored = 0;
+  const next = prev.map((p) => {
+    const add = addBack.get(p.id);
+    if (!add) return p;
+    restored += add;
+    return reconcileAllocations({ ...p, qty: (Number(p.qty) || 0) + add, updatedAt: clock() });
+  });
+  const pres = persist(next);
+  if (!pres.ok) return { ok: false, restored: 0, products: 0 }; // leave movements in place so a retry re-adds correctly
+  const removed = removeByBatch(batchId); // now drop the SALE rows → re-importable, ledger consistent
+  return { ok: true, restored, products: addBack.size, movementsRemoved: removed };
 }
 
 // Keep allocations consistent with total stock (audit W2): the shelf count and the sum of dated batches

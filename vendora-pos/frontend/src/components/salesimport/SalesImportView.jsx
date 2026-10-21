@@ -2,12 +2,14 @@ import React, { useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   FileSpreadsheet, Upload, TrendingUp, Check, AlertTriangle, Undo2, Info,
+  ArrowDownCircle, ShieldCheck, Lock, Scale,
 } from 'lucide-react';
 import ScreenBack from '../common/ScreenBack';
 import { useInventory } from '../../lib/inventoryStore';
 import {
-  useSalesImport, parseCSV, guessMapping, buildImport, MAX_AGE_DAYS,
+  useSalesImport, parseCSV, guessMapping, buildImport, compareImport, MAX_AGE_DAYS,
 } from '../../lib/salesImportStore';
+import { usePosSettings } from '../../lib/posSettingsStore';
 
 const FIELD_LABELS = {
   barcode: 'Barcode',
@@ -33,16 +35,23 @@ function todayInput() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Optional till/EPOS CSV import → confirmed sale movements (velocity evidence). Never changes stock.
+// Optional till/EPOS CSV import. Two safe modes (slice 3):
+//  - Evidence (default): records confirmed sales for velocity/insights — NEVER changes stock.
+//  - Deduct (opt-in, owner/manager, after a comparison period): completed sales dated at/after an opening
+//    baseline actually reduce stock. Historical sales never deduct; re-importing is a no-op (operationId).
 export default function SalesImportView({ onBack }) {
   const { products } = useInventory();
   const { imports, isDuplicate, applyImport, undoImport } = useSalesImport();
+  const { settings, canManage, enableDeductions, disableDeductions } = usePosSettings();
   const fileRef = useRef(null);
 
   const [parsed, setParsed] = useState(null); // { headers, rows }
   const [fileName, setFileName] = useState('');
   const [mapping, setMapping] = useState(null);
   const [defaultDate, setDefaultDate] = useState(todayInput());
+  const [confirmEnable, setConfirmEnable] = useState(false);
+
+  const deductOn = settings.deductEnabled && settings.openingStockAt != null;
 
   function onFile(e) {
     const file = e.target.files?.[0];
@@ -76,30 +85,58 @@ export default function SalesImportView({ onBack }) {
     });
   }, [parsed, mapping, products, defaultDateTs]);
 
+  const comparison = useMemo(() => {
+    if (!analysis) return null;
+    return compareImport(analysis, { products, openingStockAt: settings.openingStockAt });
+  }, [analysis, products, settings.openingStockAt]);
+
   const dup = analysis ? isDuplicate(analysis.importId) : false;
-  const canApply = analysis && analysis.lines.length > 0 && !dup;
+  const canApply = !!(analysis && analysis.lines.length > 0 && !dup);
+  const canDeduct = !!(canApply && deductOn && comparison && !comparison.totalsOnly && comparison.deductibleUnits > 0);
   const noDateColumn = mapping && mapping.date < 0;
 
   function reset() {
     setParsed(null); setMapping(null); setFileName('');
   }
 
-  function apply() {
+  function onEnable() {
+    const res = enableDeductions();
+    setConfirmEnable(false);
+    if (res.ok) toast.success('Stock deductions on. Only sales from now on will reduce stock.');
+    else if (res.reason === 'forbidden') toast.error('Only an owner or manager can turn this on.');
+    else toast.error('Couldn’t save that setting.');
+  }
+  function onDisable() {
+    const res = disableDeductions();
+    if (res.ok) toast.success('Stock deductions off. Imports now record sales evidence only.');
+    else toast.error('Couldn’t change that setting.');
+  }
+
+  function apply(mode) {
     if (!analysis) return;
-    const res = applyImport(analysis, { fileName });
+    const res = mode === 'deduct'
+      ? applyImport(analysis, { fileName }, { deduct: true, cutoff: settings.openingStockAt })
+      : applyImport(analysis, { fileName });
     if (res.ok) {
-      toast.success(`Imported ${analysis.unitsTotal} sales across ${analysis.productsMatched} products`);
+      if (mode === 'deduct') toast.success(`Deducted ${res.deducted} units from stock across ${res.products} products`);
+      else toast.success(`Recorded ${analysis.unitsTotal} sales across ${analysis.productsMatched} products`);
       reset();
-    } else if (res.reason === 'duplicate') {
-      toast.error('Looks like this exact file was already imported.');
-    } else {
-      toast.error('Nothing to import.');
+      return;
     }
+    const msg = {
+      duplicate: 'Looks like this exact file was already imported.',
+      'all-historical': 'All these sales are before your opening baseline, so none were deducted.',
+      'no-baseline': 'Turn on stock deductions first to set an opening baseline.',
+      empty: 'Nothing to import — this file has no item-level sales rows.',
+      'save-failed': 'Couldn’t save on this device. Try again.',
+    }[res.reason] || 'Nothing to import.';
+    toast.error(msg);
   }
 
   function onUndo(im) {
     const removed = undoImport(im.importId);
-    toast.success(removed ? 'Import reversed' : 'Nothing to reverse');
+    if (im.deducted) toast.success(removed ? 'Deduction reversed — stock added back' : 'Nothing to reverse');
+    else toast.success(removed ? 'Import reversed' : 'Nothing to reverse');
   }
 
   return (
@@ -107,12 +144,22 @@ export default function SalesImportView({ onBack }) {
       <ScreenBack onBack={onBack} />
       <h2 className="mb-1 text-base font-bold text-gray-900">Import till sales</h2>
       <p className="mb-4 text-xs text-gray-400">
-        Optional. Upload a sales export from your till/EPOS to turn estimated sell-through into
-        confirmed sales. This is used for reorder and insights only — it does not change your stock counts.
+        Optional. Upload a sales export from your till/EPOS. By default this records confirmed sales for
+        reorder and insights only — it does not change your stock counts.
       </p>
 
       {!parsed && (
         <>
+          <DeductionPanel
+            settings={settings}
+            deductOn={deductOn}
+            canManage={canManage}
+            confirmEnable={confirmEnable}
+            setConfirmEnable={setConfirmEnable}
+            onEnable={onEnable}
+            onDisable={onDisable}
+          />
+
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -126,7 +173,7 @@ export default function SalesImportView({ onBack }) {
 
           <div className="mt-4 flex items-start gap-2 rounded-2xl bg-blue-50 p-3 text-xs text-blue-800">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Sales are matched to products by barcode, then by name. We only count sales from the last {MAX_AGE_DAYS} days. Your current stock quantities stay exactly as they are.</span>
+            <span>Sales are matched to products by barcode, then by name. We only count sales from the last {MAX_AGE_DAYS} days.{!deductOn && ' Your current stock quantities stay exactly as they are.'}</span>
           </div>
 
           {imports.length > 0 && <History imports={imports} onUndo={onUndo} />}
@@ -204,6 +251,24 @@ export default function SalesImportView({ onBack }) {
                 </div>
               )}
 
+              {/* Comparison table — shown when deductions are ON, so the owner sees the effect BEFORE applying. */}
+              {deductOn && comparison && !comparison.totalsOnly && comparison.rows.length > 0 && (
+                <ComparisonTable comparison={comparison} />
+              )}
+
+              {deductOn && comparison && comparison.totalsOnly && (
+                <div className="mb-3 flex items-start gap-2 rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>This looks like a totals-only report (no per-item rows). It can’t be used to deduct stock — map a barcode or product-name column, or import an item-level export.</span>
+                </div>
+              )}
+
+              {deductOn && comparison && comparison.historicalUnits > 0 && (
+                <p className="mb-3 text-xs text-gray-400">
+                  {comparison.historicalUnits} units are dated before your opening baseline ({fmtDate(settings.openingStockAt)}) and won’t be deducted.
+                </p>
+              )}
+
               {dup && (
                 <div className="mb-3 flex items-start gap-2 rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -211,19 +276,140 @@ export default function SalesImportView({ onBack }) {
                 </div>
               )}
 
+              {/* Primary action: record evidence (always safe). */}
               <button
                 type="button"
-                onClick={apply}
+                onClick={() => apply('velocity')}
                 disabled={!canApply}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
               >
                 <TrendingUp className="h-4 w-4" />
-                {analysis.lines.length ? `Import ${analysis.unitsTotal} sales` : 'Nothing to import'}
+                {analysis.lines.length ? `Record ${analysis.unitsTotal} sales as evidence` : 'Nothing to import'}
               </button>
-              <p className="mt-2 text-center text-xs text-gray-400">This adds sales history only. Stock counts are unchanged.</p>
+
+              {/* Opt-in action: deduct from stock (owner enabled it). Separated + clearly labelled. */}
+              {deductOn && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => apply('deduct')}
+                    disabled={!canDeduct}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ArrowDownCircle className="h-4 w-4" />
+                    {comparison && comparison.deductibleUnits > 0 ? `Deduct ${comparison.deductibleUnits} units from stock` : 'Nothing to deduct'}
+                  </button>
+                  <p className="mt-2 text-center text-xs text-gray-400">Deducting reduces stock and can be undone from the list below.</p>
+                </>
+              )}
+              {!deductOn && (
+                <p className="mt-2 text-center text-xs text-gray-400">This adds sales history only. Stock counts are unchanged.</p>
+              )}
             </>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// Owner-only opt-in: turn stock deductions on/off. Off by default. Enabling records an opening baseline (now),
+// so only later sales deduct — historical sales already in the manual counts are never deducted twice.
+function DeductionPanel({ settings, deductOn, canManage, confirmEnable, setConfirmEnable, onEnable, onDisable }) {
+  if (!canManage && !deductOn) return null; // staff with deductions off: nothing to show (behaves as evidence-only)
+
+  if (deductOn) {
+    return (
+      <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+        <div className="flex items-start gap-2">
+          <ArrowDownCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-amber-900">Stock deductions are on</p>
+            <p className="mt-0.5 text-xs text-amber-800">
+              Sales dated from {fmtDate(settings.openingStockAt)} onwards reduce stock when you import them.
+              {settings.enabledBy ? ` Turned on by ${settings.enabledBy}.` : ''}
+            </p>
+            {canManage && (
+              <button type="button" onClick={onDisable} className="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-white px-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-300 active:scale-95">
+                Turn off (back to evidence only)
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Off (owner/manager view): offer to enable, with a clear explanation + a two-step confirm.
+  return (
+    <div className="mb-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start gap-2">
+        <Scale className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900">Make imports reduce stock?</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Right now imports only record sales as evidence. You can switch on <strong>auto-deduct</strong> so
+            future imported sales reduce your stock counts. Do a comparison import or two first to check the
+            numbers line up.
+          </p>
+          {!confirmEnable ? (
+            <button type="button" onClick={() => setConfirmEnable(true)} className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white active:scale-95">
+              <ShieldCheck className="h-3.5 w-3.5" /> Turn on stock deductions
+            </button>
+          ) : (
+            <div className="mt-2 rounded-xl bg-amber-50 p-2.5">
+              <p className="flex items-start gap-1.5 text-xs text-amber-900">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                We’ll set an opening baseline of <strong>&nbsp;now</strong>. Only sales dated from today onward
+                will deduct — your current counts and all past sales are left untouched.
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button type="button" onClick={onEnable} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-lg bg-amber-600 px-3 text-xs font-semibold text-white active:scale-95">
+                  Turn on now
+                </button>
+                <button type="button" onClick={() => setConfirmEnable(false)} className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-white px-3 text-xs font-semibold text-gray-600 ring-1 ring-gray-200 active:scale-95">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonTable({ comparison }) {
+  const rows = comparison.rows.slice(0, 12);
+  return (
+    <div className="mb-3 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-gray-100 px-3 py-2 text-xs font-semibold text-gray-700">
+        <Scale className="h-3.5 w-3.5 text-gray-400" /> Before you deduct — stock after this import
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-gray-400">
+              <th className="px-3 py-1.5 text-left font-medium">Product</th>
+              <th className="px-2 py-1.5 text-right font-medium">Sold</th>
+              <th className="px-2 py-1.5 text-right font-medium">In stock</th>
+              <th className="px-3 py-1.5 text-right font-medium">After</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.productId} className="border-t border-gray-50">
+                <td className="max-w-[9rem] truncate px-3 py-1.5 text-gray-800">{r.name}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{r.deductibleUnits}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-600">{r.currentQty}</td>
+                <td className={`px-3 py-1.5 text-right font-semibold tabular-nums ${r.impliedRemaining === 0 && r.deductibleUnits > 0 ? 'text-amber-700' : 'text-gray-900'}`}>{r.impliedRemaining}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {comparison.rows.length > rows.length && (
+        <p className="px-3 py-1.5 text-xs text-gray-400">+{comparison.rows.length - rows.length} more products</p>
       )}
     </div>
   );
@@ -246,11 +432,15 @@ function History({ imports, onUndo }) {
       <ul className="space-y-2">
         {imports.map((im) => (
           <li key={im.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><Check className="h-4 w-4" /></span>
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${im.deducted ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+              {im.deducted ? <ArrowDownCircle className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+            </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold text-gray-900">{im.fileName}</span>
               <span className="block text-xs text-gray-400">
-                {im.unitsTotal} sales · {im.productsMatched} products
+                {im.deducted
+                  ? `Deducted ${im.unitsDeducted ?? im.unitsTotal} units · ${im.productsDeducted ?? im.productsMatched} products`
+                  : `${im.unitsTotal} sales · ${im.productsMatched} products`}
                 {im.unmatchedCount > 0 && ` · ${im.unmatchedCount} skipped`}
                 {' · '}{fmtDate(im.appliedAt)}
               </span>
