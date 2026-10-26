@@ -1,0 +1,21 @@
+name: keep-warm
+
+# Keeps the free-plan Render backend from sleeping (~15 min idle spin-down) by pinging its ultra-light
+# /healthz every 10 minutes, so shoppers rarely hit a ~20s cold-start wake. Only runs because this repo is
+# PUBLIC (GitHub Actions minutes are unbilled for public repos); on a private repo this would blow the 2,000
+# free minutes/month, so use UptimeRobot instead. /healthz answers 200 with no DB — never ping /health or
+# /radius for keep-warm. See obsidian-vault/Deployment.md.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /healthz (fail unless 200)
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 --retry 2 https://vendora-api-5pyt.onrender.com/healthz)
+          echo "HTTP $code"
+          test "$code" = "200"

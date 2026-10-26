@@ -121,3 +121,28 @@ Fix (pick one):
   Frankfurt + Atlas M10 setup for latency anyway).
 
 Don't ping `/health` (it touches Mongo state) or `/radius` (heavy) for keep-warm — use `/healthz`.
+
+**Keep-warm is wired for us (public repo):** `.github/workflows/keep-warm.yml` curls `/healthz` every 10 min
+and fails unless it's 200. This only exists because the repo is **public** (Actions minutes are unbilled);
+if it ever goes **private**, delete that workflow and use UptimeRobot instead — every-10-min pings would
+exceed the 2,000 free private-repo minutes/month.
+
+## 🧪 Staging backend (Render Blueprint — `vendora-pos/render.staging.yaml`)
+
+Create the staging service **from the Blueprint, not by hand** — the earlier staging service
+(`srv-dbab6hs9v7es73fs029g`) failed to build twice because its **Root Directory was left empty**, so Render
+ran `npm install` at the repo root instead of in `vendora-pos/backend`. The Blueprint sets `rootDir`, so this
+can't happen again.
+
+Steps (one-time):
+1. Render dashboard → **New > Blueprint**.
+2. Connect this repo and branch `claude/vendora-pos-v3-KPnI0`; point it at **`vendora-pos/render.staging.yaml`**.
+3. Apply. It creates **`vendora-staging`** (web, node, free, **frankfurt**, `rootDir: vendora-pos/backend`,
+   build `npm install`, start `node server.js`, health `/healthz`, `autoDeploy: false`).
+4. The three secrets are `sync: false` (never in git) — set **MONGODB_URI**, **JWT_SECRET**,
+   **JWT_REFRESH_SECRET** in the dashboard after creation. `NODE_ENV=production` is already set by the Blueprint.
+5. Deploys are manual (`autoDeploy: false`) — trigger from the dashboard or the Render MCP when you want to
+   test a branch. **Staging is for load tests / pre-release checks only — never point shoppers at it.**
+
+If the existing empty-rootDir service is still around, delete it and recreate from the Blueprint rather than
+editing its Root Directory field by hand.
