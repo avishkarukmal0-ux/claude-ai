@@ -135,6 +135,42 @@ export async function refresh() {
   announce();
   return next;
 }
+// --- password recovery + in-app credential changes ---------------------------------------
+/** Request a reset email. Enumeration-safe on the server (always resolves). Returns { emailConfigured } so the
+ *  UI can tell the owner honestly whether a link can actually be sent. */
+export async function forgotPassword(email) {
+  const data = await _transport('/forgot-password', { email });
+  return { emailConfigured: data.emailConfigured !== false };
+}
+/** Complete a reset with the emailed token → signs in (activates the returned session). */
+export async function resetPassword({ email, token, password }) {
+  const data = await _transport('/reset-password', { email, token, password });
+  return activate(normalize(data));
+}
+/** Change the signed-in person's password. The server re-issues tokens for THIS session; persist them so the
+ *  current device stays signed in while other sessions are invalidated. */
+export async function changePassword({ currentPassword, newPassword }) {
+  const s = loadSession();
+  if (!s || !s.token) throw new Error('not-signed-in');
+  const data = await _transport('/change-password', { currentPassword, newPassword }, s.token);
+  const cur = loadSession();
+  if (!cur || cur.token !== s.token) throw new Error('session-changed'); // don't resurrect a logged-out session
+  const next = { ...cur, token: data.token, refreshToken: data.refreshToken || cur.refreshToken };
+  saveSession(next); announce();
+  return next;
+}
+/** Change the owner's login email (verified with the current password). Updates the stored session's email. */
+export async function changeEmail({ password, newEmail }) {
+  const s = loadSession();
+  if (!s || !s.token) throw new Error('not-signed-in');
+  const data = await _transport('/change-email', { password, newEmail }, s.token);
+  const cur = loadSession();
+  if (!cur || cur.token !== s.token) throw new Error('session-changed');
+  const next = { ...cur, member: data.member || cur.member };
+  saveSession(next); announce();
+  return next;
+}
+
 /**
  * Sign out: clear the session and return to the on-device guest workspace.
  *

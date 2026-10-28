@@ -169,9 +169,27 @@ const strictLimiter = rateLimit({
   message: RATE_MSG('RATE_LIMIT', 'Rate limit exceeded.'),
 });
 
+// Password-reset request + confirm get their OWN tight buckets (like register) so reset spam can't drain the
+// login/register allowances, and so an attacker can't hammer the reset endpoints for one email or from one IP.
+const resetIpLimiter = rateLimit({
+  ...COMMON,
+  store: makeStore('reset-ip'),
+  max: isTest ? 100000 : 30,
+  keyGenerator: ipKey,
+  message: RATE_MSG('RATE_LIMIT', 'Too many attempts from this network — please wait a minute.'),
+});
+const resetEmailLimiter = rateLimit({
+  ...COMMON,
+  store: makeStore('reset-email'),
+  max: isTest ? 100000 : 5,
+  keyGenerator: emailOnlyKey,
+  message: RATE_MSG('RATE_LIMIT', 'Too many password-reset attempts for this email — please wait a minute.'),
+});
+
 module.exports = {
   generalLimiter, authLimiter, strictLimiter, syncLimiter,
   loginIpLimiter, loginEmailLimiter, registerIpLimiter, registerEmailLimiter,
+  resetIpLimiter, resetEmailLimiter,
   // exported for unit tests
   shopKeyFromToken, ipKey, shopOrIpKey, emailIpKey, emailOnlyKey, emailForKey,
 };

@@ -22,4 +22,11 @@ const send = async ({ to, subject, html, text, from }) => {
   const t = nodemailer.createTransport({ host:'smtp.sendgrid.net',port:587,auth:{user:'apikey',pass:process.env.SENDGRID_API_KEY} });
   await t.sendMail({ from: fromAddress(from), to, subject, html, text });
 };
-module.exports = { send, fromAddress };
+// Can this server actually deliver an email right now? (Used so the password-reset flow can honestly tell an
+// owner whether a reset link will arrive, rather than claiming "check your email" when nothing can be sent.)
+// In development, send() logs instead of delivering, so treat that as "configured" for the dev flow.
+function isConfigured() {
+  return !!process.env.SENDGRID_API_KEY || process.env.NODE_ENV === 'development';
+}
+
+module.exports = { send, fromAddress, isConfigured };

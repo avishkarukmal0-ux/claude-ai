@@ -145,3 +145,44 @@ describe('account — logout identity guard (C1)', () => {
     expect(readJSON('inventory_v1', null, shopWorkspace('shopA'))).toBeNull(); // intended workspace purged
   });
 });
+
+describe('account — password recovery + credential changes', () => {
+  it('forgotPassword returns whether email delivery is configured (never throws on unknown email)', async () => {
+    account.__setTransport(async () => ({ success: true, emailConfigured: true }));
+    expect(await account.forgotPassword('o@x.com')).toEqual({ emailConfigured: true });
+    account.__setTransport(async () => ({ success: true, emailConfigured: false }));
+    expect(await account.forgotPassword('o@x.com')).toEqual({ emailConfigured: false });
+  });
+
+  it('resetPassword signs in with the returned session', async () => {
+    account.__setTransport(async (path) => {
+      if (path === '/reset-password') return { token: 'newT', refreshToken: 'newR', shop: { id: 'shopA', name: 'A' }, role: 'owner' };
+      return {};
+    });
+    await account.resetPassword({ email: 'o@x.com', token: 'abc', password: 'brandnew123' });
+    expect(account.isLoggedIn()).toBe(true);
+    expect(account.currentSession().token).toBe('newT');
+  });
+
+  it('changePassword swaps in the re-minted tokens for the current session', async () => {
+    account.__setTransport(makeTransport());
+    await account.login({ email: 'o@x.com', password: 'pw' }); // token t1 / r1
+    account.__setTransport(async (path, body, token) => {
+      expect(token).toBe('t1'); // sends the current access token
+      return { token: 'rotT', refreshToken: 'rotR' };
+    });
+    await account.changePassword({ currentPassword: 'pw', newPassword: 'brandnew123' });
+    expect(account.currentSession().token).toBe('rotT');
+    expect(account.currentSession().refreshToken).toBe('rotR');
+    expect(account.currentShop().id).toBe('shopA'); // session otherwise preserved
+  });
+
+  it('changeEmail updates the stored member email', async () => {
+    account.__setTransport(makeTransport());
+    await account.login({ email: 'o@x.com', password: 'pw' });
+    account.__setTransport(async () => ({ shop: { id: 'shopA', name: 'A' }, role: 'owner', member: { id: 'shopA', name: 'Owner', role: 'owner', email: 'renamed@x.com' } }));
+    await account.changeEmail({ password: 'pw', newEmail: 'renamed@x.com' });
+    expect(account.currentMember().email).toBe('renamed@x.com');
+    expect(account.isLoggedIn()).toBe(true);
+  });
+});

@@ -12,10 +12,15 @@
 // attribute actions. Role permissions are ENFORCED on the backend (see pwaSyncService) — the client
 // gating is only UX. Tokens carry `typ: 'pwa'` so they can never be confused with the till's Staff tokens.
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const config = require('../config');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const Account = require('../models/Account');
 const Member = require('../models/Member');
+const emailService = require('./emailService');
+
+const RESET_TTL_MS = 60 * 60 * 1000; // a reset link is valid for 1 hour
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
@@ -66,8 +71,114 @@ async function register({ email, password, shopName } = {}) {
 
   const passwordHash = await Account.hashPassword(password);
   const account = await Account.create({ email: lower, passwordHash, shopName: String(shopName).trim() });
-  const { accessToken, refreshToken } = tokensFor({ shopId: account._id.toString(), role: 'owner', memberId: account._id.toString(), name: 'Owner' });
+  const { accessToken, refreshToken } = tokensFor({ shopId: account._id.toString(), role: 'owner', memberId: account._id.toString(), name: 'Owner', tv: account.tokenVersion || 0 });
   return { token: accessToken, refreshToken, shop: shapeShop(account), role: 'owner', member: ownerAsMember(account) };
+}
+
+// ── Self-service password reset + in-app credential changes ──────────────────────────────────────────
+
+/**
+ * Begin a password reset for an OWNER account. ENUMERATION-SAFE: always resolves the same shape whether or
+ * not the email exists — it never reveals which emails are registered. If the account exists we store a hashed
+ * single-use token and (when email delivery is configured) send the reset link. `emailConfigured` tells the
+ * client whether a link can actually be sent, so the UI can be honest rather than say "check your email" when
+ * nothing will arrive. Members are reset by their owner via staff admin, so they get the generic response too.
+ */
+async function requestPasswordReset(email) {
+  const emailConfigured = emailService.isConfigured();
+  if (!email || !EMAIL_RE.test(String(email)) || String(email).length > MAX_EMAIL_LEN) return { emailConfigured };
+  const lower = String(email).toLowerCase();
+  const account = await Account.findOne({ email: lower });
+  if (account) {
+    const token = crypto.randomBytes(32).toString('hex');
+    account.resetTokenHash = Account.hashResetToken(token);
+    account.resetTokenExpiresAt = Date.now() + RESET_TTL_MS;
+    await account.save();
+    if (emailConfigured) {
+      const base = String(config.frontendUrl || '').replace(/\/+$/, '');
+      const link = `${base}/account?reset=${token}&email=${encodeURIComponent(lower)}`;
+      try {
+        await emailService.send({
+          to: lower,
+          subject: 'Reset your Vendora password',
+          text: `Someone asked to reset the password for your Vendora shop account.\n\nReset it here (valid for 1 hour):\n${link}\n\nIf this wasn't you, you can ignore this email — your password hasn't changed.`,
+          html: `<p>Someone asked to reset the password for your Vendora shop account.</p>`
+            + `<p><a href="${link}">Reset your password</a> (valid for 1 hour).</p>`
+            + `<p>If this wasn't you, you can ignore this email — your password hasn't changed.</p>`,
+        });
+      } catch (err) { logger.error(`Password-reset email failed: ${err.message}`); }
+    }
+  }
+  return { emailConfigured };
+}
+
+/** Complete a password reset with a valid, unexpired token. Bumps tokenVersion (invalidating every existing
+ *  session) and signs the owner straight in. The token is single-use (cleared here). */
+async function resetPassword({ email, token, password } = {}) {
+  if (!email || !token) throw new AppError('This reset link is invalid or has expired', 400, 'RESET_INVALID');
+  if (!password || String(password).length < MIN_PASSWORD) throw AppError.validation(`Password must be at least ${MIN_PASSWORD} characters`);
+  const lower = String(email).toLowerCase();
+  const account = await Account.findOne({ email: lower });
+  const given = Account.hashResetToken(token);
+  const stored = account && account.resetTokenHash;
+  const fresh = account && account.resetTokenExpiresAt && account.resetTokenExpiresAt > Date.now();
+  const match = !!stored && stored.length === given.length
+    && crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(given));
+  if (!account || !fresh || !match) throw new AppError('This reset link is invalid or has expired', 400, 'RESET_INVALID');
+
+  account.passwordHash = await Account.hashPassword(password);
+  account.tokenVersion = (account.tokenVersion || 0) + 1; // kill every session minted before the reset
+  account.resetTokenHash = null;
+  account.resetTokenExpiresAt = null;
+  await account.save();
+  const shopId = account._id.toString();
+  const { accessToken, refreshToken } = tokensFor({ shopId, role: 'owner', memberId: shopId, name: 'Owner', tv: account.tokenVersion });
+  return { token: accessToken, refreshToken, shop: shapeShop(account), role: 'owner', member: ownerAsMember(account) };
+}
+
+/** Change the signed-in person's own password (owner OR member). Verifies the current password, bumps the
+ *  relevant tokenVersion (logging OTHER sessions out), and returns fresh tokens so the CURRENT session stays
+ *  signed in. */
+async function changePassword(decoded, { currentPassword, newPassword } = {}) {
+  if (!newPassword || String(newPassword).length < MIN_PASSWORD) throw AppError.validation(`Password must be at least ${MIN_PASSWORD} characters`);
+  if (isOwnerToken(decoded)) {
+    const account = await Account.findById(decoded.shopId);
+    if (!account) throw new AppError('Account not found', 404, 'NOT_FOUND');
+    if (!await account.verifyPassword(currentPassword)) throw AppError.authInvalidCredentials('Current password is incorrect');
+    account.passwordHash = await Account.hashPassword(newPassword);
+    account.tokenVersion = (account.tokenVersion || 0) + 1;
+    await account.save();
+    const shopId = account._id.toString();
+    const { accessToken, refreshToken } = tokensFor({ shopId, role: 'owner', memberId: shopId, name: 'Owner', tv: account.tokenVersion });
+    return { token: accessToken, refreshToken, shop: shapeShop(account), role: 'owner', member: ownerAsMember(account) };
+  }
+  const member = await Member.findById(decoded.mid);
+  if (!member || member.active === false || member.account.toString() !== decoded.shopId) throw new AppError('Access has been revoked', 401, 'AUTH_TOKEN_EXPIRED');
+  if (!await member.verifyPassword(currentPassword)) throw AppError.authInvalidCredentials('Current password is incorrect');
+  member.passwordHash = await Member.hashPassword(newPassword);
+  member.tokenVersion = (member.tokenVersion || 0) + 1;
+  await member.save();
+  invalidateMember(member._id.toString());
+  const owner = await Account.findById(member.account);
+  if (!owner) throw new AppError('Account not found', 404, 'NOT_FOUND');
+  const shopId = owner._id.toString();
+  const { accessToken, refreshToken } = tokensFor({ shopId, role: member.role, memberId: member._id.toString(), name: member.name, tv: member.tokenVersion });
+  return { token: accessToken, refreshToken, shop: shapeShop(owner), role: member.role, member: shapeMember(member) };
+}
+
+/** Change the OWNER account's login email. Verifies the current password and rejects an email already used by
+ *  any account or member. (The route enforces owner-only; members' emails are managed by the owner.) */
+async function changeEmail(decoded, { password, newEmail } = {}) {
+  if (!newEmail || !EMAIL_RE.test(String(newEmail))) throw AppError.validation('A valid email is required');
+  if (String(newEmail).length > MAX_EMAIL_LEN) throw AppError.validation('Email is too long');
+  const account = await Account.findById(decoded.shopId);
+  if (!account) throw new AppError('Account not found', 404, 'NOT_FOUND');
+  if (!await account.verifyPassword(password)) throw AppError.authInvalidCredentials('Password is incorrect');
+  const lower = String(newEmail).toLowerCase();
+  if (lower !== account.email && await emailInUse(lower)) throw new AppError('That email is already in use', 409, 'ACCOUNT_EXISTS');
+  account.email = lower;
+  await account.save();
+  return { shop: shapeShop(account), role: 'owner', member: ownerAsMember(account) };
 }
 
 // ── Temporary login lockout (defence in depth; the rate limiters are the primary control) ───────────────
@@ -146,7 +257,7 @@ async function login({ email, password } = {}, { ip } = {}) {
   if (account && await account.verifyPassword(password)) {
     noteLoginSuccess(key);
     const shopId = account._id.toString();
-    const { accessToken, refreshToken } = tokensFor({ shopId, role: 'owner', memberId: shopId, name: 'Owner' });
+    const { accessToken, refreshToken } = tokensFor({ shopId, role: 'owner', memberId: shopId, name: 'Owner', tv: account.tokenVersion || 0 });
     return { token: accessToken, refreshToken, shop: shapeShop(account), role: 'owner', member: ownerAsMember(account) };
   }
 
@@ -172,11 +283,15 @@ async function refresh(refreshToken) {
   catch { throw AppError.authRefreshInvalid(); }
   if (decoded.typ !== 'pwa-refresh') throw AppError.authRefreshInvalid();
 
-  // Owner (or a pre-staff token with no member id): re-issue with the owner role.
+  // Owner (or a pre-staff token with no member id): re-issue with the owner role, but first re-check the
+  // account's tokenVersion so a refresh token minted before a password change/reset is rejected.
   const isOwner = decoded.role === 'owner' || !decoded.mid || decoded.mid === decoded.shopId;
   if (isOwner) {
+    const account = await Account.findById(decoded.shopId).select('tokenVersion').lean();
+    if (!account) throw AppError.authRefreshInvalid();
+    if ((decoded.tv || 0) !== (account.tokenVersion || 0)) throw AppError.authRefreshInvalid();
     const token = jwt.sign(
-      { sub: decoded.sub, shopId: decoded.shopId, role: 'owner', mid: decoded.shopId, name: 'Owner', typ: 'pwa' },
+      { sub: decoded.sub, shopId: decoded.shopId, role: 'owner', mid: decoded.shopId, name: 'Owner', tv: account.tokenVersion || 0, typ: 'pwa' },
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn },
     );
@@ -324,6 +439,7 @@ async function removeMember(accountId, memberId) {
 
 module.exports = {
   register, login, refresh, me, verifyAccess, requireOwner, assertMemberActive,
+  requestPasswordReset, resetPassword, changePassword, changeEmail,
   listMembers, addMember, updateMember, removeMember,
   __clearMemberCache, __clearLoginLockout, sweepLockouts, __lockoutSize: () => _loginFails.size,
 };

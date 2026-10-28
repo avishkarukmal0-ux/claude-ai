@@ -6,7 +6,8 @@ const express = require('express');
 
 const router = express.Router();
 const {
-  loginIpLimiter, loginEmailLimiter, registerIpLimiter, registerEmailLimiter, ipKey,
+  loginIpLimiter, loginEmailLimiter, registerIpLimiter, registerEmailLimiter,
+  resetIpLimiter, resetEmailLimiter, ipKey,
 } = require('../middleware/rateLimit');
 const pwaAuth = require('../services/pwaAuthService');
 
@@ -15,6 +16,7 @@ const pwaAuth = require('../services/pwaAuthService');
 // Register has its OWN buckets so invalid registrations can't drain a victim's LOGIN allowance (audit M1).
 const loginLimiters = [loginIpLimiter, loginEmailLimiter];
 const registerLimiters = [registerIpLimiter, registerEmailLimiter];
+const resetLimiters = [resetIpLimiter, resetEmailLimiter];
 
 // POST /api/pwa-auth/register  { email, password, shopName }
 router.post('/register', ...registerLimiters, async (req, res, next) => {
@@ -45,6 +47,50 @@ router.get('/me', async (req, res, next) => {
   try {
     const decoded = pwaAuth.verifyAccess(req.headers.authorization);
     const out = await pwaAuth.me(decoded);
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// ── Password recovery + in-app credential changes ────────────────────────────────────────────────────
+
+// POST /api/pwa-auth/forgot-password  { email } → { emailConfigured } (enumeration-safe; always 200)
+router.post('/forgot-password', ...resetLimiters, async (req, res, next) => {
+  try {
+    const out = await pwaAuth.requestPasswordReset((req.body || {}).email);
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// POST /api/pwa-auth/reset-password  { email, token, password } → signs in on success
+router.post('/reset-password', ...resetLimiters, async (req, res, next) => {
+  try {
+    const out = await pwaAuth.resetPassword(req.body || {});
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// Authed gate: valid token + (for members) still-active. req.pwa carries the decoded payload.
+async function authed(req, res, next) {
+  try {
+    req.pwa = pwaAuth.verifyAccess(req.headers.authorization);
+    await pwaAuth.assertMemberActive(req.pwa);
+    next();
+  } catch (err) { next(err); }
+}
+
+// POST /api/pwa-auth/change-password  { currentPassword, newPassword }  (owner or member — own password)
+router.post('/change-password', authed, async (req, res, next) => {
+  try {
+    const out = await pwaAuth.changePassword(req.pwa, req.body || {});
+    res.json({ success: true, ...out });
+  } catch (err) { next(err); }
+});
+
+// POST /api/pwa-auth/change-email  { password, newEmail }  (owner only)
+router.post('/change-email', authed, async (req, res, next) => {
+  try {
+    pwaAuth.requireOwner(req.pwa);
+    const out = await pwaAuth.changeEmail(req.pwa, req.body || {});
     res.json({ success: true, ...out });
   } catch (err) { next(err); }
 });

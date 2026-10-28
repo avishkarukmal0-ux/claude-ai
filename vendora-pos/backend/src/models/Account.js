@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 // NOT stall the event loop (and sync requests) the way the pure-JS bcryptjs ~142ms/hash did. Hash format is
 // identical ($2a/$2b), so every existing password still verifies. See Member.js (same switch).
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 // Daily digest notification preferences (opt-in, all off by default). Stored on the account because the
 // server decides due-ness and sends the email. Times are Europe/London hours (0–23).
@@ -70,6 +71,13 @@ const accountSchema = new mongoose.Schema(
     shopName: { type: String, required: true, trim: true },
     notify: { type: notifySchema, default: () => ({}) },
     entitlements: { type: entitlementsSchema, default: () => ({}) },
+    // Bumped on every password change / reset so previously-issued owner tokens (stamped with the old `tv`)
+    // are rejected on refresh — the owner equivalent of Member.tokenVersion.
+    tokenVersion: { type: Number, default: 0 },
+    // Self-service password reset: we store only a SHA-256 HASH of the single-use reset token (never the token
+    // itself), plus its expiry. Cleared the moment it's used or re-requested.
+    resetTokenHash: { type: String, default: null },
+    resetTokenExpiresAt: { type: Number, default: null }, // epoch ms
   },
   { timestamps: true },
 );
@@ -80,6 +88,12 @@ accountSchema.methods.verifyPassword = function verifyPassword(password) {
 
 accountSchema.statics.hashPassword = function hashPassword(password) {
   return bcrypt.hash(String(password), 10);
+};
+
+// A reset token is high-entropy random (256 bits), so a fast SHA-256 is the right hash here — bcrypt is for
+// low-entropy human passwords. Stored hashed so a DB leak can't be used to reset accounts.
+accountSchema.statics.hashResetToken = function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
 };
 
 // Guard against model recompilation in watch/test runs.
